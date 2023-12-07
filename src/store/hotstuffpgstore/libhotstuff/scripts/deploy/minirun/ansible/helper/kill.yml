@@ -1,3 +1,0 @@
----
-- shell: killall -9 {{ bin_name }} || true
-  ignore_errors: true

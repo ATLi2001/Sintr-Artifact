@@ -66,9 +66,9 @@ The other things that I should mention is that the `src/lib/threadpool.cc` code 
 
 
 #### Shir:
-1. possibly delete /home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffpgstore/libhotstuff folder.
-2. initialize the postgres server with: `su - postgres -c "export PATH=$PATH:/usr/lib/postgresql/12/bin/; pg_ctlcluster 12 main start"`
-3. order of things: thhe following is something you do one time to configure your enviorment (i) install postgres (`postgres_install`) (ii) `server starter` 
-4. then you do 2
-5. change #define LOCAL_CONFIG_DIR "/home/sc3348/Pesto/Pequin-Artifact/src/scripts/config/" in '/home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffstore/libhotstuff/examples/local_config_dir.h'
-6. pipelined hotstuff
+1. initialize the postgres server with: `su - postgres -c "export PATH=$PATH:/usr/lib/postgresql/12/bin/; pg_ctlcluster 12 main start"`
+2. order of things: thhe following is something you do one time to configure your enviorment (i) install postgres (`postgres_install`) (ii) `server starter` 
+ then you do 1
+3. change #define LOCAL_CONFIG_DIR "/home/sc3348/Pesto/Pequin-Artifact/src/scripts/config/" in '/home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffstore/libhotstuff/examples/local_config_dir.h'
+4. pipelined hotstuff
+5. code is run from src folder

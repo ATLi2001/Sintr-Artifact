@@ -1,1 +1,0 @@
-log for hotstuff client
