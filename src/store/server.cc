@@ -515,6 +515,7 @@ int main(int argc, char **argv) {
     default:
       NOT_REACHABLE();
   }
+  // Notice("Shir: debugging server 1\n");
 
   // parse protocol and mode
   partitioner_t partType = DEFAULT;
@@ -540,6 +541,7 @@ int main(int argc, char **argv) {
     default:
       NOT_REACHABLE();
   }
+  // Notice("Shir: debugging server 2\n");
 
   // parse occ type
   occ_type_t occ_type = OCC_TYPE_UNKNOWN;
@@ -568,6 +570,7 @@ int main(int argc, char **argv) {
     std::cerr << "Unknown read dep." << std::endl;
     return 1;
   }
+  // Notice("Shir: debugging server 3\n");
 
 	crypto::KeyType keyType;
   switch (FLAGS_indicus_key_type) {
@@ -604,6 +607,10 @@ int main(int argc, char **argv) {
   num_cpus /= FLAGS_indicus_total_processes;
   int protocol_cpu;
 
+  // Notice("Shir: debugging server proto: \n");
+  // std::cerr <<  "Shir:  Proto enum number is:  " << proto <<"\n";
+
+
   switch(proto){
       case PROTO_TAPIR:
       case PROTO_WEAK:
@@ -627,7 +634,9 @@ int main(int argc, char **argv) {
       case PROTO_PBFT:
         break;
       case PROTO_HOTSTUFF:
+          // Notice("Shir: debugging server 4\n");
       case PROTO_HOTSTUFF_PG:
+          // Notice("Shir: debugging server 4 - proto hotstuff pg \n");
       case PROTO_BFTSMART:
       case PROTO_AUGUSTUS_SMART:
       case PROTO_AUGUSTUS:
@@ -799,6 +808,9 @@ int main(int argc, char **argv) {
 
      // HotStuffPG
   case PROTO_HOTSTUFF_PG: {
+      // std::cerr << "Shir: debugging server 5\n";
+      // Notice("Shir playing with HS");
+      std::cerr << "Shir: check FLAGS_replica_idx:    "<<  FLAGS_replica_idx <<"\n";
 
       server = new hotstuffpgstore::Server(config, &keyManager,
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,

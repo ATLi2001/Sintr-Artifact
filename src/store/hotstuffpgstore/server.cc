@@ -53,11 +53,35 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
 
   dummyProof->mutable_txn()->mutable_timestamp()->set_timestamp(0);
   dummyProof->mutable_txn()->mutable_timestamp()->set_id(0);
+  // Shir: get back to this at some point
   // std::string db_name = "db" + std::to_string(1 + idx);
   std::string db_name = "db1"; // Use this code if every server is run on a 
   //separate host, otherwise use the above so they all reference a different database
   std::string connection_str = "host=localhost user=pequin_user dbname=" + db_name + " port=5432";
-  connectionPool = tao::pq::connection_pool::create(connection_str);
+
+  Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
+  Debug("Shir: connection str is:  ");
+  // Debug(connection_str);
+  std::cerr << connection_str <<"\n";
+  Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
+
+  //Shir: out put is:
+  // host=localhost user=pequin_user dbname=db1 port=5432
+
+
+  // with password: (connects, but not to right cluster)
+  std::string connection_str2 = "host=localhost user=shir_user password=123 dbname=" + db_name + " port=5432";
+ 
+  //trying with socket (no port)  
+  // std::string connection_str3 = "host=/home/sc3348/Pesto/Pequin-Artifact/src/tmp-pgdata/socket user=shir_user password=123 dbname=" + db_name;
+
+  std::cerr << connection_str2 <<"\n";
+  Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
+
+
+  connectionPool = tao::pq::connection_pool::create(connection_str2);
+
+
 
   // auto connection = connectionPool->connection();
   // std::shared_ptr<tao::pq::transaction> tr;
@@ -277,6 +301,8 @@ std::vector<::google::protobuf::Message*> Server::Execute(const string& type, co
 
     return HandleTransaction(transaction);
   } else if (type == inquiry.GetTypeName()) {
+    // Debug("Shir: executing inquiry here");
+
     inquiry.ParseFromString(msg);
     std::vector<::google::protobuf::Message*> results;
     results.push_back(HandleInquiry(inquiry));
@@ -445,9 +471,21 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
   client_seq_key.append("|");
   client_seq_key.append(std::to_string(inquiry.txn_seq_num()));
 
+  // std::cerr << "Shir:  "<< client_seq_key << "\n";
+  // client_seq_key prints 0|1
+  // Debug("Shir is now handling Inquiry 1");
+
   if(txnMap.find(client_seq_key) == txnMap.end()) {
+    // Debug("Shir is now handling Inquiry 2");
+
     auto connection = connectionPool->connection();
+
+    // Debug("Shir is now handling Inquiry 2.1");
+
     tr = connection->transaction();
+
+    // Debug("Shir is now handling Inquiry 2.2");
+
     connectionMap[client_seq_key] = connection;
     txnMap[client_seq_key] = tr;
     Debug("Query key: %s", client_seq_key);
@@ -458,15 +496,24 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     std::cout << client_seq_key << std::endl;
   }
 
+  // Debug("Shir is now handling Inquiry 3");
 
   try {
     Debug("Attempt query %s", inquiry.query());
     std::cout << inquiry.query() << std::endl;
+
+    // Debug("Shir is now handling Inquiry 3.50");
     const auto sql_res = tr->execute(inquiry.query());
+    // Debug("Shir is now handling Inquiry 3.51");
+
     Debug("Query executed");
     sql::QueryResultProtoBuilder* res_builder = new sql::QueryResultProtoBuilder();
     // Should extrapolate out into builder method
     // Start by looping over columns and adding column names
+
+  // Debug("Shir is now handling Inquiry 4");
+
+
     if(sql_res.columns() == 0) {
       Debug("Had rows affected");
       res_builder->add_empty_row();
@@ -492,6 +539,10 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
         }
       }
     }
+
+  // Debug("Shir is now handling Inquiry 5");
+
+
     reply->set_status(REPLY_OK);
     // std::string* res_string;
     // res_builder->get_result()->SerializeToString(res_string);

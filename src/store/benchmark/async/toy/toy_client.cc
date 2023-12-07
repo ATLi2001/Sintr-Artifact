@@ -73,12 +73,14 @@ ToyClient::ToyClient(
                                  expDuration, delay, warmupSec, cooldownSec,
                                  tputInterval, abortBackoff, retryAborted, maxBackoff, maxAttempts, timeout,
                                  latencyFilename){
+  // std::cout << "Shir: toy client constructor" << std::endl;
 }
 
 ToyClient::~ToyClient() {}
 
 void ToyClient::ExecuteToy(){
     std::cerr << "Started client thread\n";
+    // std::cerr << "Started client thread in execute toy transaction (Shir)\n";
     //Calling directly into syncClient here. Usually SyncTransactionBenchClient calls SendNext, which generates a new transaction. This transaction then calls the operations on the SyncClient.
             uint32_t timeout = UINT_MAX;
             // client.Begin(timeout);
@@ -99,10 +101,16 @@ void ToyClient::ExecuteToy(){
             // client.Commit(timeout);
             // std::cerr << "Committed value for x\n";
 
-            
+
             client.Begin(timeout);
 
-            std::string query = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
+            // std::cerr << "Shir: execute toy transacion : after timeout\n";
+
+          
+            std::string query = "SELECT current_date";
+
+            // Create users table before trying to execute the following
+            // std::string query = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
             std::unique_ptr<const query_result::QueryResult> queryResult;
             client.Query(query, queryResult, timeout);  //--> Edit API in frontend sync_client.
                                            //For real benchmarks: Also edit in sync_transaction_bench_client.
@@ -112,6 +120,7 @@ void ToyClient::ExecuteToy(){
             UW_ASSERT(!queryResult->empty());
             std::cerr << "num cols: " <<  queryResult->columns() << std::endl;
             std::cerr << "num rows affected: " <<  queryResult->rows_affected() << std::endl;
+            // std::cerr << "Shir: Hello World2\n";
 
              std::stringstream ss(std::ios::in | std::ios::out | std::ios::binary);
             size_t nbytes;
@@ -126,45 +135,71 @@ void ToyClient::ExecuteToy(){
              std::cerr << "Query 1 Done: " << output_row << std::endl << std::endl;
 
 
-            std::string query2 = "INSERT INTO users (name, age) VALUES ('Oliver9', 35)";
+            // Create users table before trying to execute the following
+            query = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
             std::unique_ptr<const query_result::QueryResult> queryResult2;
-            client.Query(query2, queryResult2, timeout); 
-            std::cerr << "Got res" << std::endl;
-             std::cerr << "Query 2 Done!" << std::endl << std::endl;
-  
-
-            // client.Query(query, queryResult, timeout);  //--> Edit API in frontend sync_client.
-            //                                //For real benchmarks: Also edit in sync_transaction_bench_client.
-            // std::cerr << "Query 2 Result: " << queryResult << std::endl << std::endl;
-
-            std::cerr << "Trying commit" << std::endl;
-            client.Commit(timeout);
-            std::cerr << "Committed Query" << std::endl;
-
-            client.Begin(timeout);
-
-            std::string query3 = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
-            std::unique_ptr<const query_result::QueryResult> queryResult3;
-            client.Query(query3, queryResult3, timeout);  //--> Edit API in frontend sync_client.
+            client.Query(query, queryResult, timeout);  //--> Edit API in frontend sync_client.
                                            //For real benchmarks: Also edit in sync_transaction_bench_client.
                               
             // (*queryResult->at(0))[0] //TODO: parse the output...  data.length
             std::cerr << "Got res" << std::endl;
-            UW_ASSERT(!queryResult3->empty());
-            std::cerr << "num cols: " <<  queryResult3->columns() << std::endl;
-            std::cerr << "num rows affected: " <<  queryResult3->rows_affected() << std::endl;
+            UW_ASSERT(!queryResult2->empty());
+            std::cerr << "num cols: " <<  queryResult2->columns() << std::endl;
+            std::cerr << "num rows affected: " <<  queryResult2->rows_affected() << std::endl;
+            std::cerr << "Shir: Hello World3\n";
 
-             std::stringstream ss3(std::ios::in | std::ios::out | std::ios::binary);
-            size_t nbytes3;
-            const char* out3 = queryResult3->get(0, 0, &nbytes3);
-            std::string output3(out3, nbytes3);
-            ss3 << output3;
-            std::string output_row3;
+            std::stringstream ss2(std::ios::in | std::ios::out | std::ios::binary);
+            size_t nbytes2;
+            out = queryResult->get(0, 0, &nbytes2);
+            std::string output2(out, nbytes2);
+            ss2 << output2;
+            output_row;
             {
-              cereal::BinaryInputArchive iarchive(ss3); // Create an input archive
-              iarchive(output_row3); // Read the data from the archive
+              cereal::BinaryInputArchive iarchive(ss2); // Create an input archive
+              iarchive(output_row); // Read the data from the archive
             }
-             std::cerr << "Query 3 Done: " << output_row3 << std::endl << std::endl;
+             std::cerr << "Query 2 Done: " << output_row << std::endl << std::endl;
+
+
+            // std::string query2 = "INSERT INTO users (name, age) VALUES ('Oliver9', 35)";
+            // std::unique_ptr<const query_result::QueryResult> queryResult2;
+            // client.Query(query2, queryResult2, timeout); 
+            // std::cerr << "Got res" << std::endl;
+            //  std::cerr << "Query 2 Done!" << std::endl << std::endl;
+  
+
+            // // client.Query(query, queryResult, timeout);  //--> Edit API in frontend sync_client.
+            // //                                //For real benchmarks: Also edit in sync_transaction_bench_client.
+            // // std::cerr << "Query 2 Result: " << queryResult << std::endl << std::endl;
+
+            // std::cerr << "Trying commit" << std::endl;
+            // client.Commit(timeout);
+            // std::cerr << "Committed Query" << std::endl;
+
+            // client.Begin(timeout);
+
+            // std::string query3 = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
+            // std::unique_ptr<const query_result::QueryResult> queryResult3;
+            // client.Query(query3, queryResult3, timeout);  //--> Edit API in frontend sync_client.
+            //                                //For real benchmarks: Also edit in sync_transaction_bench_client.
+                              
+            // // (*queryResult->at(0))[0] //TODO: parse the output...  data.length
+            // std::cerr << "Got res" << std::endl;
+            // UW_ASSERT(!queryResult3->empty());
+            // std::cerr << "num cols: " <<  queryResult3->columns() << std::endl;
+            // std::cerr << "num rows affected: " <<  queryResult3->rows_affected() << std::endl;
+
+            //  std::stringstream ss3(std::ios::in | std::ios::out | std::ios::binary);
+            // size_t nbytes3;
+            // const char* out3 = queryResult3->get(0, 0, &nbytes3);
+            // std::string output3(out3, nbytes3);
+            // ss3 << output3;
+            // std::string output_row3;
+            // {
+            //   cereal::BinaryInputArchive iarchive(ss3); // Create an input archive
+            //   iarchive(output_row3); // Read the data from the archive
+            // }
+            //  std::cerr << "Query 3 Done: " << output_row3 << std::endl << std::endl;
 
             // client.Abort(timeout);
             // std::cerr << "Aborted Query\n";

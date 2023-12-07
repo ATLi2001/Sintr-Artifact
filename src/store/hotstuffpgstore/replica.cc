@@ -68,6 +68,12 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
       asyncServer(asyncServer) {
   transport->Register(this, config, groupIdx, idx);
 
+  // Debug("Shir: creating new replica\n");
+  // // Debug(USE_HOTSTUFF_STORE);
+  // #ifdef USE_HOTSTUFF_STORE
+  //   Debug("Shir: in the if\n");
+  // #endif
+
   // intial view
   currentView = 0;
   // initial seqnum
@@ -86,8 +92,8 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
    EbStatNames[i] = "ebsize_" + std::to_string(i);
   }
 
-  Debug("Initialized replica at %d %d", groupIdx, idx);
-
+    Debug("Initialized replica at %d %d", groupIdx, idx);
+  
   stats = app->mutableStats();
   for (uint64_t i = 1; i <= maxBatchSize; i++) {
    bStatNames[i] = "bsize_" + std::to_string(i);
@@ -333,6 +339,7 @@ void Replica::HandleRequest(const TransportAddress &remote,
       proto::PackedMessage packedMsg = request.packed_msg();
       std::function<void(const std::string&, uint32_t seqnum)> execb = [this, digest, packedMsg, clientAddr](const std::string &digest_param, uint32_t seqnum) {
           if(numShards <= 6 || numShards == 12){
+              // std::cerr<<"Shir: the OG execb" << std::endl;
               Debug("Creating and sending callback");
               auto f = [this, digest, packedMsg, clientAddr, digest_param, seqnum](){
                   Debug("Callback: %d, %lu", idx, seqnum);
@@ -395,16 +402,64 @@ void Replica::HandleRequest(const TransportAddress &remote,
       // digest[4] = 'l';
       // digest[5] = 'e';
 
-      // std::string digest_b("bubble");
-      //
-      // std::function<void(const std::string&, uint32_t seqnum)> execb_bubble =
-      //   [this, digest_b](const std::string&, uint32_t seqnum){
-      //     stats->Increment("hotstuffpg_exec_bubble", 1);
-      //     std::cerr<<"Calling bubble dummt execute slots" << std::endl;
-      //     pendingExecutions[seqnum] = digest_b;
+
+// Shir: Pushing more commands down the pipeline
+      std::string digest_b("bubble");
+      std::function<void(const std::string&, uint32_t seqnum)> execb_bubble =
+        [this, digest_b](const std::string&, uint32_t seqnum){
+          stats->Increment("hotstuffpg_exec_bubble", 1);
+          std::cerr<<"Shir: Calling bubble dummy execute slots - first command to go down the pipe" << std::endl;
+          pendingExecutions[seqnum] = digest_b;
+          executeSlots();
+          // Shir: possibly remove the above command. it might break some things
+
+        };
+      hotstuffpg_interface.propose(digest_b, execb_bubble);
+
+
+      std::string digest_b1("bubble1");
+      std::function<void(const std::string&, uint32_t seqnum)> execb_bubble1 =
+        [this, digest_b1](const std::string&, uint32_t seqnum){
+          stats->Increment("hotstuffpg_exec_bubble 1", 1);
+          std::cerr<<"Calling bubble dummt execute slots 1" << std::endl;
+          pendingExecutions[seqnum] = digest_b1;
+          executeSlots();
+        };
+      hotstuffpg_interface.propose(digest_b1, execb_bubble1);
+
+
+      std::string digest_b2("bubble2");     
+      std::function<void(const std::string&, uint32_t seqnum)> execb_bubble2 =
+        [this, digest_b2](const std::string&, uint32_t seqnum){
+          stats->Increment("hotstuffpg_exec_bubble 2", 1);
+          std::cerr<<"Calling bubble dummt execute slots 2" << std::endl;
+          pendingExecutions[seqnum] = digest_b2;
+          executeSlots();
+        };
+      hotstuffpg_interface.propose(digest_b2, execb_bubble2);
+
+
+      // std::string digest_b3("bubble3");     
+      // std::function<void(const std::string&, uint32_t seqnum)> execb_bubble3 =
+      //   [this, digest_b3](const std::string&, uint32_t seqnum){
+      //     stats->Increment("hotstuffpg_exec_bubble 3", 1);
+      //     std::cerr<<"Calling bubble dummt execute slots 3" << std::endl;
+      //     pendingExecutions[seqnum] = digest_b3;
       //     executeSlots();
       //   };
-      //   hotstuffpg_interface.propose(digest_b, execb_bubble);
+      // hotstuffpg_interface.propose(digest_b3, execb_bubble3);
+
+      // std::string digest_b4("bubble4");     
+      // std::function<void(const std::string&, uint32_t seqnum)> execb_bubble4 =
+      //   [this, digest_b4](const std::string&, uint32_t seqnum){
+      //     stats->Increment("hotstuffpg_exec_bubble 4", 1);
+      //     std::cerr<<"Calling bubble dummt execute slots 4" << std::endl;
+      //     pendingExecutions[seqnum] = digest_b4;
+      //     executeSlots();
+      //   };
+      // hotstuffpg_interface.propose(digest_b4, execb_bubble4);
+
+
   }
 
 #else // use PBFT store

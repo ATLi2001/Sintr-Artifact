@@ -774,6 +774,9 @@ int main(int argc, char **argv) {
   for (int i = 0; i < numBenchs; ++i) {
     if (FLAGS_benchmark == benchmark_args[i]) {
       benchMode = benchmodes[i];
+      // std::cout << "Shir" << std::endl;
+      // std::cout << benchMode << std::endl;
+      // std::cout << "Shir2" << std::endl;
       break;
     }
   }
@@ -1565,6 +1568,7 @@ int main(int argc, char **argv) {
         break;
       case BENCH_TOY:
         UW_ASSERT(syncClient != nullptr);
+        std::cout << "Shir: toy mode" << std::endl;
         bench = new toy::ToyClient(*syncClient, *tport,
             seed,
             FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
@@ -1603,9 +1607,11 @@ int main(int argc, char **argv) {
       case BENCH_TOY: {
        SyncTransactionBenchClient *syncBench = dynamic_cast<SyncTransactionBenchClient *>(bench);
         toy::ToyClient *toyClient =  dynamic_cast<toy::ToyClient *>(syncBench);
+        // std::cout << "Shir: call execute toy1\n";
         threads.push_back(new std::thread([toyClient, bdcb](){
           //Simply calls whatever toy code is declared in ExecuteToy.
           //Could extend toyClient interface to declare toy code as explicit transaction, and run transaction multiple times.
+            // std::cout << "Shir: call execute toy2\n";
             toyClient->ExecuteToy();
             bdcb();
         }));

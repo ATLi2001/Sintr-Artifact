@@ -8,7 +8,7 @@ namespace hotstuff {
 namespace hotstuffstore {
 
     void IndicusInterface::propose(const std::string& hash, hotstuff_exec_callback execb) {
-        std::cout << "############# HotStuff Interface #############" << std::endl;
+        std::cout << "############# Shir: HotStuff Interface #############" << std::endl;
         hotstuff_papp->interface_propose(hash, execb);
         std::cout << "############# HotStuff Interface Proposed #############" << std::endl;
     }
@@ -37,7 +37,7 @@ namespace hotstuffstore {
         argv[2] = "--conf";
         argv[3] = arg3;
 
-        std::cout << std::endl << "############## HotStuff Config (hotstuffstore): " << config_file << "   " << key_file << std::endl << std::endl;
+        std::cout << std::endl << "############## Shir: HotStuff Config (hotstuffstore): " << config_file << "   " << key_file << std::endl << std::endl;
 
         initialize(4, argv);
     }

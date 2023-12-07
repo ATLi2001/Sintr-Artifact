@@ -63,3 +63,12 @@ I have been running tests using the `toy_client`. To do this, navigate to `src/s
 When running with replicated queries (sending 5 instead of 1) after a commit, a new transaction is not executed because the count for the pending executions gets incremented further than it should. This should not be an issue with non-replicated commands as the sequence number will get incremented the proper amount.
 
 The other things that I should mention is that the `src/lib/threadpool.cc` code on this branch is slightly different than the normal code. Do to hardware limitations of my local machine, this was necessary to allow for execution of the code.
+
+
+#### Shir:
+1. possibly delete /home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffpgstore/libhotstuff folder.
+2. initialize the postgres server with: `su - postgres -c "export PATH=$PATH:/usr/lib/postgresql/12/bin/; pg_ctlcluster 12 main start"`
+3. order of things: thhe following is something you do one time to configure your enviorment (i) install postgres (`postgres_install`) (ii) `server starter` 
+4. then you do 2
+5. change #define LOCAL_CONFIG_DIR "/home/sc3348/Pesto/Pequin-Artifact/src/scripts/config/" in '/home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffstore/libhotstuff/examples/local_config_dir.h'
+6. pipelined hotstuff
