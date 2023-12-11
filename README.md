@@ -69,6 +69,25 @@ The other things that I should mention is that the `src/lib/threadpool.cc` code 
 1. initialize the postgres server with: `su - postgres -c "export PATH=$PATH:/usr/lib/postgresql/12/bin/; pg_ctlcluster 12 main start"`
 2. order of things: thhe following is something you do one time to configure your enviorment (i) install postgres (`postgres_install`) (ii) `server starter` 
  then you do 1
+
+
+
+
+#### Postgres information:
+1. `pg_lsclusters -h` provides information on existing clusters and their status
+2. `posgres_service.sh` is the script that handles installation and creating\removing clusters.
+    use it as is in order to create the necceary cluster (it will also install postgres, if not already installed).
+    Use it with flag `-un` to uninstall postgres completely.
+    Use it with flag `-r` to drop the created cluster and all of its data. This action is unrecoverable.
+3. `server.cc` now starts the cluster upon construction of a Server, and turns it off when destructing. For now, the name of the cluster and the postgres version is hardcoded in that file.
+
+Helpful info regarding mounting :
+1. "df" command shows the list of mounted devices
+2. Use `umount /path/to/mounted_data` in order to unmount. I'm not sure why but sometimes you would have to do it more than once.
+3. Folders can be removed only after they are unmounted.
+
+
+Clarify next:
 3. change #define LOCAL_CONFIG_DIR "/home/sc3348/Pesto/Pequin-Artifact/src/scripts/config/" in '/home/sc3348/Pesto/Pequin-Artifact/src/store/hotstuffstore/libhotstuff/examples/local_config_dir.h'
 4. pipelined hotstuff
 5. code is run from src folder

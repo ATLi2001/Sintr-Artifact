@@ -29,6 +29,7 @@
 #include "store/common/transaction.h"
 #include <iostream>
 #include <sys/time.h>
+#include <cstdlib>
 
 namespace hotstuffpgstore {
 
@@ -53,11 +54,20 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
 
   dummyProof->mutable_txn()->mutable_timestamp()->set_timestamp(0);
   dummyProof->mutable_txn()->mutable_timestamp()->set_id(0);
+
+
+  // Start the cluster before trying to connect:
+  // version and cluster name should match the ones in Pequin-Artifact/pg_setup/postgres_service.sh script
+  const char* command = "sudo pg_ctlcluster 12 pgdata start";
+  system(command);
+
   // Shir: get back to this at some point
   // std::string db_name = "db" + std::to_string(1 + idx);
   std::string db_name = "db1"; // Use this code if every server is run on a 
   //separate host, otherwise use the above so they all reference a different database
-  std::string connection_str = "host=localhost user=pequin_user dbname=" + db_name + " port=5432";
+
+  // password should match the one created in Pequin-Artifact/pg_setup/postgres_service.sh script
+  std::string connection_str = "host=localhost user=pequin_user password=123 dbname=" + db_name + " port=5432";
 
   Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
   Debug("Shir: connection str is:  ");
@@ -65,21 +75,8 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   std::cerr << connection_str <<"\n";
   Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
 
-  //Shir: out put is:
-  // host=localhost user=pequin_user dbname=db1 port=5432
 
-
-  // with password: (connects, but not to right cluster)
-  std::string connection_str2 = "host=localhost user=shir_user password=123 dbname=" + db_name + " port=5432";
- 
-  //trying with socket (no port)  
-  // std::string connection_str3 = "host=/home/sc3348/Pesto/Pequin-Artifact/src/tmp-pgdata/socket user=shir_user password=123 dbname=" + db_name;
-
-  std::cerr << connection_str2 <<"\n";
-  Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");
-
-
-  connectionPool = tao::pq::connection_pool::create(connection_str2);
+  connectionPool = tao::pq::connection_pool::create(connection_str);
 
 
 
@@ -101,7 +98,12 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   Debug("PostgreSQL client created!", idx);
 }
 
-Server::~Server() {}
+Server::~Server() {
+  // Stopping the postgres cluster
+  // version and cluster name should match the ones in Pequin-Artifact/pg_setup/postgres_service.sh script
+  const char* command = "sudo pg_ctlcluster 12 pgdata stop";
+  system(command);
+}
 
 bool Server::CCC2(const proto::Transaction& txn) {
   Debug("Starting ccc v2 check");
