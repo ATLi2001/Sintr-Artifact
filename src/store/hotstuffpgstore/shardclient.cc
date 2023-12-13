@@ -511,6 +511,7 @@ void ShardClient::HandleInquiryReply(const proto::InquiryReply& inquiryReply, co
     PendingInquiry* pendingInquiry = &pendingInquiries[reqId];
 
     pendingInquiry->numReceivedReplies++;
+    Debug("Shir: got an additional reply");
     if(signMessages) { // May have to just take the second path?
       uint64_t replica_id = signedMsg.replica_id();
       if (replica_id / config.n != (uint64_t) group_idx) {
@@ -519,20 +520,30 @@ void ShardClient::HandleInquiryReply(const proto::InquiryReply& inquiryReply, co
       }
       if(inquiryReply.status() == REPLY_OK) {
         pendingInquiry->receivedReplies[inquiryReply.sql_res()].insert(replica_id);
+        Debug("Shir: query reply was OK");
 
         // Timestamp its(inquiryReply.value_timestamp());
         if(pendingInquiry->status == REPLY_FAIL) {
           Debug("Updating inquiry reply signed");
           // pendingInquiry->maxTs = its;
           pendingInquiry->status = REPLY_OK;
+          // Debug("Shir: 222");
+
         }
         if(!deterministic && signMessages) {
           pendingInquiry->receivedSuccesses.insert(replica_id);
+          // Debug("Shir: 333");
+
+          // std::cerr<<"Shir: query result:     "<<inquiryReply.sql_res() <<"\n";
           if(replica_id == 0) {
+            // Debug("Shir: 444");
+
             pendingInquiry->leaderReply = inquiryReply.sql_res();
           }
         }
       } else {
+        // Debug("Shir: 555");
+
         pendingInquiry->receivedFails.insert(replica_id);
         if(!deterministic && signMessages && replica_id == 0) {
           InquiryReplyHelper(pendingInquiry, inquiryReply.sql_res(), reqId, REPLY_FAIL);
@@ -542,7 +553,11 @@ void ShardClient::HandleInquiryReply(const proto::InquiryReply& inquiryReply, co
 
 
     } else {
+      // Debug("Shir: 666");
+
       if(inquiryReply.status() == REPLY_OK) {
+        // Debug("Shir: 777");
+
         pendingInquiry->receivedReplies[inquiryReply.sql_res()].insert(pendingInquiry->numReceivedReplies);
         // Timestamp its(inquiryReply.value_timestamp());
         if(pendingInquiry->status == REPLY_FAIL) {
@@ -556,8 +571,11 @@ void ShardClient::HandleInquiryReply(const proto::InquiryReply& inquiryReply, co
       }
     }
 
-    
+    // Debug("Shir: 888");
+    // std::cerr <<"Shir: Is deterministic?:  "<< deterministic <<"\n";
+    // std::cerr <<"Shir: Is signed messages?:  "<< signMessages <<"\n";
     if(!signMessages || deterministic) { // This is for a fault tolerant system, curently we only look for the leader's opinion (only works in signed system)
+      // Debug("Shir: 999");
       if(pendingInquiry->receivedReplies[inquiryReply.sql_res()].size() 
           >= (uint64_t) config.f + 1) {
         InquiryReplyHelper(pendingInquiry, inquiryReply.sql_res(), reqId, pendingInquiry->status);
@@ -566,6 +584,7 @@ void ShardClient::HandleInquiryReply(const proto::InquiryReply& inquiryReply, co
         InquiryReplyHelper(pendingInquiry, inquiryReply.sql_res(), reqId, REPLY_FAIL);
       }
     } else {
+      // Debug("Shir: 101010");
       if(pendingInquiry->receivedSuccesses.size() >= (uint64_t) config.f + 1 && 
           pendingInquiry->receivedSuccesses.find(0) != pendingInquiry->receivedSuccesses.end()) {
         InquiryReplyHelper(pendingInquiry, pendingInquiry->leaderReply, reqId, pendingInquiry->status);

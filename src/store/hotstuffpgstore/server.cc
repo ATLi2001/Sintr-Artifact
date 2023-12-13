@@ -62,11 +62,12 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   system(command);
 
   // Shir: get back to this at some point
-  // std::string db_name = "db" + std::to_string(1 + idx);
-  std::string db_name = "db1"; // Use this code if every server is run on a 
+  std::string db_name = "db" + std::to_string(1 + idx);
+  // std::string db_name = "db1"; // Use this code if every server is run on a 
   //separate host, otherwise use the above so they all reference a different database
 
   // password should match the one created in Pequin-Artifact/pg_setup/postgres_service.sh script
+  // port should match the one that appears when executing "pg_lsclusters -h"
   std::string connection_str = "host=localhost user=pequin_user password=123 dbname=" + db_name + " port=5432";
 
   Debug("Shir: 33333333333333333333333333333333333333333333333333333333333");

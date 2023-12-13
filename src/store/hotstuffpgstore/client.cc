@@ -179,7 +179,7 @@ void Client::Query(const std::string &query, query_callback qcb, query_timeout_c
 
     std::cerr<< "Shir: performing query transaction 1\n";
 
-    // Debug("Shir: step 30");
+    Debug("Shir: step 30");
 
     Debug("Query called");
 
@@ -193,17 +193,17 @@ void Client::Query(const std::string &query, query_callback qcb, query_timeout_c
       query_msg->set_query(query);
       query_result::QueryResult* query_res = new sql::QueryResultProtoWrapper(sql_res);
       qcb(status, query_res);
-      // Debug("Shir: step 45");
+      Debug("Shir: step 45");
 
     };
     inquiry_timeout_callback itcb = qtcb;
-    // Debug("Shir: step 40");
+    Debug("Shir: step 40");
 
-    // std::cerr<< "Shir: performing query transaction 2\n";
+    std::cerr<< "Shir: performing query transaction 2\n";
 
 
     bclient[0]->Query(query, currentTxn.timestamp(), client_id, client_seq_num, icb, itcb, timeout);
-    // Debug("Shir: step 50");
+    Debug("Shir: step 50");
 
   });
 }

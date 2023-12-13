@@ -77,8 +77,9 @@ The other things that I should mention is that the `src/lib/threadpool.cc` code 
 1. `pg_lsclusters -h` provides information on existing clusters and their status
 2. `posgres_service.sh` is the script that handles installation and creating\removing clusters.
     use it as is in order to create the necceary cluster (it will also install postgres, if not already installed).
-    Use it with flag `-un` to uninstall postgres completely.
+    Use it with flag `-u` to uninstall postgres completely.
     Use it with flag `-r` to drop the created cluster and all of its data. This action is unrecoverable.
+    Use it with flag `-n <db_num>` to create db_num databases on the cluster. The default number without using this option is 1. When running locally, you'll want to create a unique db for each server. When running remotly, all servers can access a database with the same name and this option is not necessary.
 3. `server.cc` now starts the cluster upon construction of a Server, and turns it off when destructing. For now, the name of the cluster and the postgres version is hardcoded in that file.
 
 Helpful info regarding mounting :

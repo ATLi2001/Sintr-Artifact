@@ -107,7 +107,8 @@ void ToyClient::ExecuteToy(){
             // std::cerr << "Shir: execute toy transacion : after timeout\n";
 
           
-            std::string query = "SELECT current_date";
+            // std::string query = "SELECT current_date";
+            std::string query = "SELECT * FROM users";
 
             // Create users table before trying to execute the following
             // std::string query = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
@@ -135,7 +136,14 @@ void ToyClient::ExecuteToy(){
              std::cerr << "Query 1 Done: " << output_row << std::endl << std::endl;
 
 
-            // Create users table before trying to execute the following
+            // Create users table before trying to execute the following - this should be for all dbs used in the code...
+            // CREATE TABLE users (
+            //     name            varchar(80),
+            //     age        point
+            // );
+
+
+
             query = "SELECT * FROM users"; //INSERT INTO users (name, age) VALUES ('Oliver5', 31)
             std::unique_ptr<const query_result::QueryResult> queryResult2;
             client.Query(query, queryResult, timeout);  //--> Edit API in frontend sync_client.
