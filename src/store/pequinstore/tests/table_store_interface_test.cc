@@ -794,12 +794,63 @@ void test_rw_sql() {
   delete table_store3;*/
 }
 
+void predicate_parser() {
+  // Query for testing
+  std::string test_query = "SELECT * FROM test WHERE a > 5;";
+
+  // Peloton tuple used for testing
+  std::vector<peloton::catalog::Column> columns;
+
+  peloton::catalog::Column column1(type::TypeId::INTEGER,
+                          type::Type::GetTypeSize(type::TypeId::INTEGER), "A",
+                          true);
+  peloton::catalog::Column column2(type::TypeId::INTEGER,
+                          type::Type::GetTypeSize(type::TypeId::INTEGER), "B",
+                          true);
+  peloton::catalog::Column column3(type::TypeId::TINYINT,
+                          type::Type::GetTypeSize(type::TypeId::TINYINT), "C",
+                          true);
+  peloton::catalog::Column column4(type::TypeId::VARCHAR, 25, "D", false);
+
+  columns.push_back(column1);
+  columns.push_back(column2);
+  columns.push_back(column3);
+  columns.push_back(column4);
+
+  // Call the PostgresParser
+  auto parser = peloton::parser::PostgresParser::GetInstance();
+  std::unique_ptr<peloton::parser::SQLStatementList> stmt_list(
+        parser.BuildParseTree(test_query).release());
+  if (!stmt_list->is_valid) {
+    std::cout << "Parsing failed" << std::endl;
+  }
+
+  auto sql_stmt = stmt_list->GetStatement(0);
+
+  // Only process select statements
+  if (sql_stmt->GetType() != peloton::StatementType::SELECT)
+    return;
+  auto select_stmt = (peloton::parser::SelectStatement *)sql_stmt;
+
+  // Extract the WHERE clause (predicate)
+  auto predicate_expr = select_stmt->where_clause;
+
+
+  std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
+  std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
+
+  std::unique_ptr<peloton::expression::AbstractExpression> root(createExpTree());
+  root->Evaluate(tuple, nullptr, nullptr);
+}
+
+
 int main() {
   // test_read_query(); // Adds 3 rows; deletes one; purges the delete;
   //   QueryRead for all 3
   //   FIXME: all 3 Segfault at the end.
   //   test_committed_table_write(); // 100 writes, 100 overwrites, Query Read
   //   for all test_read_predicate();
-  test_rw_sql();
+  //test_rw_sql();
+  predicate_parser();
   return 0;
 }
