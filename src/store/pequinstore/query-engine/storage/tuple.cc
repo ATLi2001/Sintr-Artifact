@@ -35,6 +35,7 @@ Tuple::~Tuple() {
 // Get the value of a specified column (const)
 type::Value Tuple::GetValue(oid_t column_id) const {
   PELOTON_ASSERT(tuple_schema_);
+  std::cout << "Tuple schema is " << tuple_schema_->GetInfo() << std::endl;
   PELOTON_ASSERT(tuple_data_);
   const type::TypeId column_type = tuple_schema_->GetType(column_id);
   const char *data_ptr = GetDataPtr(column_id);

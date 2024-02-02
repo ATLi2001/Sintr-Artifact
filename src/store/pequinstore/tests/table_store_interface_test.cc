@@ -795,27 +795,26 @@ void test_rw_sql() {
 }
 
 void predicate_parser() {
-  // Query for testing
-  std::string test_query = "SELECT * FROM test WHERE a > 5;";
-
   // Peloton tuple used for testing
   std::vector<peloton::catalog::Column> columns;
 
-  peloton::catalog::Column column1(type::TypeId::INTEGER,
-                          type::Type::GetTypeSize(type::TypeId::INTEGER), "A",
+  peloton::catalog::Column column1(peloton::type::TypeId::INTEGER,
+                          peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER), "A",
                           true);
-  peloton::catalog::Column column2(type::TypeId::INTEGER,
-                          type::Type::GetTypeSize(type::TypeId::INTEGER), "B",
+  peloton::catalog::Column column2(peloton::type::TypeId::INTEGER,
+                          peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER), "B",
                           true);
-  peloton::catalog::Column column3(type::TypeId::TINYINT,
-                          type::Type::GetTypeSize(type::TypeId::TINYINT), "C",
-                          true);
-  peloton::catalog::Column column4(type::TypeId::VARCHAR, 25, "D", false);
 
   columns.push_back(column1);
   columns.push_back(column2);
-  columns.push_back(column3);
-  columns.push_back(column4);
+
+  std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
+  std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
+  tuple->SetValue(0, peloton::type::ValueFactory::GetIntegerValue(10));
+  tuple->SetValue(1, peloton::type::ValueFactory::GetIntegerValue(15));
+
+  // Query for testing
+  std::string test_query = "SELECT * FROM test WHERE A > 5;";
 
   // Call the PostgresParser
   auto parser = peloton::parser::PostgresParser::GetInstance();
@@ -825,6 +824,7 @@ void predicate_parser() {
     std::cout << "Parsing failed" << std::endl;
   }
 
+
   auto sql_stmt = stmt_list->GetStatement(0);
 
   // Only process select statements
@@ -832,15 +832,16 @@ void predicate_parser() {
     return;
   auto select_stmt = (peloton::parser::SelectStatement *)sql_stmt;
 
+  std::cout << "WHERE CLAUSE child expr is " << select_stmt->where_clause->GetChild(0)->GetInfo() << std::endl;
+
   // Extract the WHERE clause (predicate)
-  auto predicate_expr = select_stmt->where_clause;
+  //auto predicate_expr = select_stmt->where_clause;
+  auto result = select_stmt->where_clause->Evaluate(nullptr, tuple.get(), nullptr);
 
 
-  std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
-  std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
-
-  std::unique_ptr<peloton::expression::AbstractExpression> root(createExpTree());
-  root->Evaluate(tuple, nullptr, nullptr);
+  //std::unique_ptr<peloton::expression::AbstractExpression> root(predicate_expr);
+  //auto result = root->Evaluate(tuple, nullptr, nullptr);
+  std::cout << "The result is " << result.GetInfo() << std::endl;
 }
 
 

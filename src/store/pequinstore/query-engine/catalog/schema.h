@@ -96,6 +96,9 @@ class Schema : public Printable {
   }
 
   inline type::TypeId GetType(const oid_t column_id) const {
+    std::cout << "Columns size: " << columns_.size() << std::endl;
+    std::cout << "Column id: " << column_id << std::endl;
+    std::cout << "Column is: " << columns_[0].GetInfo() << std::endl;
     return columns_[column_id].GetType();
   }
 
