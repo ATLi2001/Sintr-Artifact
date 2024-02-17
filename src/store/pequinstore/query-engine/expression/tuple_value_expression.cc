@@ -34,6 +34,7 @@ type::Value TupleValueExpression::Evaluate(
 void TupleValueExpression::PerformBinding(
     const std::vector<const planner::BindingContext *> &binding_contexts) {
   const auto &context = binding_contexts[GetTupleId()];
+  std::cout << "Get column id is " << GetColumnId() << std::endl;
   ai_ = context->Find(GetColumnId());
   PELOTON_ASSERT(ai_ != nullptr);
   LOG_TRACE("TVE Column ID %u.%u binds to AI %p (%s)", GetTupleId(),

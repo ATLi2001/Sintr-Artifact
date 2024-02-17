@@ -439,8 +439,8 @@ PlanGenerator::GenerateTableTVExprs(
     expression::TupleValueExpression *col_expr =
         new expression::TupleValueExpression(
             column_object->GetColumnName().c_str(), alias.c_str());
-    col_expr->SetValueType(column_object->GetColumnType());
-    col_expr->SetBoundOid(db_id, table_id, col_id);
+    //col_expr->SetValueType(column_object->GetColumnType());
+    //col_expr->SetBoundOid(db_id, table_id, col_id);
     exprs[col_id].reset(col_expr);
   }
   return exprs;
@@ -475,6 +475,7 @@ PlanGenerator::GeneratePredicateForScan(
   auto exprs = GenerateTableTVExprs(alias, table);
   ExprMap table_expr_map;
   for (oid_t idx = 0; idx < exprs.size(); ++idx) {
+    std::cout << "Expr is " << exprs[idx].get()->GetInfo() << std::endl;
     table_expr_map[exprs[idx].get()] = idx;
   }
   unique_ptr<expression::AbstractExpression> predicate =

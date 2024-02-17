@@ -35,11 +35,13 @@ Tuple::~Tuple() {
 // Get the value of a specified column (const)
 type::Value Tuple::GetValue(oid_t column_id) const {
   PELOTON_ASSERT(tuple_schema_);
-  std::cout << "Tuple schema is " << tuple_schema_->GetInfo() << std::endl;
+  //std::cout << "Tuple schema is " << tuple_schema_->GetInfo() << std::endl;
   PELOTON_ASSERT(tuple_data_);
   const type::TypeId column_type = tuple_schema_->GetType(column_id);
   const char *data_ptr = GetDataPtr(column_id);
   const bool is_inlined = tuple_schema_->IsInlined(column_id);
+  int printable_id = static_cast<int>(column_id);
+  std::cout << "Column type is " << printable_id << std::endl;
   return type::Value::DeserializeFrom(data_ptr, column_type, is_inlined);
 }
 

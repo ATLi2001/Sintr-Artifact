@@ -565,9 +565,19 @@ class ExpressionUtil {
       // shared_ptr to delete the object. Use alias constructor
       auto tup_expr = (TupleValueExpression *)expr;
       size_t tuple_idx = 0;
+      std::cout << "Outside tuple value expression" << std::endl;
       for (auto &expr_map : expr_maps) {
+        std::cout << "Inside for loop tuple value expr" << std::endl;
+        for (auto expression : expr_map) {
+          std::cout << "Predicate expr is " << expr->GetInfo() << std::endl;
+          std::cout << "Predicate hash is " << expr->Hash() << std::endl;
+          std::cout << "Inside expr first is " << expression.first->GetInfo() << std::endl;
+          std::cout << "Inside expr first hash " << expression.first->Hash() << std::endl;
+          std::cout << "Inside expr second is " << expression.second << std::endl;
+        }
         auto iter = expr_map.find(expr);
         if (iter != expr_map.end()) {
+          std::cout << "Setting value index" << std::endl;
           tup_expr->SetValueIdx(iter->second, tuple_idx);
           break;
         }

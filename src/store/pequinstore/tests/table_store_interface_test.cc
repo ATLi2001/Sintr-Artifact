@@ -30,6 +30,10 @@
 #include "../query-engine/traffic_cop/traffic_cop.h"
 #include "../query-engine/type/type.h"
 #include "../query-engine/type/value_factory.h"
+#include "../query-engine/optimizer/util.h"
+#include "../query-engine/optimizer/operators.h"
+#include "../query-engine/common/internal_types.h"
+#include "../query-engine/optimizer/plan_generator.h"
 
 #include "lib/assert.h"
 #include "store/common/timestamp.h"
@@ -794,27 +798,63 @@ void test_rw_sql() {
   delete table_store3;*/
 }
 
+std::vector<peloton::AnnotatedExpression> CollectPredicates(
+    peloton::expression::AbstractExpression *expr,
+    std::vector<peloton::AnnotatedExpression> predicates) {
+  // First check if all conjunctive predicates are supported before
+  // transfoming
+  // predicate with sub-select into regular predicates
+  std::vector<peloton::expression::AbstractExpression *> predicate_ptrs;
+  peloton::optimizer::util::SplitPredicates(expr, predicate_ptrs);
+  // Accept will change the expression, e.g. (a in (select b from test)) into
+  // (a IN test.b), after the rewrite, we can extract the table aliases
+  // information correctly
+  expr->Accept(new peloton::SqlNodeVisitor);
+  return peloton::optimizer::util::ExtractPredicates(expr, predicates);
+}
+
 void predicate_parser() {
+  // Create table
+  auto &txn_manager =  peloton::concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
+  auto catalog = peloton::catalog::Catalog::GetInstance();
+  catalog->CreateDatabase(txn, "emp_db");
+
+  auto id_column = peloton::catalog::Column(
+      peloton::type::TypeId::INTEGER, peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER),
+      "id", true);
+  //auto name_column = peloton::catalog::Column(peloton::type::TypeId::VARCHAR, 32, "name", true);
+
+  std::unique_ptr<peloton::catalog::Schema> table_schema(
+      new peloton::catalog::Schema({id_column}));
+
+  
+  catalog->CreateTable(txn,
+                       "emp_db",
+                       DEFAULT_SCHEMA_NAME,
+                       std::move(table_schema),
+                       "emp_table",
+                       false);
+  
+  auto emp = catalog->GetTableCatalogEntry(txn,
+                                     "emp_db",
+                                     DEFAULT_SCHEMA_NAME,
+                                     "emp_table");
+  txn_manager.CommitTransaction(txn);
+
   // Peloton tuple used for testing
   std::vector<peloton::catalog::Column> columns;
 
-  peloton::catalog::Column column1(peloton::type::TypeId::INTEGER,
-                          peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER), "A",
-                          true);
-  peloton::catalog::Column column2(peloton::type::TypeId::INTEGER,
-                          peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER), "B",
-                          true);
-
-  columns.push_back(column1);
-  columns.push_back(column2);
+  columns.push_back(id_column);
+  //columns.push_back(name_column);
 
   std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
   std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
-  tuple->SetValue(0, peloton::type::ValueFactory::GetIntegerValue(10));
-  tuple->SetValue(1, peloton::type::ValueFactory::GetIntegerValue(15));
+  tuple->SetValue(0, peloton::type::ValueFactory::GetIntegerValue(5));
+  //tuple->SetValue(1, peloton::type::ValueFactory::GetVarcharValue("neil"));
 
   // Query for testing
-  std::string test_query = "SELECT * FROM test WHERE A > 5;";
+  std::string test_query = "SELECT * FROM emp_table WHERE id = 5;";
 
   // Call the PostgresParser
   auto parser = peloton::parser::PostgresParser::GetInstance();
@@ -831,17 +871,58 @@ void predicate_parser() {
   if (sql_stmt->GetType() != peloton::StatementType::SELECT)
     return;
   auto select_stmt = (peloton::parser::SelectStatement *)sql_stmt;
+  std::vector<peloton::AnnotatedExpression> predicates_;
 
-  std::cout << "WHERE CLAUSE child expr is " << select_stmt->where_clause->GetChild(0)->GetInfo() << std::endl;
-
-  // Extract the WHERE clause (predicate)
-  //auto predicate_expr = select_stmt->where_clause;
+  /*reinterpret_cast<peloton::expression::TupleValueExpression *>(select_stmt->where_clause)->SetValueIdx(0);
   auto result = select_stmt->where_clause->Evaluate(nullptr, tuple.get(), nullptr);
+  std::cout << "The result is " << result.GetInfo() << std::endl;*/
+
+  auto where_clause = select_stmt->where_clause->Copy();
+  std::shared_ptr<peloton::expression::AbstractExpression> sptr(where_clause);
+  peloton::optimizer::PlanGenerator plan_generator;
+  auto predicate = plan_generator.GeneratePredicateForScan(sptr, "", emp);
+
+  std::cout << "The predicate is " << predicate->GetInfo() << std::endl;
+  auto result = predicate->Evaluate(tuple.get(), nullptr, nullptr);
+
+  std::cout << "Result from evaluating predicate is " << result.ToString() << std::endl;
+
+  /*if (select_stmt->where_clause != nullptr) {
+    predicates_ = CollectPredicates(select_stmt->where_clause.get(), predicates_);
+    for (auto pred : predicates_) {
+      peloton::planner::BindingContext all_cols_context;
+      for (peloton::oid_t col_id = 0; col_id < schema->GetColumnCount(); col_id++) {
+        all_cols_context.BindNew(col_id, &attributes_[col_id]);
+      }
+
+      std::cout << "Found context is " << all_cols_context.Find(0)->name << std::endl;
+
+      pred.expr->PerformBinding({&all_cols_context});
+      std::cout << "Predicate is " << pred.expr->GetInfo() << std::endl;
+      auto result = pred.expr->Evaluate(nullptr, tuple.get(), nullptr);
+      std::cout << "The result is " << result.GetInfo() << std::endl;
+    }
+  }*/
+
+  /*if (!predicates_.empty()) {
+    auto filter_expr =
+        std::make_shared<peloton::expression::OperatorExpression>(peloton::optimizer::LogicalFilter::make(predicates_));
+    //filter_expr->PushChild(output_expr_);
+    //output_expr_ = filter_expr;
+
+    // Extract the WHERE clause (predicate)
+    auto predicate_expr = select_stmt->where_clause;
+    auto result = filter_expr->Evaluate(nullptr, tuple.get(), nullptr);
 
 
-  //std::unique_ptr<peloton::expression::AbstractExpression> root(predicate_expr);
-  //auto result = root->Evaluate(tuple, nullptr, nullptr);
-  std::cout << "The result is " << result.GetInfo() << std::endl;
+    //std::unique_ptr<peloton::expression::AbstractExpression> root(predicate_expr);
+    //auto result = root->Evaluate(tuple, nullptr, nullptr);
+    std::cout << "The result is " << result.GetInfo() << std::endl;
+  }*/
+
+  //std::cout << "WHERE CLAUSE child expr is " << select_stmt->where_clause->GetChild(0)->GetInfo() << std::endl;
+
+  
 }
 
 
