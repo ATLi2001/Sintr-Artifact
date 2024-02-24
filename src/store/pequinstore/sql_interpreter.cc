@@ -1658,7 +1658,9 @@ bool SQLTransformer::CheckColConditions(std::string_view &cond_statement, std::s
     
     Debug("Find TABLE: [%s] in Registry", table_name.c_str());
     auto itr = TableRegistry.find(table_name);
+    std::cerr << "Before col assert" << std::endl;
     UW_ASSERT(itr != TableRegistry.end());
+    std::cerr << "After col assert" << std::endl;
     const ColRegistry &col_registry = itr->second; //TableRegistry[table_name]; 
 
     return CheckColConditions(cond_statement, col_registry, p_col_values, relax);
@@ -1686,6 +1688,8 @@ bool SQLTransformer::CheckColConditions(std::string_view &cond_statement, const 
 
     bool terminate_early = false;
     size_t end = 0;
+
+    std::cerr << "cond statement is " << std::string(cond_statement) << std::endl;
 
     std::map<std::string, std::string> p_col_value;
     if(!CheckColConditions(end, cond_statement, col_registry, p_col_value, terminate_early, relax)) return false;

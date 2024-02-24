@@ -401,6 +401,7 @@ void GetToIndexScan::Transform(
       std::cerr << "is primary? " << is_primary_index << ". min_distance (if match): " << min_distance << std::endl;
   
        if (min_distance < closest_index || (min_distance == closest_index && index_key_column_id_list.size() > max_num_matching_cols )){
+        std::cout << "Adding index plan for able " << get->table->GetTableName() << std::endl;
         auto index_scan_op = PhysicalIndexScan::make(
             get->get_id, get->table, get->table_alias, get->predicates,
             get->is_for_update, index_id, index_key_column_id_list,

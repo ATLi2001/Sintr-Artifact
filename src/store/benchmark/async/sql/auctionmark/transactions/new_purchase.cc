@@ -91,17 +91,23 @@ transaction_status_t NewPurchase::Execute(SyncClient &client) {
 
     
       //Read Without TABLE_ITEM_MAX_BID
-       std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
+       /*std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
                                         "FROM {}, {}, {} "
                                         "WHERE i_id = '{}' AND i_u_id = '{}' "
                                           "AND ib_i_id = i_id AND ib_u_id = i_u_id "
                                           "AND ib_buyer_id = u_id", TABLE_ITEM, TABLE_ITEM_BID, TABLE_USERACCT,
+                                          item_id, seller_id);*/
+      std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
+                                        "FROM {}, {}, {} "
+                                        "WHERE i_id = '{}' AND i_u_id = '{}' "
+                                          "AND ib_i_id = i_id AND ib_u_id = i_u_id "
+                                          "AND ib_buyer_id = u_id AND ib_i_id = ib_i_id AND i_id = i_id AND ib_u_id = ib_u_id AND i_u_id = i_u_id AND ib_buyer_id = ib_buyer_id AND u_id = u_id", TABLE_ITEM, TABLE_ITEM_BID, TABLE_USERACCT,
                                           item_id, seller_id);
       client.Query(getItemInfo, queryResult, timeout);
   }
   else{
     // Get the ITEM_MAX_BID record so that we know what we need to process. At this point we should always have an ITEM_MAX_BID record
-    std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
+    /*std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
                                         "FROM {}, {}, {}, {} "
                                         "WHERE i_id = '{}' AND i_u_id = '{}' "
                                         "AND imb_i_id = '{}' AND imb_u_id = '{}' " //added redundancies for better scan choice...
@@ -113,7 +119,18 @@ transaction_status_t NewPurchase::Execute(SyncClient &client) {
                                         item_id, seller_id, item_id, seller_id, item_id, seller_id);
                                         //This query should do Primary index scan for Item, ItemMaxBid
                                         //After that, it should be able to do primary index scan on ItemBid and UserAcct via NestedLoop join
-                                        // //The only unknown are: ib_id and u_id
+                                        // //The only unknown are: ib_id and u_id*/
+    std::string getItemInfo = fmt::format("SELECT i_num_bids, i_current_price, i_end_date, ib_id, ib_buyer_id, u_balance "
+                                        "FROM {}, {}, {}, {} "
+                                        "WHERE i_id = '{}' AND i_u_id = '{}' "
+                                        "AND imb_i_id = '{}' AND imb_u_id = '{}' " //added redundancies for better scan choice...
+                                        //"AND imb_i_id = i_id AND imb_u_id = i_u_id "
+                                        "AND imb_ib_id = ib_id "
+                                        "AND ib_i_id = '{}' AND ib_u_id = '{}' "  // because imb_ib_i_id == imb_i_d and imb_ib_u_id = imb_u_id.
+                                        //"AND imb_ib_i_id = ib_i_id AND imb_ib_u_id = ib_u_id "
+                                        "AND ib_buyer_id = u_id AND imb_ib_id = imb_ib_id AND ib_id = ib_id AND ib_buyer_id = ib_buyer_id AND u_id = u_id", TABLE_ITEM, TABLE_ITEM_MAX_BID, TABLE_ITEM_BID, TABLE_USERACCT,
+                                        item_id, seller_id, item_id, seller_id, item_id, seller_id);
+    
     client.Query(getItemInfo, queryResult, timeout);
   }
   if(queryResult->empty()){
