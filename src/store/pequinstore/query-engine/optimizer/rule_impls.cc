@@ -395,6 +395,7 @@ void GetToIndexScan::Transform(
         }
       }
 
+      std::cerr << "table name is " << get->table->GetTableName() << std::endl;
       std::cerr << "is primary? " << is_primary_index << ". min_distance: " << min_distance << std::endl;
       //If index fully covers the condition. //Give preference to primary key.
       if(index_key_column_id_list.size() == index_col_set.size()) min_distance = is_primary_index? -2 : -1;

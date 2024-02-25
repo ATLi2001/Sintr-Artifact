@@ -408,8 +408,9 @@ void IndexScanExecutor::ManageReadSet(ItemPointer &visible_tuple_location, concu
 void IndexScanExecutor::ManageReadSet(ItemPointer &tuple_location, std::shared_ptr<storage::TileGroup> tile_group, storage::TileGroupHeader *tile_group_header, 
     concurrency::TransactionContext *current_txn) {
   
+  bool is_metadata_table_ = table_->GetName().substr(0,3) == "pg_";
   //Don't create a read set if it's a point query, or the query is executed in snapshot only mode
-  if (current_txn->GetHasReadSetMgr()) {
+  if (current_txn->GetHasReadSetMgr() && !is_metadata_table_) {
 
     auto const &primary_index_columns_ = index_->GetMetadata()->GetKeyAttrs();
     auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
@@ -417,6 +418,7 @@ void IndexScanExecutor::ManageReadSet(ItemPointer &tuple_location, std::shared_p
     ContainerTuple<storage::TileGroup> row(tile_group.get(), tuple_location.offset);
 
     std::vector<std::string> primary_key_cols;
+    std::cerr << "Table name for readset is " << table_->GetName() << std::endl;
     for (auto const &col_idx : current_txn->GetTableRegistry()->at(table_->GetName()).primary_col_idx) {
     //for (auto const &col_idx : primary_index_columns_) { //These are not the right primary key cols. They may be secondary index cols...
       auto const &val = row.GetValue(col_idx);
@@ -1014,7 +1016,7 @@ void IndexScanExecutor::ManageSnapshot(concurrency::TransactionContext *current_
    bool is_metadata_table_ = table_->GetName().substr(0,3) == "pg_"; //don't do any of the Pequin features for meta data tables..
    //UW_ASSERT(!is_metadata_table_);
   if(is_metadata_table_) return;
-
+  std::cout << "Snapshot table name is " << table_->GetName() << std::endl;
   Debug("Manage Snapshot. Add TS [%lu:%lu]", write_timestamp.getTimestamp(), write_timestamp.getID());
   auto txn_digest = tile_group_header->GetTxnDig(tuple_location.offset);
   UW_ASSERT(txn_digest);
