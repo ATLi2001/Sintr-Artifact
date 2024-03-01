@@ -823,7 +823,7 @@ void predicate_parser() {
   auto id_column = peloton::catalog::Column(
       peloton::type::TypeId::INTEGER, peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER),
       "id", true);
-  //auto name_column = peloton::catalog::Column(peloton::type::TypeId::VARCHAR, 32, "name", true);
+  auto name_column = peloton::catalog::Column(peloton::type::TypeId::VARCHAR, 32, "name", true);
 
   std::unique_ptr<peloton::catalog::Schema> table_schema(
       new peloton::catalog::Schema({id_column}));
@@ -835,26 +835,38 @@ void predicate_parser() {
                        std::move(table_schema),
                        "emp_table",
                        false);
+  /*catalog->CreateTable(txn,
+                       "emp_db",
+                       DEFAULT_SCHEMA_NAME,
+                       std::move(table_schema),
+                       "emp_salary",
+                       false);*/
   
   auto emp = catalog->GetTableCatalogEntry(txn,
                                      "emp_db",
                                      DEFAULT_SCHEMA_NAME,
                                      "emp_table");
+  /*auto salary = catalog->GetTableCatalogEntry(txn,
+                                     "emp_db",
+                                     DEFAULT_SCHEMA_NAME,
+                                     "emp_salary");*/
   txn_manager.CommitTransaction(txn);
 
   // Peloton tuple used for testing
   std::vector<peloton::catalog::Column> columns;
 
   columns.push_back(id_column);
-  //columns.push_back(name_column);
+  columns.push_back(name_column);
 
   std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
   std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
   tuple->SetValue(0, peloton::type::ValueFactory::GetIntegerValue(5));
-  //tuple->SetValue(1, peloton::type::ValueFactory::GetVarcharValue("neil"));
+  tuple->SetValue(1, peloton::type::ValueFactory::GetVarcharValue("neil"));
 
   // Query for testing
-  std::string test_query = "SELECT * FROM emp_table WHERE id = 5;";
+  std::string test_query = "SELECT * FROM emp_table WHERE id = 5 AND name = 'neil';";
+  // Join query for testing
+  std::string test_join_query = "SELECT id FROM emp_table, emp_salary WHERE id = 5 AND e_salary = s_salary;";
 
   // Call the PostgresParser
   auto parser = peloton::parser::PostgresParser::GetInstance();
