@@ -813,6 +813,43 @@ std::vector<peloton::AnnotatedExpression> CollectPredicates(
   return peloton::optimizer::util::ExtractPredicates(expr, predicates);
 }
 
+std::unique_ptr<peloton::catalog::Schema> ConvertColRegistryToSchema(ColRegistry *col_registry) {
+  std::vector<peloton::catalog::Column> columns;
+  for (int i = 0; i < col_registry->col_names.size(); i++) {
+    auto name = col_registry->col_names[i];
+    auto type = col_registry->col_name_type.at(name);
+    
+    if (type == "VARCHAR") {
+      auto column = peloton::catalog::Column(
+      peloton::type::TypeId::VARCHAR, peloton::type::Type::GetTypeSize(peloton::type::TypeId::VARCHAR), name, true);
+      columns.push_back(column);
+    } else if (type == "INTEGER") {
+      auto column = peloton::catalog::Column(
+      peloton::type::TypeId::INTEGER, peloton::type::Type::GetTypeSize(peloton::type::TypeId::INTEGER), name, true);
+      columns.push_back(column);
+    }
+  }
+
+  std::unique_ptr<peloton::catalog::Schema> schema(new peloton::catalog::Schema(columns));
+  return schema;
+}
+
+bool Eval(peloton::expression::AbstractExpression *predicate, RowUpdates *row, std::unique_ptr<peloton::catalog::Schema> schema) { 
+  std::unique_ptr<peloton::storage::Tuple> tuple(new peloton::storage::Tuple(schema.get(), true));
+
+  for(int i = 0; i < row->column_values_size(); ++i){
+    if (schema->GetColumn(i).GetType() == peloton::type::TypeId::INTEGER) {
+      int32_t val = std::stoi(row->column_values()[i]);
+      tuple->SetValue(i, peloton::type::ValueFactory::GetIntegerValue(val));
+    } else if (schema->GetColumn(i).GetType() == peloton::type::TypeId::VARCHAR) {
+      tuple->SetValue(i, peloton::type::ValueFactory::GetVarcharValue(row->column_values()[i]));
+    }    
+  }
+
+  auto result = predicate->Evaluate(tuple.get(), nullptr, nullptr);
+  return result.IsTrue();
+}
+
 void predicate_parser() {
   // Create table
   auto &txn_manager =  peloton::concurrency::TransactionManagerFactory::GetInstance();
@@ -871,7 +908,7 @@ void predicate_parser() {
   // Call the PostgresParser
   auto parser = peloton::parser::PostgresParser::GetInstance();
   std::unique_ptr<peloton::parser::SQLStatementList> stmt_list(
-        parser.BuildParseTree(test_query).release());
+        parser.BuildParseTree(test_join_query).release());
   if (!stmt_list->is_valid) {
     std::cout << "Parsing failed" << std::endl;
   }
@@ -890,6 +927,9 @@ void predicate_parser() {
   std::cout << "The result is " << result.GetInfo() << std::endl;*/
 
   auto where_clause = select_stmt->where_clause->Copy();
+  where_clause->DeduceExpressionName();
+  std::cout << "Getting expr name" << std::endl;
+  std::cout << where_clause->expr_name_ << std::endl;
   std::shared_ptr<peloton::expression::AbstractExpression> sptr(where_clause);
   peloton::optimizer::PlanGenerator plan_generator;
   auto predicate = plan_generator.GeneratePredicateForScan(sptr, "", emp);
