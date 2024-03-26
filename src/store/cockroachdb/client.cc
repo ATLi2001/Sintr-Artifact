@@ -210,14 +210,13 @@ void Client::Put(const std::string &key, const std::string &value,
 // Execute query.
 void Client::Query(const std::string &query_statement, query_callback qcb,
       query_timeout_callback qtcb, uint32_t timeout, bool cache_result, bool skip_query_interpretation) {
-  std::cerr << "In Query" << std::endl;
   try {
-    if (tr == nullptr) {
-      qcb(REPLY_FAIL, nullptr);
-      return;
-    }
-    tao::pq::result result = [this, &query_statement]() {
-      return tr->execute(query_statement);
+      tao::pq::result result = [this, &query_statement]() {
+      // If part of a Tx, use Tx->exec, else use connection->exec
+      if (tr != nullptr)
+        return tr->execute(query_statement);
+      else
+        return conn->execute(query_statement);
     }();
     stats.Increment("queries_issued", 1);
     taopq_wrapper::TaoPQQueryResultWrapper *tao_res =
@@ -226,45 +225,29 @@ void Client::Query(const std::string &query_statement, query_callback qcb,
   } catch (const std::exception &e) {
     std::cerr << "Tx query failed" << '\n';
     std::cerr << e.what() << '\n';
-    tr->rollback();
-    tr = nullptr;
-    qcb(REPLY_FAIL, nullptr);
+    qtcb(REPLY_FAIL);
   }
 }
 
 void Client::Write(std::string &write_statement, write_callback wcb, 
-  write_timeout_callback wtcb, uint32_t timeout, bool blind_write) {
+  write_timeout_callback wtcb, uint32_t timeout) {
   try {
-    if (tr == nullptr) {
-      wcb(REPLY_FAIL, nullptr);
-      return;
-    }
-
-    tao::pq::result result = tr->execute(write_statement);
-    stats.Increment("writes_issued", 1);
+      tao::pq::result result = [this, &write_statement]() {
+      // If part of a Tx, use Tx->exec, else use connection->exec
+      if (tr != nullptr)
+        return tr->execute(write_statement);
+      else
+        return conn->execute(write_statement);
+    }();
+     stats.Increment("writes_issued", 1);
+    // TODO handle qcb
     taopq_wrapper::TaoPQQueryResultWrapper *tao_res =
         new taopq_wrapper::TaoPQQueryResultWrapper(std::make_unique<tao::pq::result>(std::move(result)));
     wcb(REPLY_OK, tao_res);
-  } catch (const tao::pq::integrity_constraint_violation &e) {
-    std::cerr << "Tx write integrity constraint violation" << '\n';
-    std::cerr << e.what() << '\n';
-    auto result = new taopq_wrapper::TaoPQQueryResultWrapper();
-    wcb(REPLY_OK, result);
-  } catch (const tao::pq::transaction_rollback &e) {
-    std::cerr << "Tx write transaction rollback" << std::endl;
-    std::cerr << e.what() << std::endl;
-    tr->rollback();
-    tr = nullptr;
-    wcb(REPLY_FAIL, nullptr);
-  } catch (const tao::pq::in_failed_sql_transaction &e) {
-    std::cerr << "Tx write failed" << std::endl;
-    std::cerr << e.what() << std::endl;
-    tr = nullptr;
-    wcb(REPLY_FAIL, nullptr);
   } catch (const std::exception &e) {
     std::cerr << "Tx write failed" << '\n';
     std::cerr << e.what() << '\n';
-    Panic("Tx write failed");
+    wtcb(REPLY_FAIL);
   }
 }
 

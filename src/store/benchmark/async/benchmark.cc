@@ -1407,6 +1407,7 @@ int main(int argc, char **argv) {
       case PROTO_HOTSTUFF_PG:
       case PROTO_BFTSMART:
       case PROTO_AUGUSTUS_SMART:
+      case PROTO_CRDB:
       case PROTO_AUGUSTUS:
         switch (read_quorum) {
           case READ_QUORUM_ONE:
@@ -1646,7 +1647,10 @@ int main(int argc, char **argv) {
     }
 
     case PROTO_CRDB: {
-      client = new cockroachdb::Client(*config, clientId, FLAGS_num_shards, FLAGS_num_groups, tport, TrueTime(FLAGS_clock_skew, FLAGS_clock_error));
+      client = new cockroachdb::Client(
+            *config, clientId, FLAGS_num_shards, FLAGS_num_groups, tport,
+            FLAGS_indicus_phase1_decision_timeout,
+            TrueTime(FLAGS_clock_skew, FLAGS_clock_error));
         break;
     }
 

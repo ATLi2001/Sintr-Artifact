@@ -41,7 +41,8 @@ namespace cockroachdb {
 class Client : public ::Client {
  public:
   Client(const transport::Configuration &config, uint64_t id, int nShards,
-         int nGroups, Transport *transport, TrueTime timeserver = TrueTime(0, 0));
+         int nGroups, Transport *transport, uint64_t default_timeout,
+         TrueTime timeserver = TrueTime(0, 0));
   ~Client();
 
   // Begin a transaction.
@@ -65,14 +66,12 @@ class Client : public ::Client {
   virtual void Abort(abort_callback acb, abort_timeout_callback atcb,
                      uint32_t timeout) override;
 
-//   virtual void SQLRequest(std::string &statement, sql_callback scb,
-//     sql_timeout_callback stcb, uint32_t timeout) override;
-
+  // inline const Stats &GetStats() const { return stats; }
   virtual void Query(const std::string &query_statement, query_callback qcb,
       query_timeout_callback qtcb, uint32_t timeout, bool cache_result = false, bool skip_query_interpretation = false) override;
 
   virtual void Write(std::string &write_statement, write_callback wcb,
-      write_timeout_callback wtcb, uint32_t timeout, bool blind_write=false) override;
+      write_timeout_callback wtcb, uint32_t timeout) override;
 
  protected:
   Stats stats;
