@@ -82,9 +82,7 @@ def kill_servers(config, executor, kill_args=' -9'):
     x = len(config['server_names']) // n
     kill_commands = {}
     for group in range(config['num_groups']):
-        
         process_idx = group // x
-        
         for i in range(n):
             server_idx = (i * x + group) % len(config['server_names'])
             if is_exp_remote(config):
@@ -267,7 +265,10 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
     x = len(config['server_names']) // n
     start_commands = {}
     for group in range(config['num_groups']):
-        process_idx = group // x
+        if x > 0:
+            process_idx = group // x
+        else:
+            process_idx = 0
         for i in range(n):
             server_idx = (i * x + group) % len(config['server_names'])
             if is_exp_local(config):

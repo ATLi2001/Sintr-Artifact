@@ -318,7 +318,7 @@ namespace auctionmark
    
     if (item_info.has_current_price())
     {
-      if (items.size() < ITEM_ID_CACHE_SIZE)
+      if (items.size() < ITEM_ID_CACHE_SIZE || is_loader)
       {
         items.push_back(item_info);
 
@@ -405,16 +405,16 @@ namespace auctionmark
       switch (new_status)
       {
       case ItemStatus::OPEN:
-        add_item(items_available, item_info);
+        add_item(items_available, item_info, is_loader);
         break;
       case ItemStatus::ENDING_SOON:
-        add_item(items_ending_soon, item_info);
+        add_item(items_ending_soon, item_info, is_loader);
         break;
       case ItemStatus::WAITING_FOR_PURCHASE:
-        add_item(items_waiting_for_purchase, item_info);
+        add_item(items_waiting_for_purchase, item_info, is_loader);
         break;
       case ItemStatus::CLOSED:
-        add_item(items_completed, item_info);
+        add_item(items_completed, item_info, is_loader);
         break;
       }
       item_info.set_status(new_status);
@@ -592,6 +592,15 @@ namespace auctionmark
   void AuctionMarkProfile::save_profile() {
     std::cerr << "items_per_cat.size: " << items_per_category.size() << std::endl;
     std::cerr << "seller cnt: " << seller_item_cnt.size() << std::endl;
+    for (auto& items : all_item_sets) {
+      if (items->size() > ITEM_ID_CACHE_SIZE) {
+        std::cerr << "shuffling items old size: " << items->size() << " new size: " << ITEM_ID_CACHE_SIZE << std::endl;
+        std::vector<ItemInfo> result(ITEM_ID_CACHE_SIZE);
+        std::sample(items->begin(), items->end(), result.begin(), ITEM_ID_CACHE_SIZE, gen);
+        *items = std::move(result);
+      }
+    }
+
     std::ofstream profile_save_file;
     profile_save_file.open(PROFILE_FILE_NAME);
     {

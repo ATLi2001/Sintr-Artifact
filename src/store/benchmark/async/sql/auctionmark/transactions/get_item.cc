@@ -37,11 +37,16 @@ GetItem::GetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 
     // auto itemInfo_opt = profile.get_random_available_item();
     // UW_ASSERT(itemInfo_opt.has_value());
 
-    ItemInfo itemInfo = *profile.get_random_available_item();
+    std::optional<ItemInfo> maybeItemInfo = profile.get_random_available_item();
+    ItemInfo itemInfo;
+    if (maybeItemInfo.has_value()) {
+      itemInfo = maybeItemInfo.value();
+    } else {
+      throw std::runtime_error("get_item construction: failed to get random available item");
+    }
     std::cerr << "ItemInfo: " << itemInfo.get_item_id().to_string() << std::endl;
     item_id = itemInfo.get_item_id().encode();
     seller_id = itemInfo.get_seller_id().encode();
-
 }
 
 GetItem::~GetItem(){
@@ -59,7 +64,16 @@ transaction_status_t GetItem::Execute(SyncClient &client) {
 
   statement = fmt::format("SELECT i_id, i_u_id, i_name, i_current_price, i_num_bids, i_end_date, i_status FROM "
                           "{} WHERE i_id = '{}' AND i_u_id = '{}'", TABLE_ITEM, item_id, seller_id);
-  client.Query(statement, timeout);
+  client.Query(statement, queryResult, timeout);
+
+  if(queryResult->empty()) {
+    Debug("Query result empty, aborting GET ITEM");
+    client.Abort(timeout);
+    return ABORTED_USER;
+  }
+
+  ItemRow ir;
+  deserialize(ir, queryResult);
 
   statement = fmt::format("SELECT u_id, u_rating, u_created, u_sattr0, u_sattr1, u_sattr2, u_sattr3, u_sattr4, r_name "
                          "FROM {}, {} WHERE u_id = '{}' AND u_r_id = r_id "
@@ -68,18 +82,13 @@ transaction_status_t GetItem::Execute(SyncClient &client) {
 
   // statement = fmt::format("SELECT u_id, u_rating, u_created, u_sattr0, u_sattr1, u_sattr2, u_sattr3, u_sattr4, r_name "
   //                         "FROM {} INNER JOIN {} ON u_r_id = r_id WHERE u_id = '{}' AND r_id = r_id",  TABLE_USERACCT, TABLE_REGION, seller_id);                
-  client.Query(statement, timeout);
+  client.Query(statement, queryResult, timeout);
 
-  client.Wait(results);
-
-  if(results[0]->empty() || results[1]->empty()){
+  if(queryResult->empty()) {
     Debug("Query result empty, aborting GET ITEM");
     client.Abort(timeout);
     return ABORTED_USER;
   } 
-
-  ItemRow ir;
-  deserialize(ir, queryResult);
 
   Debug("COMMIT");
   auto tx_result = client.Commit(timeout);

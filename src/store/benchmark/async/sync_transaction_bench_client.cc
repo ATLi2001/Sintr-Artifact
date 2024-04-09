@@ -63,7 +63,7 @@ void SyncTransactionBenchClient::SendNext(transaction_status_t *result) {
       *result = currTxn->Execute(client);
     }
     catch(...) {
-      Notice("catch abort");
+      std::cerr <<"catch abort" << std::endl;
       *result = ABORTED_SYSTEM; //ABORTED_USER;
     }
     //usleep(10000); //sleep 10 miliseconds to guarantee Tx are sequential FIXME: THIS IS PURELY fOR DEBUGGING PURPOSES

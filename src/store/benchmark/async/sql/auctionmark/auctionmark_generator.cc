@@ -457,7 +457,7 @@ std::vector<UserId> GenerateUserAcctTable(TableWriter &writer, AuctionMarkProfil
  
   //DATA GEN
 
-   std::mt19937_64 gen;
+  std::mt19937_64 gen;
   
   Zipf randomRating(gen, USER_MIN_RATING, USER_MAX_RATING, 1.0001);
   Zipf randomBalance(gen, USER_MIN_BALANCE, USER_MAX_BALANCE, 1.001);
@@ -668,9 +668,9 @@ LoaderItemInfo GenerateItemTableRow(TableWriter &writer, AuctionMarkProfile &pro
   assert(itemInfo.get_status() == ItemStatus::OPEN || itemInfo.get_status() == ItemStatus::CLOSED);
   profile.add_item_to_proper_queue(itemInfo, true);
 
-   if(itemInfo.get_status() == ItemStatus::OPEN) num_open_items++;
-   if(itemInfo.get_status() == ItemStatus::ENDING_SOON) num_ending_soon_items++;
-    if(itemInfo.get_status() == ItemStatus::WAITING_FOR_PURCHASE) num_waiting_for_purchase_items++;
+  if(itemInfo.get_status() == ItemStatus::OPEN) num_open_items++;
+  if(itemInfo.get_status() == ItemStatus::ENDING_SOON) num_ending_soon_items++;
+  if(itemInfo.get_status() == ItemStatus::WAITING_FOR_PURCHASE) num_waiting_for_purchase_items++;
   if(itemInfo.get_status() == ItemStatus::CLOSED) num_closed_items++;
 
   //   if(itemInfo.get_status() == ItemStatus::WAITING_FOR_PURCHASE){
@@ -1212,7 +1212,7 @@ int main(int argc, char *argv[]) {
   // auctionmark::GenerateUserWatch(writer, profile, items);
   // std::cerr << "Finished UserWatch Table" << std::endl;
 
-   std::cerr << "Finished all User* Tables" << std::endl;
+  std::cerr << "Finished all User* Tables" << std::endl;
 
   writer.flush();
 
@@ -1222,7 +1222,7 @@ int main(int argc, char *argv[]) {
   profile.save_profile();
   std::cerr << "Saved profile." << std::endl;
 
-   auto end_time = std::time(0);
-    std::cerr << "Finished AUCTIONMARK Table Generation. Took " << (end_time - start_time) << "seconds" << std::endl;
+  auto end_time = std::time(0);
+  std::cerr << "Finished AUCTIONMARK Table Generation. Took " << (end_time - start_time) << "seconds" << std::endl;
   return 0;
 }

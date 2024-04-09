@@ -218,6 +218,10 @@ class IndicusCodebase(ExperimentCodebase):
             if 'commit_delay_ms' in config['replication_protocol_settings']:
                 client_command += ' --morty_commit_delay_ms %d' % config['replication_protocol_settings']['commit_delay_ms']
 
+        if config['replication_protocol'] == 'crdb':
+            if 'sign_messages' in config['replication_protocol_settings']:
+                client_command += ' --indicus_sign_messages=%s' % str(config['replication_protocol_settings']['sign_messages']).lower()
+                client_command += ' --indicus_key_path %s' % config['replication_protocol_settings']['key_path']
 
         if 'client_debug_stats' in config and config['client_debug_stats']:
             client_command += ' --debug_stats'
@@ -371,7 +375,6 @@ class IndicusCodebase(ExperimentCodebase):
             n = 3 * config['fault_tolerance'] + 1
         else:
             n = 2 * config['fault_tolerance'] + 1
-        
         if config['replication_protocol'] == 'pg':
             n = 1
 
@@ -553,6 +556,11 @@ class IndicusCodebase(ExperimentCodebase):
         if config['replication_protocol'] == 'bftsmart':
             replica_command += " --bftsmart_codebase_dir=%s" % str(config['bftsmart_codebase_dir'])
 
+        if config['replication_protocol'] == 'crdb':
+            if 'sign_messages' in config['replication_protocol_settings']:
+                replica_command += ' --indicus_sign_messages=%s' % str(config['replication_protocol_settings']['sign_messages']).lower()
+                replica_command += ' --indicus_key_path %s' % config['replication_protocol_settings']['key_path']
+
         if 'server_debug_stats' in config and config['server_debug_stats']:
             replica_command += ' --debug_stats'
 
@@ -662,11 +670,14 @@ class IndicusCodebase(ExperimentCodebase):
                 
             x = len(config['server_names']) // n
             for group in range(config['num_groups']):
-                process_idx = group // x
+                if x > 0:
+                    process_idx = group // x
+                else:
+                    process_idx = 0
                 print('f %d' % config['fault_tolerance'], file=f)
                 print('group', file=f)
                 for i in range(n):
-                    server_idx = i * x + (group % x)
+                    server_idx = (i * x + group) % len(config['server_names'])
                     if 'run_locally' in config and config['run_locally']:
                         print('replica %s:%d' % ('localhost',
                             config['server_port'] + process_idx

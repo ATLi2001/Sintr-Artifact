@@ -5,3 +5,4 @@ SRCS += $(addprefix $(d), client.cc server.cc)
 LIB-postgres-client := $(LIB-store-frontend) $(LIB-store-common) $(o)client.o 
 
 LIB-postgresstore := $(o)server.o $(LIB-configuration) $(LIB-store-common) $(LIB-transport)
+

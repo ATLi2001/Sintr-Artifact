@@ -32,7 +32,13 @@ namespace auctionmark {
 UpdateItem::UpdateItem(uint32_t timeout,  AuctionMarkProfile &profile, std::mt19937_64 &gen) : AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
   
   std::cerr << std::endl << "UPDATE ITEM" << std::endl;
-  ItemInfo itemInfo = *profile.get_random_available_item();
+  std::optional<ItemInfo> maybeItemInfo = profile.get_random_available_item();
+  ItemInfo itemInfo;
+  if (maybeItemInfo.has_value()) {
+    itemInfo = maybeItemInfo.value();
+  } else {
+    throw std::runtime_error("update_item construction: failed to get a random available item");
+  }
   UserId sellerId = itemInfo.get_seller_id();
   description = RandomAString(50, 255, gen);
 
@@ -80,7 +86,8 @@ transaction_status_t UpdateItem::Execute(SyncClient &client) {
   //DELETE ITEM_ATTRIBUTE
   bool deleted_first_attribute = false;
   if(delete_attribute){
-    std::string ia_id = GetUniqueElementId(item_id, 0);
+    std::string ia_id;
+    ia_id = GetUniqueElementId(item_id, 0);
     std::string deleteItemAttribute = fmt::format("DELETE FROM {} WHERE ia_id = '{}' AND ia_i_id = '{}' AND ia_u_id = '{}'", TABLE_ITEM_ATTR, ia_id, item_id, seller_id);
     client.Write(deleteItemAttribute, queryResult, timeout);
     if(queryResult->rows_affected() == 1) deleted_first_attribute = true;
