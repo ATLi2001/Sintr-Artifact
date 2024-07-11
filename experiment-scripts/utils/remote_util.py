@@ -37,7 +37,7 @@ def get_server_host(config, i):
         config['experiment_name'], config['project_name'])
 
 def get_client_host(config, i, j):
-    return config['client_host_format_str'] % (i, j, config['experiment_name'],
+    return config['client_host_format_str'] % (j, i, config['experiment_name'],
         config['project_name'])
 
 def get_ip_for_interface(interface, remote_user, remote_host):
@@ -169,7 +169,7 @@ def get_name_to_ip_map(config, remote_user, remote_host):
             remote_host)
         name_to_ip[config['server_names'][i]] = ip
         for j in range(config['client_nodes_per_server']):
-            client_name = config['client_name_format_str'] % (i, j)
+            client_name = config['client_name_format_str'] % (j, i)
             ip = get_ip_for_server_name(client_name, remote_user, remote_host)
             name_to_ip[client_name] = ip
     return name_to_ip
@@ -191,7 +191,7 @@ def get_ip_to_delay(config, name_to_ip, server_name, delay_to_clients=False):
     if delay_to_clients:
         for i in range(len(config['server_names'])):
             for j in range(config['client_nodes_per_server']):
-                client_name = config['client_name_format_str'] % (i, j)
+                client_name = config['client_name_format_str'] % (j, i)
                 other_region = None
                 for reg, servers in config['server_regions'].items():
                     if config['server_names'][i] in servers:

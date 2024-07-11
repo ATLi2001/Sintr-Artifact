@@ -149,7 +149,7 @@
       [1]
     ],
   
-    "client_nodes_per_server": 1,
+    "client_nodes_per_server": 3,
     "_pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
     "pin_client_processes": [0, 1, 2, 3, 4, 5, 6, 7],
     "_client_debug_output": false,
@@ -165,8 +165,13 @@
     "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
     "client_host_format_str": "client-%d-%d.%s.%s.utah.cloudlab.us",
     "project_name": "pequin-PG0",
-    "fault_tolerance": 1,
-  "server_names": [
+    "fault_tolerance": 0,
+    "server_names": [
+   
+      ["us-east-1-2"]
+  
+    ],
+  "_server_names": [
    
     ["us-east-1-0", "us-east-1-1", "us-east-1-2"]
 

@@ -4,6 +4,7 @@
  * store/cockroachdb/server.cc:
  *
  *  @author Benton Li <cl2597@cornell.edu>
+ *  @author Liam Arzola <lma77@cornell.edu>
  *
  **********************************************************************/
 
@@ -95,12 +96,11 @@ Server::Server(const transport::Configuration &config, KeyManager *keyManager,
       std::to_string(id);
 
   // In memory cluster.
-  std::string store_flag_mem = " --store=type=mem,size=90%";
+  std::string store_flag_mem = " --store=type=mem,size=1.0";
 
   std::string log_flag =
       " --log=\"sinks: {file-groups: {ops: {channels: [OPS, HEALTH, "
-      "SQL_SCHEMA], filter: ERROR}}, stderr: {filter: NONE}}\"";
-
+      "SQL_SCHEMA], filter: FATAL}}, stderr: {filter: NONE}}\"";
   // std::string log_flag = " --log-config-file=./store/cockroachdb/logs.yaml";
 
   // TODO : Add encryption
@@ -238,6 +238,7 @@ void Server::LoadTableData(const std::string &table_name, const std::string &tab
         parent_dir, table_file_name);
 
     Notice("Load Table Data for table: %s", table_name.c_str());
+    // TODO: exec with thread
     exec_sql(copy_table_statement_crdb);
     stats.Increment("TablesLoaded", 1);
   }
