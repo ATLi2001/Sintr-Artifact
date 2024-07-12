@@ -69,25 +69,33 @@ Server::Server(const transport::Configuration &config, KeyManager *keyManager,
    * --listen-addr determines which address(es) to listen on for connections
    *   from other nodes and clients.
    */
-  std::string start_cmd = "cockroach start";
+  std::string start_cmd;
+  if (config.n > 1) {
+    start_cmd = "cockroach start";
+  } else {
+    start_cmd = "cockroach start-single-node";
+  }
   std::string security_flag = " --insecure";
   std::string listen_addr_flag = " --listen-addr=" + host + ":" + port;
-  std::string sql_addr_flag = " --advertise-sql-addr=" + host + ":" + port;
-  std::string advertise_flag = " --advertise-addr=" + host + ":" + port;
-  std::string join_flag = " --join=";
-  std::string load_flag = " --join=";
-
-  // Naive implementation: join all node
-  for (int i = 0; i < numGroups; i++) {
-    for (int j = 0; j < config.n; j++) {
-      transport::ReplicaAddress join_address = config.replica(i, j);
-      join_flag =
-          join_flag + join_address.host + site + ":" + join_address.port + ",";
-    }
+  std::string join_flag;
+  if (config.n > 1) {
+    join_flag = " --join=";
+  } else {
+    join_flag = "";
   }
-  // Remove last comma
-  join_flag.pop_back();
 
+  if (config.n > 1) {
+    // Naive implementation: join all node
+    for (int i = 0; i < numGroups; i++) {
+      for (int j = 0; j < config.n; j++) {
+        transport::ReplicaAddress join_address = config.replica(i, j);
+        join_flag =
+            join_flag + join_address.host + site + ":" + join_address.port + ",";
+      }
+    }
+    // Remove last comma
+    join_flag.pop_back();
+  }
   // TODO: better port number
   std::string http_addr_flag =
       " --http-addr=" + host + ":" + std::to_string(8069 + id);
@@ -107,16 +115,17 @@ Server::Server(const transport::Configuration &config, KeyManager *keyManager,
 
   // region = shard group number
   // zone = host name
-  std::string locality_flag =
-      " --locality=region=" + std::to_string(groupIdx) + ",zone=" + zone;
-
+  std::string locality_flag;
+  if (config.n > 1) {
+   locality_flag =
+        " --locality=region=" + std::to_string(groupIdx) + ",zone=" + zone;
+  }
   // TODO: Add load balancer
   std::string other_flags = " --background ";
 
   std::string script_parts[] = {join_flag, security_flag,
                                 listen_addr_flag,  // for nodes and clients
                                 // advertise_flag,    // for nodes
-                                sql_addr_flag,   // for client's sql
                                 http_addr_flag,  // for  DB Console
                                 log_flag, store_flag_mem, locality_flag,
                                 other_flags};

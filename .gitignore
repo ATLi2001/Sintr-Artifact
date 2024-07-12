@@ -110,3 +110,7 @@ tags
 
 # VS Code
 .vscode/
+
+# Clang
+src/.cache/*
+compile_commands.json
