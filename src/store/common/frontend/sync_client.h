@@ -125,8 +125,6 @@ class SyncClient {
   //std::vector<std::unique_ptr<Promise>> queryPromises;
   std::vector<Promise *> asyncPromises;
 
-  std::unique_ptr<const query_result::QueryResult> SafeRelease(Promise &promise);
-
   Client *client;
 };
 

@@ -23,7 +23,7 @@
     "_TPCC_SQL_ARGS_" :0,
           "_note: parititoner is unused currently": 0,
         "partitioner": "warehouse",
-        "tpcc_num_warehouses": 10,
+        "tpcc_num_warehouses": 20,
         
         "tpcc_stock_level_ratio": 4,
         "tpcc_delivery_ratio": 4,
@@ -167,25 +167,24 @@
     "project_name": "pequin-PG0",
     "fault_tolerance": 0,
     "server_names": [
-   
       ["us-east-1-2"]
-  
     ],
-  "_server_names": [
-   
-    ["us-east-1-0", "us-east-1-1", "us-east-1-2"]
-
-  ],
-  
+    "_server_names": [
+      ["us-east-1-0", "us-east-1-1", "us-east-1-2"]
+    ],
     "server_regions": [
+      {
+        "us-east-1": ["us-east-1-2"]
+      }
+    ],
+
+    "_server_regions": [
      
       {
         "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
         "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"]
       }
     ],
-  
-  
     "region_rtt_latencies": {
       "us-east-1": {
         "us-east-1": 0,
