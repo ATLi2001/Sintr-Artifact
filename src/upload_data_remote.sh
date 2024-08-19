@@ -9,9 +9,9 @@
 
 
 ## declare an array variable
-##declare -a arr_servers=("us-east-1-0" "us-east-1-1" "us-east-1-2")
-declare -a arr_servers=("us-east-1-2")
-declare -a arr_clients=("client-0-0" "client-1-0" "client-2-0")
+declare -a arr_servers=("us-east-1-0" "us-east-1-1" "us-east-1-2" "us-east-1-3" "us-east-1-4")
+#declare -a arr_servers=("us-east-1-2")
+declare -a arr_clients=("client-0-0" "client-1-0" "client-2-0" "client-3-0" "client-4-0")
 
 USER="liam0215"
 BENCHMARK_NAME="tpcc"

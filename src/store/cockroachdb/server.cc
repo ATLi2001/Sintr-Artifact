@@ -155,14 +155,18 @@ Server::Server(const transport::Configuration &config, KeyManager *keyManager,
     // Server::exec_sql(
     //     "CREATE TABLE IF NOT EXISTS datastore ( key_ TEXT PRIMARY KEY, val_ "
     //     "TEXT NOT NULL)");
-    std::string lock_timeout_cmd = "cockroach sql --insecure --host=" + host +
-                             std::string() + ":" + port + 
-                             " --execute=\"ALTER DATABASE defaultdb SET lock_timeout = '50ms';\"" +
-                             " --user=root";
+    std::string lock_timeout_cmd = "ALTER DATABASE defaultdb SET lock_timeout = '50ms';";
     Notice("Issuing SQL command %s", lock_timeout_cmd.c_str());
-    status = system(lock_timeout_cmd.c_str());
+    exec_sql(lock_timeout_cmd);
+    std::string set_num_replicas = "ALTER RANGE default CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 134217728, num_replicas = 1;";
+//    std::string set_num_replicas = "ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1;";
+    Notice("Issuing SQL command %s", set_num_replicas.c_str());
+    exec_sql(set_num_replicas);
+    std::string enable_merge_queue = "SET CLUSTER SETTING kv.range_merge.queue_enabled = true;";
+    Notice("Issuing SQL command %s", enable_merge_queue.c_str());
+    exec_sql(enable_merge_queue);
   }
-  if (idx == numShards - 1) {
+  if (idx == config.n - 1) {
     // If node is the last one in the group, serve as load balancer
     std::string proxy_cmd =
         "cockroach gen haproxy --insecure --host=" + host + ":" + port +
