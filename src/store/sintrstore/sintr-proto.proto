@@ -470,14 +470,18 @@ message BeginValidateTxnMessage {
 }
 
 message ForwardReadResult {
-  required bytes key = 1;
-  required bytes value = 2;
-  required TimestampMessage timestamp = 3;
+  required uint64 client_id = 1;
+  required uint64 client_seq_num = 2;
+  required bytes key = 3;
+  required bytes value = 4;
+  required TimestampMessage timestamp = 5;
+  optional Dependency dep = 6;
+  optional Dependency policy_dep = 7;
+  optional string table_name = 8;
+  optional bool add_readset = 9;
 }
 
 message ForwardReadResultMessage {
-  required uint64 client_id = 1;
-  required uint64 client_seq_num = 2;
   oneof forward_one_of {
     ForwardReadResult fwd_read_result = 3;
     SignedMessage signed_fwd_read_result = 4;
@@ -489,36 +493,28 @@ message ForwardReadResultMessage {
     Write write = 6;
     SignedMessage signed_write = 7;
   }
-  // shows dependency which can be verified
-  optional Dependency dep = 8;
-  // tell validating client whether to add to readset
-  optional bool add_readset = 9;
-  // policy dependencies must be included in txn in order for digest to match
-  optional Dependency policy_dep = 10;
 }
 
 message ForwardPointQueryResultMessage {
-  required uint64 client_id = 1;
-  required uint64 client_seq_num = 2;
   // the value in ForwardReadResult is the query result
   oneof forward_one_of {
     ForwardReadResult fwd_read_result = 3;
     SignedMessage signed_fwd_read_result = 4;
   }
-  optional string table_name = 5;
-  optional CommittedProof proof = 6;
+  optional CommittedProof proof = 5;
   oneof prepared_oneof {
-    Write write = 7;
-    SignedMessage signed_write = 8;
+    Write write = 6;
+    SignedMessage signed_write = 7;
   }
-  optional Dependency dep = 9;
-  optional bool add_readset = 10;
 }
 
 message ForwardQueryResult {
-  required bytes query_gen_id = 1;
-  required bytes query_result = 2;
-  optional QueryResultMetaData query_res_meta = 3;
+  optional uint64 client_id = 1;
+  optional uint64 client_seq_num = 2;
+  required bytes query_gen_id = 3;
+  required bytes query_result = 4;
+  optional QueryResultMetaData query_res_meta = 5;
+  optional bool add_readset = 6;
 }
 
 message ForwardQueryResultMessage {
@@ -531,7 +527,6 @@ message ForwardQueryResultMessage {
   // server signatures on query result and readset per group, should be f+1 exact matches
   map<uint64, SignedMessages> query_sigs = 5;
   // tell validating client whether to add to readset
-  optional bool add_readset = 6;
 }
 
 // blind write message to other clients

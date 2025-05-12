@@ -281,28 +281,14 @@ void Client2Client::SendForwardReadResultMessageHelper(const uint64_t client_seq
     const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep) {
 
   proto::ForwardReadResultMessage *fwdReadResultMsgToSend = new proto::ForwardReadResultMessage();
-  fwdReadResultMsgToSend->set_client_id(client_id);
-  fwdReadResultMsgToSend->set_client_seq_num(client_seq_num);
   proto::ForwardReadResult fwdReadResult;
   fwdReadResult.set_key(key);
   fwdReadResult.set_value(value);
   fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
   fwdReadResult.mutable_timestamp()->set_id(ts.getID());
-
-  if (params.sintr_params.signFwdReadResults) {
-    // struct timespec ts_start;
-    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(fwdReadResult, *fwdReadResultMsgToSend->mutable_signed_fwd_read_result());
-    // struct timespec ts_end;
-    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-    // auto duration = end - start;
-    // create_hmac_us.add(duration);
-  }
-  else {
-    *fwdReadResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
-  }
+  fwdReadResult.set_client_id(client_id);
+  fwdReadResult.set_client_seq_num(client_seq_num);
+  fwdReadResult.set_add_readset(addReadset);
 
   // only if addReadset is true did this result come from server
   // otherwise it came from the buffer and there is no dependency or committed proof
@@ -310,7 +296,7 @@ void Client2Client::SendForwardReadResultMessageHelper(const uint64_t client_seq
     // this will contain the prepared txn dependency
     if (hasDep) {
       UW_ASSERT(dep.IsInitialized());
-      *fwdReadResultMsgToSend->mutable_dep() = std::move(dep);
+      *fwdReadResult.mutable_dep() = std::move(dep);
       // must be oneof write or signed write
       *fwdReadResultMsgToSend->mutable_write() = proto::Write();
     }
@@ -342,11 +328,25 @@ void Client2Client::SendForwardReadResultMessageHelper(const uint64_t client_seq
     // separately include policy change txn dependency if there is one
     if (hasPolicyDep) {
       UW_ASSERT(policyDep.IsInitialized());
-      *fwdReadResultMsgToSend->mutable_policy_dep() = std::move(policyDep);
+      *fwdReadResult.mutable_policy_dep() = std::move(policyDep);
     }
   }
 
-  fwdReadResultMsgToSend->set_add_readset(addReadset);
+  if (params.sintr_params.signFwdReadResults) {
+    
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    CreateHMACedMessage(fwdReadResult, *fwdReadResultMsgToSend->mutable_signed_fwd_read_result());
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
+    // create_hmac_us.add(duration);
+  }
+  else {
+    *fwdReadResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
+  }
 
   std::unique_lock lock(sentFwdResultsMutex);
   sentFwdResults.insert(fwdReadResultMsgToSend);
@@ -406,29 +406,15 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const uint64_t clie
     const proto::Dependency &dep, bool hasDep, bool addReadset) {
   
   proto::ForwardPointQueryResultMessage *fwdPointQueryResultMsgToSend = new proto::ForwardPointQueryResultMessage();
-  fwdPointQueryResultMsgToSend->set_client_id(client_id);
-  fwdPointQueryResultMsgToSend->set_client_seq_num(client_seq_num);
-  fwdPointQueryResultMsgToSend->set_table_name(table_name);
   proto::ForwardReadResult fwdReadResult;
   fwdReadResult.set_key(key);
   fwdReadResult.set_value(value);
   fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
   fwdReadResult.mutable_timestamp()->set_id(ts.getID());
-
-  if (params.sintr_params.signFwdReadResults) {
-    // struct timespec ts_start;
-    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(fwdReadResult, *fwdPointQueryResultMsgToSend->mutable_signed_fwd_read_result());
-    // struct timespec ts_end;
-    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-    // auto duration = end - start;
-    // create_hmac_us.add(duration);
-  }
-  else {
-    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
-  }
+  fwdReadResult.set_client_id(client_id);
+  fwdReadResult.set_client_seq_num(client_seq_num);
+  fwdReadResult.set_table_name(table_name);
+  fwdReadResult.set_add_readset(addReadset);
 
   // only if addReadset is true did this result come from server
   // otherwise it came from the buffer and there is no dependency or committed proof
@@ -436,7 +422,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const uint64_t clie
     // this will contain the prepared txn dependency
     if (hasDep) {
       UW_ASSERT(dep.IsInitialized());
-      *fwdPointQueryResultMsgToSend->mutable_dep() = std::move(dep);
+      *fwdReadResult.mutable_dep() = std::move(dep);
       // must be oneof write or signed write
       *fwdPointQueryResultMsgToSend->mutable_write() = proto::Write();
     }
@@ -466,7 +452,20 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const uint64_t clie
     }
   }
 
-  fwdPointQueryResultMsgToSend->set_add_readset(addReadset);
+  if (params.sintr_params.signFwdReadResults) {
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    CreateHMACedMessage(fwdReadResult, *fwdPointQueryResultMsgToSend->mutable_signed_fwd_read_result());
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
+    // create_hmac_us.add(duration);
+  }
+  else {
+    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
+  }
 
   std::unique_lock lock(sentFwdResultsMutex);
   sentFwdResults.insert(fwdPointQueryResultMsgToSend);
@@ -527,6 +526,9 @@ void Client2Client::SendForwardQueryResultMessageHelper(const uint64_t client_se
   proto::ForwardQueryResult fwdQueryResult;
   fwdQueryResult.set_query_gen_id(query_gen_id);
   fwdQueryResult.set_query_result(query_result);
+  fwdQueryResult.set_client_id(client_id);
+  fwdQueryResult.set_client_seq_num(client_seq_num);
+  fwdQueryResult.set_add_readset(addReadset);
   if(query_res_meta.IsInitialized()) {
     *fwdQueryResult.mutable_query_res_meta() = query_res_meta;
   }
@@ -556,8 +558,6 @@ void Client2Client::SendForwardQueryResultMessageHelper(const uint64_t client_se
       }
     }
   }
-
-  fwdQueryResultMsgToSend->set_add_readset(addReadset);
 
   std::unique_lock lock(sentFwdResultsMutex);
   sentFwdResults.insert(fwdQueryResultMsgToSend);
@@ -807,8 +807,6 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
 }
 
 void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResultMessage &fwdReadResultMsg) {
-  uint64_t curr_client_id = fwdReadResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdReadResultMsg.client_seq_num();
   proto::ForwardReadResult fwdReadResult;
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
@@ -816,21 +814,14 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
     // first check client signature
+    // Debugs will not include client ID/client seq num because they are included in the fwdReadResult
     if (!fwdReadResultMsg.has_signed_fwd_read_result()) {
-      Debug(
-        "Missing client signature on forwarded read result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Missing client signature on forwarded read result");
       return;
     }
     std::string data;
     if (!ValidateHMACedMessage(fwdReadResultMsg.signed_fwd_read_result(), data)) {
-      Debug(
-        "Invalid client signature on forwarded read result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Invalid client signature on forwarded read result");
       return;
     }
 
@@ -846,16 +837,19 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     fwdReadResult = fwdReadResultMsg.fwd_read_result();
   }
 
+  uint64_t curr_client_id = fwdReadResult.client_id();
+  uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
+
   std::string curr_key = fwdReadResult.key();
   std::string curr_value = fwdReadResult.value();
 
   proto::Write write;
-  bool hasDep = fwdReadResultMsg.has_dep();
+  bool hasDep = fwdReadResult.has_dep();
   proto::Dependency dep;
-  bool addReadset = fwdReadResultMsg.add_readset();
+  bool addReadset = fwdReadResult.add_readset();
   // only if addReadset is true will there be dep or committed proofs
   if (addReadset && params.sintr_params.clientCheckEvidence) {
-    if (!CheckPreparedCommittedEvidence(fwdReadResultMsg, write, dep)) {
+    if (!CheckPreparedCommittedEvidence(fwdReadResult, fwdReadResultMsg, write, dep)) {
       return;
     }
     // if there is an actual value, expect matches
@@ -891,10 +885,10 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     }
   }
 
-  bool hasPolicyDep = fwdReadResultMsg.has_policy_dep();
+  bool hasPolicyDep = fwdReadResult.has_policy_dep();
   proto::Dependency policyDep;
   if (hasPolicyDep) {
-    policyDep = fwdReadResultMsg.policy_dep();
+    policyDep = fwdReadResult.policy_dep();
   }
 
   Debug(
@@ -912,9 +906,6 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
 }
 
 void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg) {
-  uint64_t curr_client_id = fwdPointQueryResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdPointQueryResultMsg.client_seq_num();
-
   proto::ForwardReadResult fwdReadResult;
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
@@ -922,21 +913,14 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
     // first check client signature
+    // Debugs will not include client ID/client seq num because they are included in the fwdReadResult
     if (!fwdPointQueryResultMsg.has_signed_fwd_read_result()) {
-      Debug(
-        "Missing client signature on forwarded read result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Missing client signature on forwarded read result");
       return;
     }
     std::string data;
     if (!ValidateHMACedMessage(fwdPointQueryResultMsg.signed_fwd_read_result(), data)) {
-      Debug(
-        "Invalid client signature on forwarded read result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Invalid client signature on forwarded read result");
       return;
     }
 
@@ -952,16 +936,19 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
     fwdReadResult = fwdPointQueryResultMsg.fwd_read_result();
   }
 
+  uint64_t curr_client_id = fwdReadResult.client_id();
+  uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
+
   std::string curr_key = fwdReadResult.key();
   std::string curr_value = fwdReadResult.value();
 
   proto::Write write;
-  bool hasDep = fwdPointQueryResultMsg.has_dep();
+  bool hasDep = fwdReadResult.has_dep();
   proto::Dependency dep;
-  bool addReadset = fwdPointQueryResultMsg.add_readset();
+  bool addReadset = fwdReadResult.add_readset();
   // only if addReadset is true will there be dep or committed proofs
   if (addReadset && params.sintr_params.clientCheckEvidence) {
-    if (!CheckPreparedCommittedEvidence(fwdPointQueryResultMsg, write, dep)) {
+    if (!CheckPreparedCommittedEvidence(fwdReadResult, fwdPointQueryResultMsg, write, dep)) {
       Panic("Invalid prepared or committed evidence on forwarded point query result");
       return;
     }
@@ -1011,8 +998,6 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
 }
 
 void Client2Client::HandleForwardQueryResultMessage(const proto::ForwardQueryResultMessage &fwdQueryResultMsg) {
-  uint64_t curr_client_id = fwdQueryResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdQueryResultMsg.client_seq_num();
 
   proto::ForwardQueryResult fwdQueryResult;
   if (params.sintr_params.signFwdReadResults) {
@@ -1021,21 +1006,14 @@ void Client2Client::HandleForwardQueryResultMessage(const proto::ForwardQueryRes
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
     // first check client signature
+    // Debugs will not include client ID/client seq num because they are included in the fwdQueryResult
     if (!fwdQueryResultMsg.has_signed_fwd_query_result()) {
-      Debug(
-        "Missing client signature on forwarded query result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Missing client signature on forwarded query result");
       return;
     }
     std::string data;
     if (!ValidateHMACedMessage(fwdQueryResultMsg.signed_fwd_query_result(), data)) {
-      Debug(
-        "Invalid client signature on forwarded query result from client id %lu, seq num %lu", 
-        curr_client_id, 
-        curr_client_seq_num
-      );
+      Debug("Invalid client signature on forwarded query result");
       return;
     }
 
@@ -1051,10 +1029,13 @@ void Client2Client::HandleForwardQueryResultMessage(const proto::ForwardQueryRes
     fwdQueryResult = fwdQueryResultMsg.fwd_query_result();
   }
 
+  uint64_t curr_client_id = fwdQueryResult.client_id();
+  uint64_t curr_client_seq_num = fwdQueryResult.client_seq_num();
+
   std::string curr_query_gen_id = fwdQueryResult.query_gen_id();
   std::string curr_query_result = fwdQueryResult.query_result();
 
-  bool addReadset = fwdQueryResultMsg.add_readset();
+  bool addReadset = fwdQueryResult.add_readset();
   if (addReadset && params.sintr_params.clientCheckEvidence) {
     if (!CheckPreparedCommittedEvidence(fwdQueryResult, fwdQueryResultMsg)) {
       Panic("Invalid prepared or committed evidence on forwarded query result");
@@ -1180,19 +1161,19 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg);
 }
 
-bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResultMessage &fwdReadResultMsg, 
-    proto::Write &write, proto::Dependency &dep) {
+bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdReadResult, 
+  const proto::ForwardReadResultMessage &fwdReadResultMsg, proto::Write &write, proto::Dependency &dep) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
-  uint64_t curr_client_id = fwdReadResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdReadResultMsg.client_seq_num();
+  uint64_t curr_client_id = fwdReadResult.client_id();
+  uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
 
   // if has dependency, then this is based on a prepared txn
-  if (fwdReadResultMsg.has_dep()) {
+  if (fwdReadResult.has_dep()) {
     if (params.validateProofs && params.signedMessages && params.verifyDeps) {
-      if (!ValidateDependency(fwdReadResultMsg.dep(), config, params.readDepSize, 
+      if (!ValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
           keyManager, verifier)) {
         Debug(
           "Invalid dependency on forwarded read result from client id %lu, seq num %lu",
@@ -1202,8 +1183,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
         return false;
       }
     }
-    dep = fwdReadResultMsg.dep();
-    write = fwdReadResultMsg.dep().write();
+    dep = fwdReadResult.dep();
+    write = fwdReadResult.dep().write();
   } 
   else {
     // otherwise can check committed proof and signature
@@ -1279,19 +1260,19 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
   return true;
 }
 
-bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, 
-    proto::Write &write, proto::Dependency &dep) {
+bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
+  const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, proto::Write &write, proto::Dependency &dep) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
-  uint64_t curr_client_id = fwdPointQueryResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdPointQueryResultMsg.client_seq_num();
+  uint64_t curr_client_id = fwdPointQueryResult.client_id();
+  uint64_t curr_client_seq_num = fwdPointQueryResult.client_seq_num();
 
   // if has dependency, then this is based on a prepared txn
-  if (fwdPointQueryResultMsg.has_dep()) {
+  if (fwdPointQueryResult.has_dep()) {
     if (params.validateProofs && params.signedMessages && params.verifyDeps) {
-      if (!ValidateDependency(fwdPointQueryResultMsg.dep(), config, params.readDepSize, 
+      if (!ValidateDependency(fwdPointQueryResult.dep(), config, params.readDepSize, 
           keyManager, verifier)) {
         Debug(
           "Invalid dependency on forwarded point query result from client id %lu, seq num %lu",
@@ -1301,8 +1282,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardPointQuer
         return false;
       }
     }
-    dep = fwdPointQueryResultMsg.dep();
-    write = fwdPointQueryResultMsg.dep().write();
+    dep = fwdPointQueryResult.dep();
+    write = fwdPointQueryResult.dep().write();
   }
   else {
     // otherwise can check committed proof and signature
@@ -1361,7 +1342,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardPointQuer
         sql::QueryResultProtoWrapper query_result;
         if (!ValidateTransactionTableWrite(fwdPointQueryResultMsg.proof(), &committedTxnDigest,
             write.committed_timestamp(), write.key(), write.committed_value(),
-            fwdPointQueryResultMsg.table_name(), &query_result, sql_interpreter,
+            fwdPointQueryResult.table_name(), &query_result, sql_interpreter,
             config, params.signedMessages, keyManager, verifier)) {
           Debug(
             "Failed to validate committed value for forwarded point query result from client id %lu, seq num %lu",
@@ -1390,8 +1371,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
-  uint64_t curr_client_id = fwdQueryResultMsg.client_id();
-  uint64_t curr_client_seq_num = fwdQueryResultMsg.client_seq_num();
+  uint64_t curr_client_id = fwdQueryResult.client_id();
+  uint64_t curr_client_seq_num = fwdQueryResult.client_seq_num();
   const std::string &query_gen_id = fwdQueryResult.query_gen_id();
   const std::string &query_result = fwdQueryResult.query_result();
 
