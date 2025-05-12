@@ -237,12 +237,14 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   // check if fwdReadResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdReadResultMsg
-  bool CheckPreparedCommittedEvidence(const proto::ForwardReadResultMessage &fwdReadResultMsg, 
-    proto::Write &write, proto::Dependency &dep, const proto::ForwardReadResult &fwdReadResult);
+  bool CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdReadResult, 
+    const proto::ForwardReadResultMessage &fwdReadResultMsg, 
+    proto::Write &write, proto::Dependency &dep);
   // check if fwdPointQueryResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdPointQueryResultMsg
-  bool CheckPreparedCommittedEvidence(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, 
-    proto::Write &write, proto::Dependency &dep, const proto::ForwardReadResult &fwdPointQueryResult);
+  bool CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
+    const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, 
+    proto::Write &write, proto::Dependency &dep);
   // check if fwdQueryResult is valid based on f+1 matching server responses in fwdQueryResultMsg
   bool CheckPreparedCommittedEvidence(const proto::ForwardQueryResult &fwdQueryResult,
     const proto::ForwardQueryResultMessage &fwdQueryResultMsg);
