@@ -18,45 +18,32 @@
       "client_threads_per_process"
     ]
   ],
-  "replication_protocol": ["sintr"],
-  "client_protocol_mode": ["sintr"],
+  "replication_protocol": ["pequin"],
+  "client_protocol_mode": ["pequin"],
   "num_shards": [1],
   "num_groups": [1],
 
-  "_NOTE:": "using _benchmark_type turns off sql mode",
   "benchmark_type": "sql_bench",
 
-  "benchmark_name": "rw-sql",
-  "benchmark_schema_file_path": "/users/atli/rw-sql.json",
+  "benchmark_name": "tpcc-sql",
+  "benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",
 
-  "server_load_time": 14,
+  "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
+  "server_load_time": 47,
 
-  "_RW_SQL_ARGS_": 0,
+  "_TPCC_SQL_ARGS_": 0,
   "_note: parititoner is unused currently": 0,
-  "partitioner": "rw_sql",
+  "partitioner": "warehouse",
+  "tpcc_num_warehouses": 20,
 
-  "client_key_selector": "uniform",
-  "client_zipf_coefficient": 0.75,
+  "tpcc_stock_level_ratio": 4,
+  "tpcc_delivery_ratio": 4,
+  "tpcc_order_status_ratio": 4,
+  "tpcc_payment_ratio": 44,
+  "tpcc_new_order_ratio": 44,
 
-  "_note: for rw_sql client_num_keys is just placeholder, it is not used!": 0,
-  "client_num_keys": 10000000,
-  "rw_num_ops_txn": 1,
-
-  "num_tables": 1,
-  "num_keys_per_table": 10000000,
-  "value_size": -1,
-  "value_categories": 100,
-
-  "rw_read_only": false,
-  "rw_read_only_rate": 0,
-  "rw_secondary_condition": false,
-  "fixed_range": true,
-  "max_range": 10,
-  "point_op_freq": 0,
-
-  "scan_as_point": false,
-  "scan_as_point_parallel": false,
-  "rw_simulate_point_kv": false,
+  "tpcc_c_c_id": 0,
+  "tpcc_c_c_last": 0,
 
   "client_abort_backoff": 2,
   "client_retry_aborted": true,
@@ -85,8 +72,8 @@
       "merkle_branch_factor": 2,
 
       "signature_type": 4,
-      "sig_batch": 1,
-      "sig_batch_timeout": 4,
+      "sig_batch": 4,
+      "sig_batch_timeout": 2,
       "key_path": "/usr/local/etc/indicus-keys/donna",
       "shared_mem_batch": false,
       "shared_mem_verify": false,
@@ -156,77 +143,51 @@
     }
   ],
 
-  "sintr_protocol_settings": {
-    "client_network_config_file_name": "client.config",
-    "client_port": 7587,
-    "sintr_max_val_threads": 1,
-    "sintr_sign_fwd_read_results": true,
-    "sintr_sign_finish_validation": true,
-    "sintr_debug_endorse_check": false,
-    "sintr_client_check_evidence": true,
-    "sintr_policy_function_name": "basic_id",
-    "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-grouped.config",
-    "sintr_read_include_policy": 0,
-    "sintr_client_validation": "client-validation-exact",
-    "sintr_check_policy_leak": true,
-    "sintr_client_pin_cores": true,
-    "sintr_client2client_multi_threading": false,
-    "sintr_parallel_endorsement_check": false,
-    "sintr_parallel_query_sigs_check": false,
-    "sintr_hash_endorsements": true,
-    "sintr_use_occ_for_policies": true,
-    "sintr_blind_write_message": false,
-    "sintr_sort_writeset": true,
-    "sintr_profile_one_client_load": true
-  },
-
   "experiment_name": "sintr",
   "codebase_name": "indicus",
 
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
 
-  "client_total": [[2]],
-  "client_processes_per_client_node": [[2]],
+  "client_total": [[30]],
+  "client_processes_per_client_node": [[8]],
   "client_threads_per_process": [[1]],
 
   "client_nodes_per_server": 1,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
   "pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
-  "pin_client_processes": [0, 2, 4, 6],
+  "pin_client_processes": [0, 1, 2, 3, 4, 5, 6, 7],
   "client_debug_output": false,
-  "_client_debug_output": "store/sintrstore/client2client.cc",
+  "_client_debug_output": "store/pequinstore/*",
   "server_debug_output": false,
-  "_server_debug_output": "store/pequinstore/*",
+  "_server_debug_output": "store/pequinstore/query-engine/*",
   "server_debug_stats": false,
   "client_debug_stats": false,
 
-  "client_experiment_length": 20,
-  "client_ramp_down": 5,
-  "client_ramp_up": 5,
+  "client_experiment_length": 60,
+  "client_ramp_down": 15,
+  "client_ramp_up": 15,
 
   "default_remote_shell": "bash",
 
-  "_server_host_format_str": "%s.%s.%s.emulab.net",
-  "_client_host_format_str": "client-%d-%d.%s.%s.emulab.net",
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_host_format_str": "client-%d-%d.%s.%s.utah.cloudlab.us",
-  "__server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
-  "__client_host_format_str": "client-%d-%d.%s.%s.wisc.cloudlab.us",
+  "_server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
+  "_client_host_format_str": "client-%d-%d.%s.%s.wisc.cloudlab.us",
 
   "project_name": "pequin-pg0",
 
-  "fault_tolerance": 0,
+  "fault_tolerance": 1,
 
-  "server_names": [["us-east-1-0"]],
+  "_server_names": [["us-east-1-0"]],
 
-  "server_regions": [
+  "_server_regions": [
     {
       "us-east-1": ["us-east-1-0"]
     }
   ],
 
-  "_server_names": [
+  "server_names": [
     [
       "us-east-1-0",
       "us-east-1-1",
@@ -237,7 +198,7 @@
     ]
   ],
 
-  "_server_regions": [
+  "server_regions": [
     {
       "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
       "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"]
@@ -477,6 +438,5 @@
   "client_cpuprofile": false,
   "server_gc_debug_trace": false,
   "_server_wrap_command": "valgrind --tool=none %s",
-  "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s",
-  "_client_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s"
+  "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s"
 }

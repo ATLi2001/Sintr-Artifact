@@ -185,6 +185,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_blind_write_message=%s' % str(config['sintr_protocol_settings']['sintr_blind_write_message']).lower()
             if 'sintr_sort_writeset' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_sort_writeset=%s' % str(config['sintr_protocol_settings']['sintr_sort_writeset']).lower()
+            if 'sintr_profile_one_client_load' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_profile_one_client_load=%s' % str(config['sintr_protocol_settings']['sintr_profile_one_client_load']).lower()
 
         if config['replication_protocol'] == 'pequin':
             ##Sync protocol settings
