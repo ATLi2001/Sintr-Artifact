@@ -25,9 +25,10 @@ CLUSTER_NAME="utah"
 BENCHMARK_NAME="tpcc"
 NUM_SHARDS=1
 PG_MODE=0
+CLIENTS_PER_SERVER=1
 
 
-while getopts u:e:b:s:f:c:p: option; do
+while getopts u:e:b:s:f:c:p:n: option; do
 case "${option}" in
 u) USER=${OPTARG};;
 e) EXP_NAME=${OPTARG};;
@@ -36,6 +37,7 @@ s) NUM_SHARDS=${OPTARG};;
 f) FIRST_TIME_CONNECTION=${OPTARG};;
 c) CLUSTER_NAME=${OPTARG};;
 p) PG_MODE=${OPTARG};;
+n) CLIENTS_PER_SERVER=${OPTARG};;
 esac;
 done
 
@@ -54,6 +56,17 @@ if [ $NUM_SHARDS = 3 ]; then
    arr_servers=("us-east-1-0" "us-east-1-1" "us-east-1-2" "eu-west-1-0" "eu-west-1-1" "eu-west-1-2" "ap-northeast-1-0" "ap-northeast-1-1" "ap-northeast-1-2" "us-west-1-0" "us-west-1-1" "us-west-1-2" "eu-central-1-0" "eu-central-1-1" "eu-central-1-2" "ap-southeast-2-0" "ap-southeast-2-1" "ap-southeast-2-2")
    arr_clients=("client-0-0" "client-1-0" "client-2-0" "client-3-0" "client-4-0" "client-5-0" "client-6-0" "client-7-0" "client-8-0" "client-9-0" "client-10-0" "client-11-0" "client-12-0" "client-13-0" "client-14-0" "client-15-0" "client-16-0" "client-17-0")
 fi
+
+# if CLIENTS_PER_SERVER > 1, add on more
+additional_clients=()
+for (( i=1; i<$CLIENTS_PER_SERVER; i++ )); do
+	for host in "${arr_clients[@]}"
+	do
+		additional_clients+=("${host:0:-1}$i")
+	done
+done
+arr_clients+=("${additional_clients[@]}")
+echo "arr_clients: ${arr_clients[@]}"
 
 if [ $FIRST_TIME_CONNECTION = 1 ]; then
 	#connect to all servers once to establish auth.
