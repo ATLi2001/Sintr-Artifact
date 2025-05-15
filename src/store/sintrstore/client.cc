@@ -220,9 +220,8 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     // TODO: Default should be either ACL or Weight Policy depending on parameter
     PolicyClient *policyClient = new PolicyClient();
     EstimateTxnPolicy(protoTxnState, policyClient);
-    c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, policyClient);
-    delete policyClient;
-    policyClient = nullptr;
+    c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
+
     txn.Clear(); //txn = proto::Transaction();
     txn.set_client_id(client_id);
     txn.set_client_seq_num(client_seq_num);
