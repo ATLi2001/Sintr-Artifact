@@ -79,7 +79,16 @@ void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDiges
 }
 
 void EndorsementClient::DebugSetExpectedTxnOutput(const proto::Transaction &expectedTxn) {
+  std::unique_lock lock(mutex);
   this->expectedTxn = expectedTxn;
+  lock.release();
+  mutex.unlock();
+
+  Debug(
+    "DebugSetExpectedTxnOutput for EndorsementClient client id %lu, seq num %lu",
+    expectedTxn.client_id(),
+    expectedTxn.client_seq_num()
+  );
 
   for (auto const &txn : pendingTxns) {
     DebugCheck(txn);
@@ -88,6 +97,7 @@ void EndorsementClient::DebugSetExpectedTxnOutput(const proto::Transaction &expe
 }
 
 void EndorsementClient::DebugCheck(const proto::Transaction &txn) {
+  std::unique_lock lock(mutex);
   if (!expectedTxn.IsInitialized()) {
     pendingTxns.push_back(txn);
     return;

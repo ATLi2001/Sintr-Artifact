@@ -646,6 +646,9 @@ void Client2Client::SendBlindWriteMessageHelper() {
 }
 
 void Client2Client::HandlePolicyUpdate(const Policy *policy) {
+  UW_ASSERT(policy != nullptr);
+  endorseClient->UpdateRequirement(policy);
+
   if (!params.sintr_params.client2clientMultiThreading) {
     HandlePolicyUpdateHelper(policy);
   }
@@ -660,8 +663,6 @@ void Client2Client::HandlePolicyUpdate(const Policy *policy) {
 }
 
 void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
-  UW_ASSERT(policy != nullptr);
-  endorseClient->UpdateRequirement(policy);
   std::vector<int> diff = endorseClient->DifferenceToSatisfied(beginValSent);
   // if after updating the policy, and the current set of validations is not enough, initiate more
   if (diff.size() > 0) {
