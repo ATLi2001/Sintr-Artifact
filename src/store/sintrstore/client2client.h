@@ -259,7 +259,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
 
   void ValidationThreadFunction();
-  void Client2ClientMessageThreadFunction();
+  void Client2ClientMessageThreadFunction(tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> &c2cQueue);
 
   bool ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data);
   // create an hmac from msg and place into signature
@@ -308,10 +308,14 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // concurrent queue of transactions to be validated, has blocking semantics for pop
   tbb::concurrent_bounded_queue<ValidationInfo *> validationQueue;
 
-  // separate thread for message processing (send/receive), stays sequential
-  std::thread *c2cThread;
-  // concurrent queue of messages to be processed
-  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cQueue;
+  // separate thread for message sending, stays sequential
+  std::thread *c2cSendThread;
+  // concurrent queue of messages to be sent
+  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cSendQueue;
+  // separate thread for message receiving, stays sequential
+  std::thread *c2cReceiveThread;
+  // concurrent queue of messages to be received
+  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cReceiveQueue;
 
   // for hmacs
   std::unordered_map<uint64_t, std::string> sessionKeys;

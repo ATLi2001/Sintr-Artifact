@@ -74,37 +74,56 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
 
   done = false;
 
-  // for each client process, have 1 core for main client thread and maxValThreads for validation threads
-  // if multi-threading message processing, need to reserve 1 more core per client
-  // so each client process takes up a total of maxValThreads + (1 or 2) cores
+  // // for each client process, have 1 core for main client thread and maxValThreads for validation threads
+  // // if multi-threading message processing, need to reserve 1 more core per client
+  // // so each client process takes up a total of maxValThreads + (1 or 2) cores
+  // int num_cpus = std::thread::hardware_concurrency();
+  // int main_client_cpu;
+  // if (params.sintr_params.c2cReceiveThread) {
+  //   main_client_cpu = client_id * (params.sintr_params.maxValThreads + 2) % num_cpus;
+  // }
+  // else {
+  //   main_client_cpu = client_id * (params.sintr_params.maxValThreads + 1) % num_cpus;
+  // }
+
+  // each process gets 2 cpus, one for main client thread and one for all validation, send, receive threads 
   int num_cpus = std::thread::hardware_concurrency();
-  int main_client_cpu;
-  if (params.sintr_params.client2clientMultiThreading) {
-    main_client_cpu = client_id * (params.sintr_params.maxValThreads + 2) % num_cpus;
-  }
-  else {
-    main_client_cpu = client_id * (params.sintr_params.maxValThreads + 1) % num_cpus;
-  }
+  int main_client_cpu = client_id * 2 % num_cpus;
+
+  Debug("Starting %lu validation threads", params.sintr_params.maxValThreads);
   for (size_t i = 0; i < params.sintr_params.maxValThreads; i++) {
     valThreads.push_back(new std::thread(&Client2Client::ValidationThreadFunction, this));
     if (params.sintr_params.clientPinCores) {
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);      
-      CPU_SET(main_client_cpu + i + 1 % num_cpus, &cpuset);
+      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
       pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
 
-  if (params.sintr_params.client2clientMultiThreading) {
-    c2cThread = new std::thread(&Client2Client::Client2ClientMessageThreadFunction, this);
+  if (params.sintr_params.c2cSendThread) {
+    Debug("Starting c2cSendThread");
+    c2cSendThread = new std::thread(&Client2Client::Client2ClientMessageThreadFunction, this, std::ref(c2cSendQueue));
     if (params.sintr_params.clientPinCores) {
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
       // try to pin to core following validation threads
-      CPU_SET(main_client_cpu + params.sintr_params.maxValThreads + 1 % num_cpus, &cpuset);
-      pthread_setaffinity_np(c2cThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+    }
+  }
+  if (params.sintr_params.c2cReceiveThread) {
+    Debug("Starting c2cReceiveThread");
+    c2cReceiveThread = new std::thread(&Client2Client::Client2ClientMessageThreadFunction, this, std::ref(c2cReceiveQueue));
+    if (params.sintr_params.clientPinCores) {
+      // set cpu affinity
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      // try to pin to core following validation threads
+      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      pthread_setaffinity_np(c2cReceiveThread->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
 }
@@ -119,10 +138,15 @@ Client2Client::~Client2Client() {
     t->join();
     delete t;
   }
-  if (params.sintr_params.client2clientMultiThreading) {
-    c2cQueue.push(nullptr);
-    c2cThread->join();
-    delete c2cThread;
+  if (params.sintr_params.c2cSendThread) {
+    c2cSendQueue.push(nullptr);
+    c2cSendThread->join();
+    delete c2cSendThread;
+  }
+  if (params.sintr_params.c2cReceiveThread) {
+    c2cReceiveQueue.push(nullptr);
+    c2cReceiveThread->join();
+    delete c2cReceiveThread;
   }
   delete valClient;
   delete clients_verifier;
@@ -170,7 +194,7 @@ bool Client2Client::SendPing(size_t replica, const PingMessage &ping) {
 
 void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
     PolicyClient *policyClient) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState, txnStartTime, policyClient);
     delete policyClient;
   }
@@ -183,7 +207,7 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -274,7 +298,7 @@ void Client2Client::SendForwardReadResultMessage(const std::string &key, const s
     const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
     const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep) {
 
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     SendForwardReadResultMessageHelper(key, value, ts, proof, serializedWrite, serializedWriteTypeName,
       dep, hasDep, addReadset, policyDep, hasPolicyDep);
   }
@@ -288,7 +312,7 @@ void Client2Client::SendForwardReadResultMessage(const std::string &key, const s
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -393,7 +417,7 @@ void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, c
     const std::string &serializedWrite, const std::string &serializedWriteTypeName,
     const proto::Dependency &dep, bool hasDep, bool addReadset) {
   
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     SendForwardPointQueryResultMessageHelper(
       key, value, ts, table_name, proof, serializedWrite, 
       serializedWriteTypeName, dep, hasDep, addReadset
@@ -408,7 +432,7 @@ void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, c
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -509,7 +533,7 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
     const proto::QueryResultMetaData &query_res_meta,
     const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset) {
 
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     SendForwardQueryResultMessageHelper(
       query_gen_id, query_result,
       query_res_meta, group_sigs, addReadset
@@ -524,7 +548,7 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -594,7 +618,7 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
 }
 
 void Client2Client::SendBlindWriteMessage() {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     SendBlindWriteMessageHelper();
   }
   else {
@@ -603,7 +627,7 @@ void Client2Client::SendBlindWriteMessage() {
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -649,7 +673,7 @@ void Client2Client::HandlePolicyUpdate(const Policy *policy) {
   UW_ASSERT(policy != nullptr);
   endorseClient->UpdateRequirement(policy);
 
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cSendThread) {
     HandlePolicyUpdateHelper(policy);
   }
   else {
@@ -658,7 +682,7 @@ void Client2Client::HandlePolicyUpdate(const Policy *policy) {
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cSendQueue.push(executor);
   }
 }
 
@@ -689,7 +713,7 @@ void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
 }
 
 void Client2Client::ManageDispatchBeginValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     beginValTxnMsg.ParseFromString(data);
     HandleBeginValidateTxnMessage(remote, beginValTxnMsg);
   }
@@ -702,12 +726,12 @@ void Client2Client::ManageDispatchBeginValidateTxnMessage(const TransportAddress
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cReceiveQueue.push(executor);
   }
 }
 
 void Client2Client::ManageDispatchForwardReadResultMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     fwdReadResultMsg.ParseFromString(data);
     HandleForwardReadResultMessage(fwdReadResultMsg);
   }
@@ -720,12 +744,12 @@ void Client2Client::ManageDispatchForwardReadResultMessage(const TransportAddres
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cReceiveQueue.push(executor);
   }
 }
 
 void Client2Client::ManageDispatchForwardPointQueryResultMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     fwdPointQueryResultMsg.ParseFromString(data);
     HandleForwardPointQueryResultMessage(fwdPointQueryResultMsg);
   }
@@ -738,12 +762,12 @@ void Client2Client::ManageDispatchForwardPointQueryResultMessage(const Transport
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cReceiveQueue.push(executor);
   }
 }
 
 void Client2Client::ManageDispatchForwardQueryResultMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     fwdQueryResultMsg.ParseFromString(data);
     HandleForwardQueryResultMessage(fwdQueryResultMsg);
   }
@@ -756,12 +780,12 @@ void Client2Client::ManageDispatchForwardQueryResultMessage(const TransportAddre
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cReceiveQueue.push(executor);
   }
 }
 
 void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     blindWriteMsg.ParseFromString(data);
     HandleBlindWriteMessage(blindWriteMsg);
   }
@@ -774,12 +798,12 @@ void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remo
       return (void*) true;
     };
     Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-    c2cQueue.push(executor);
+    c2cReceiveQueue.push(executor);
   }
 }
 
 void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.client2clientMultiThreading) {
+  if (!params.sintr_params.c2cReceiveThread) {
     finishValTxnMsg.ParseFromString(data);
     HandleFinishValidateTxnMessage(finishValTxnMsg);
   }
@@ -799,7 +823,7 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
     else {
       // only moves the function to be off the main client thread, but still sequential on client2client message thread
       Client2ClientMessageExecutor *executor = new Client2ClientMessageExecutor(std::move(f));
-      c2cQueue.push(executor);
+      c2cReceiveQueue.push(executor);
     }
   }
 }
@@ -1677,7 +1701,7 @@ void Client2Client::ValidationThreadFunction() {
   Debug("done true, exiting validation thread");
 }
 
-void Client2Client::Client2ClientMessageThreadFunction() {
+void Client2Client::Client2ClientMessageThreadFunction(tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> &c2cQueue) {
   while (!done) {
     Client2ClientMessageExecutor *executor;
     c2cQueue.pop(executor);
