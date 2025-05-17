@@ -101,32 +101,33 @@ void ValidationClient::Get(const std::string &key, get_callback gcb,
     txn->add_involved_groups(i);
   }
 
+  a->second->seenReads.insert(key);
+
   // read locally in buffer
-  if (BufferGet(a->second, key, vrcb)) {
-    Debug(
-      "ValidationClient::BufferGet for client id %lu, seq num %lu, on key %s", 
-      txn_client_id,
-      txn_client_seq_num,
-      BytesToHex(key, 16).c_str()
-    );
-    // remove pending Forwarded read from vector
-    auto itr = std::find_if(
-      a->second->pendingForwardedRead.begin(), a->second->pendingForwardedRead.end(),
-      [&key](const auto &key_value) { return key_value.first == key; }
-    );
-    if(itr != a->second->pendingForwardedRead.end()) {
-      Debug("removing pending forwarded read for key %s", BytesToHex(key, 16).c_str());
-      a->second->pendingForwardedRead.erase(itr);
-    }
-    return;
-  }
+  // if (BufferGet(a->second, key, vrcb)) {
+  //   Debug(
+  //     "ValidationClient::BufferGet for client id %lu, seq num %lu, on key %s", 
+  //     txn_client_id,
+  //     txn_client_seq_num,
+  //     BytesToHex(key, 16).c_str()
+  //   );
+  //   // remove pending Forwarded read from vector
+  //   auto itr = std::find_if(
+  //     a->second->pendingForwardedRead.begin(), a->second->pendingForwardedRead.end(),
+  //     [&key](const auto &key_value) { return key_value.first == key; }
+  //   );
+  //   if(itr != a->second->pendingForwardedRead.end()) {
+  //     Debug("removing pending forwarded read for key %s", BytesToHex(key, 16).c_str());
+  //     a->second->pendingForwardedRead.erase(itr);
+  //   }
+  //   return;
+  // }
   // check if forward read result already received (if callback exists)
   auto itr = std::find_if(
     a->second->pendingForwardedRead.begin(), a->second->pendingForwardedRead.end(),
     [&key](const auto &key_value) { return key_value.first == key; }
   );
   if(itr != a->second->pendingForwardedRead.end()) {
-    Debug("Adding queried get to readset for key %s", BytesToHex(key, 16).c_str());
     std::pair<std::string, Timestamp> res = itr->second;
     vrcb(REPLY_OK, txn_client_id, txn_client_seq_num, key, res.first, res.second);
     a->second->pendingForwardedRead.erase(itr);
@@ -244,7 +245,7 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
 
   if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
     std::ostringstream oss;
-    oss << std::this_thread::get_id() << std::endl;
+    oss << std::this_thread::get_id();
     Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
   }
   SQLTransformer *sql_interpreter = threadValtoSQL[std::this_thread::get_id()];
@@ -348,7 +349,7 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
 
   if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
     std::ostringstream oss;
-    oss << std::this_thread::get_id() << std::endl;
+    oss << std::this_thread::get_id();
     Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
   }
   SQLTransformer *sql_interpreter = threadValtoSQL[std::this_thread::get_id()];
@@ -368,15 +369,17 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
   if(pendingQuery->is_point){
     Debug("Encoded key: %s", EncodeTableRow(pendingQuery->table_name, pendingQuery->p_col_values).c_str()); 
     std::string encoded_key = EncodeTableRow(pendingQuery->table_name, pendingQuery->p_col_values);
-    auto itr = a->second->point_read_cache.find(encoded_key);
-    if(itr != a->second->point_read_cache.end()){
-      Debug("Supply point query result from cache!");
-      auto res = new sql::QueryResultProtoWrapper(itr->second);
-      qcb(REPLY_OK, res);
-      delete pendingQuery;
-      pendingQuery = nullptr;
-      return;
-    }
+
+    a->second->seenReads.insert(encoded_key);
+    // auto itr = a->second->point_read_cache.find(encoded_key);
+    // if(itr != a->second->point_read_cache.end()){
+    //   Debug("Supply point query result from cache!");
+    //   auto res = new sql::QueryResultProtoWrapper(itr->second);
+    //   qcb(REPLY_OK, res);
+    //   delete pendingQuery;
+    //   pendingQuery = nullptr;
+    //   return;
+    // }
     // check if forward read result already received
     auto read_itr = std::find_if(
       a->second->pendingForwardedPointQuery.begin(), a->second->pendingForwardedPointQuery.end(),
@@ -402,17 +405,19 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
   else{
     Debug("Query gen id: %s", BytesToHex(pendingQuery->query_gen_id, 16).c_str());
 
-    // check if query is in cache
-    auto itr = a->second->scan_read_cache.find(query);
-    if(itr != a->second->scan_read_cache.end()){
-      Debug("Supply scan query result from cache! Query: %s", query.c_str());
+    a->second->seenQueries.insert(pendingQuery->query_gen_id);
 
-      auto res = new sql::QueryResultProtoWrapper(itr->second);
-      qcb(REPLY_OK, res);
-      delete pendingQuery;
-      pendingQuery = nullptr;
-      return;
-    }
+    // check if query is in cache
+    // auto itr = a->second->scan_read_cache.find(query);
+    // if(itr != a->second->scan_read_cache.end()){
+    //   Debug("Supply scan query result from cache! Query: %s", query.c_str());
+
+    //   auto res = new sql::QueryResultProtoWrapper(itr->second);
+    //   qcb(REPLY_OK, res);
+    //   delete pendingQuery;
+    //   pendingQuery = nullptr;
+    //   return;
+    // }
     // probably need to check txn read set & query_set of txn
     // to find if query result has already been forwarded
     // check if forward query result already received (if callback exists)
@@ -514,8 +519,20 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       a->second->pendingForwardedQuery.size(),
       a->second->pendingForwardedRead.size());
   }
+
+  // prevent initiating client from hiding reads by telling validating client to ignore them
+  std::set<std::string> readsInReadset;
+  for (const auto &read : txn->read_set()) {
+    readsInReadset.insert(read.key());
+  }
+  if (readsInReadset != a->second->seenReads) {
+    Panic("Transaction readset does not match the reads seen by the validating client.");
+  }
+  if (a->second->queriesAddedToReadset != a->second->seenQueries) {
+    Panic("Transaction queries added to readset does not match the queries seen by the validating client.");
+  }
   
-  Debug("Committing validation for client %d, seq num %d and txn ID: %s", txn_client_id, txn_client_seq_num,
+  Debug("Committing validation for client id %lu, seq num %lu and txn ID: %s", txn_client_id, txn_client_seq_num,
       BytesToHex(TransactionDigest(*txn, true), 16).c_str());
   // if has queries, and query deps are meant to be reported by client:
   // Sort and erase all duplicate dependencies. (equality = same txn_id and same involved group.)
@@ -604,10 +621,10 @@ void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_clie
   if(params.query_params.sql_mode && txn->policy_type() != proto::Transaction::POLICY_ID_POLICY) {
     if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
       std::ostringstream oss;
-      oss << std::this_thread::get_id() << std::endl;
+      oss << std::this_thread::get_id();
       Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
     }
-    Debug("CREATING NEW TX for client %lu seq num %lu", txn_client_id, txn_client_seq_num);
+    Debug("CREATING NEW TX for client id %lu, seq num %lu", txn_client_id, txn_client_seq_num);
     threadValtoSQL[std::this_thread::get_id()]->NewTx(txn);
   }
 }
@@ -660,9 +677,7 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     txn->set_client_seq_num(txn_client_seq_num);
     a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num, txn);
     editTxnStateCB(a->second);
-    if(addReadset) {
-      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
-    }
+    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
     return;
   }
 
@@ -678,12 +693,7 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
       txn_client_seq_num,
       BytesToHex(curr_key, 16).c_str()
     );
-    // if addReadset is true then add it to pending forwarded read
-    if(addReadset) {
-      Debug("Added curr key %s with value %s to readset of txn client ID: %lu , seq num: %lu",
-        curr_key.c_str(), curr_value.c_str(), txn_client_id, txn_client_seq_num);
-      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
-    }
+    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
     editTxnStateCB(a->second);
     return;
   }
@@ -769,17 +779,18 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
       txn_client_seq_num,
       curr_key.c_str()
     );
-    // for some reason using addReadset for query point reads causes some queries to stall indefinitely
-    if(a->second->point_read_cache.find(curr_key) == a->second->point_read_cache.end()
-      || a->second->point_read_cache[curr_key] == "") {
-      a->second->pendingForwardedPointQuery.push_back(std::make_pair(curr_key, curr_value));
-    } else if(addReadset && a->second->point_read_cache[curr_key] != curr_value &&
-      a->second->point_read_cache[curr_key] != "") {
-      // if the cached values isn't the same as the current value and cached value is non empty
-      Panic("Cached value %s and current value %s are not the same for point query key %s",
-        a->second->point_read_cache[curr_key].c_str(), curr_value.c_str(), curr_key.c_str());
-    }
+    // // for some reason using addReadset for query point reads causes some queries to stall indefinitely
+    // if(a->second->point_read_cache.find(curr_key) == a->second->point_read_cache.end()
+    //   || a->second->point_read_cache[curr_key] == "") {
+    //   a->second->pendingForwardedPointQuery.push_back(std::make_pair(curr_key, curr_value));
+    // } else if(addReadset && a->second->point_read_cache[curr_key] != curr_value &&
+    //   a->second->point_read_cache[curr_key] != "") {
+    //   // if the cached values isn't the same as the current value and cached value is non empty
+    //   Panic("Cached value %s and current value %s are not the same for point query key %s",
+    //     a->second->point_read_cache[curr_key].c_str(), curr_value.c_str(), curr_key.c_str());
+    // }
     editTxnStateCB(a->second, ""); // use empty string for query, maybe cache result when query is executed
+    a->second->pendingForwardedPointQuery.push_back(std::make_pair(curr_key, curr_value));
     return;
   }
   // callback
@@ -814,9 +825,10 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
 
   // lambda for editing txn state
   auto editTxnStateCB = [
-    this, &curr_query_result, &fwdQueryResult, addReadset
+    this, &curr_query_gen_id, &curr_query_result, &fwdQueryResult, addReadset
   ](AllValidationTxnState *allValTxnState, const std::string &query_cmd, sql::QueryResultProtoWrapper *q_result, bool cache_result) {
     if (addReadset) {
+      allValTxnState->queriesAddedToReadset.insert(curr_query_gen_id);
       AddQueryReadset(allValTxnState, fwdQueryResult);
     }
     if (cache_result && q_result != nullptr && !q_result->empty()) {
@@ -847,9 +859,7 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
     txn->set_client_seq_num(txn_client_seq_num);
     a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num, txn);
     editTxnStateCB(a->second, "", nullptr, false);
-    if(addReadset) {
-      a->second->pendingForwardedQuery.push_back(std::make_pair(curr_query_gen_id, curr_query_result));
-    }
+    a->second->pendingForwardedQuery.push_back(std::make_pair(curr_query_gen_id, curr_query_result));
     return;
   }
 
@@ -869,17 +879,18 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
     //  addReadset, a->second->queryIDToCmd[curr_query_gen_id].c_str(),
     //  (a->second->scan_read_cache.find(a->second->queryIDToCmd[curr_query_gen_id]) == a->second->scan_read_cache.end()),
     //  BytesToHex(curr_query_gen_id, 16).c_str());
-    if(addReadset && (a->second->queryIDToCmd.find(curr_query_gen_id) == a->second->queryIDToCmd.end() ||
-      (a->second->queryIDToCmd.find(curr_query_gen_id) != a->second->queryIDToCmd.end()
-      && a->second->scan_read_cache.find(a->second->queryIDToCmd[curr_query_gen_id]) == a->second->scan_read_cache.end()))) {
-      a->second->pendingForwardedQuery.push_back(std::make_pair(curr_query_gen_id, curr_query_result));
-    } else if(addReadset && a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]] != curr_query_result
-        && a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]] != ""){
-      // if the cached values isn't the same as the current value and cached value is non empty
-      Panic("Cached results %s and current value %s are not the same for query gen ID %s",
-        a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]].c_str(), curr_query_result.c_str(), curr_query_gen_id.c_str());
-    }
+    // if(addReadset && (a->second->queryIDToCmd.find(curr_query_gen_id) == a->second->queryIDToCmd.end() ||
+    //   (a->second->queryIDToCmd.find(curr_query_gen_id) != a->second->queryIDToCmd.end()
+    //   && a->second->scan_read_cache.find(a->second->queryIDToCmd[curr_query_gen_id]) == a->second->scan_read_cache.end()))) {
+    //   a->second->pendingForwardedQuery.push_back(std::make_pair(curr_query_gen_id, curr_query_result));
+    // } else if(addReadset && a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]] != curr_query_result
+    //     && a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]] != ""){
+    //   // if the cached values isn't the same as the current value and cached value is non empty
+    //   Panic("Cached results %s and current value %s are not the same for query gen ID %s",
+    //     a->second->scan_read_cache[a->second->queryIDToCmd[curr_query_gen_id]].c_str(), curr_query_result.c_str(), curr_query_gen_id.c_str());
+    // }
     editTxnStateCB(a->second, "", nullptr, false);
+    a->second->pendingForwardedQuery.push_back(std::make_pair(curr_query_gen_id, curr_query_result));
     return;
   }
 
@@ -952,6 +963,8 @@ proto::Transaction *ValidationClient::GetCompletedTxn(uint64_t txn_client_id, ui
     Panic("cannot find transaction %s in allValTxnStates", txn_id.c_str());
   }
   proto::Transaction *txn = a->second->txn;
+  UW_ASSERT(txn->client_id() == txn_client_id);
+  UW_ASSERT(txn->client_seq_num() == txn_client_seq_num);
 
   Debug(
     "ValidationClient::GetCompletedValTxn called for txn client id %lu, seq num %lu",

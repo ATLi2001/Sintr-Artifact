@@ -842,7 +842,7 @@ int main(int argc, char **argv) {
         false, false,
         FLAGS_sintr_policy_function_name,
         FLAGS_sintr_policy_config_path, 0, sintrstore::CLIENT_VALIDATION_HEURISTIC::EXACT,
-        FLAGS_sintr_check_policy_leak, false, 0, false,
+        FLAGS_sintr_check_policy_leak, false, 0, false, false,
         FLAGS_sintr_parallel_endorsement_check,
         FLAGS_sintr_use_occ_for_policies,
         FLAGS_sintr_hash_endorsements, false, false, true

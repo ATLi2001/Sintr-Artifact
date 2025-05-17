@@ -862,7 +862,8 @@ typedef struct SintrParameters {
   const CLIENT_VALIDATION_HEURISTIC clientValidationHeuristic;
   const bool checkPolicyLeak;
   const bool clientPinCores; // pin client cores for validation
-  const bool client2clientMultiThreading; // enable multi-threading for client-to-client communication
+  const bool c2cSendThread; // separate thread for sending client-to-client communication
+  const bool c2cReceiveThread; // separate thread for receiving client-to-client communication
   const bool parallelEndorsementCheck; // parallel endorsement check
   const bool useOCCForPolicies; // use OCC for policies, changing policies in sql means this flag must be enabled
   const bool hashEndorsements; // hash endorsements with txn digest to get updated txn digest
@@ -873,7 +874,7 @@ typedef struct SintrParameters {
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
     std::string policyConfigPath, uint32_t readIncludePolicy, CLIENT_VALIDATION_HEURISTIC clientValidationHeuristic,
-    bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool client2clientMultiThreading,
+    bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset) :
     maxValThreads(maxValThreads), 
@@ -888,7 +889,8 @@ typedef struct SintrParameters {
     checkPolicyLeak(checkPolicyLeak),
     clientPinCores(clientPinCores),
     minEnablePullPolicies(minEnablePullPolicies),
-    client2clientMultiThreading(client2clientMultiThreading),
+    c2cSendThread(c2cSendThread),
+    c2cReceiveThread(c2cReceiveThread),
     parallelEndorsementCheck(parallelEndorsementCheck),
     useOCCForPolicies(useOCCForPolicies),
     hashEndorsements(hashEndorsements),

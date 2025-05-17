@@ -226,8 +226,15 @@ class ValidationClient : public ::Client {
     std::deque<std::function<void(void)>*> pendingBlindWrites;
     // for tracking blind write messages that arrive before registering pending blind writes
     uint64_t blind_write_message_count = 0;
+
+    // prevent initiating client from hiding reads by telling validating client to ignore them
+    // track all reads that should have been seen by the transaction
+    std::set<std::string> seenReads;
+    // queriesAddedToReadset should match seenQueries
+    std::set<std::string> seenQueries;
+    std::set<std::string> queriesAddedToReadset;
   };
-  
+
   bool BufferGet(const AllValidationTxnState *allValTxnState, const std::string &key, 
     validation_read_callback vrcb);
   // add (key, ts) to the readset of transaction txn_id

@@ -80,7 +80,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   // start up the sintr validation for current transaction
   // sends BeginValidateTxnMessage to peers
-  // policy is the estimated policy for the transaction
+  // takes ownership of policyClient, which contains the estimated policy for the transaction
   void SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
     PolicyClient *policyClient);
 
@@ -202,24 +202,26 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::atomic<uint64_t> num_check_passed;
     std::atomic<uint64_t> num_finished;
   };
+
+  void SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
+    uint64_t txnStartTime, PolicyClient *policyClient);
   
-  void SendForwardReadResultMessageHelper(const uint64_t client_seq_num, 
-    const std::string &key, const std::string &value, const Timestamp &ts,
+  void SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
     const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep);
   
-  void SendForwardPointQueryResultMessageHelper(const uint64_t client_seq_num,
-    const std::string &key, const std::string &value, const Timestamp &ts,
+  void SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
     const std::string &serializedWrite, const std::string &serializedWriteTypeName,
     const proto::Dependency &dep, bool hasDep, bool addReadset);
   
-  void SendForwardQueryResultMessageHelper(const uint64_t client_seq_num,
-    const std::string &query_gen_id, const std::string &query_result,
+  void SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
     const proto::QueryResultMetaData &query_res_meta,
     const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset);
   
-  void SendBlindWriteMessageHelper(const uint64_t client_seq_num);
+  void SendBlindWriteMessageHelper();
+
+  void HandlePolicyUpdateHelper(const Policy *policy);
 
   void ManageDispatchBeginValidateTxnMessage(const TransportAddress &remote, const std::string &data);
   void ManageDispatchForwardReadResultMessage(const TransportAddress &remote, const std::string &data);
@@ -257,7 +259,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
 
   void ValidationThreadFunction();
-  void Client2ClientMessageThreadFunction();
+  void Client2ClientMessageThreadFunction(tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> &c2cQueue);
 
   bool ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data);
   // create an hmac from msg and place into signature
@@ -306,10 +308,14 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // concurrent queue of transactions to be validated, has blocking semantics for pop
   tbb::concurrent_bounded_queue<ValidationInfo *> validationQueue;
 
-  // separate thread for message processing (send/receive), stays sequential
-  std::thread *c2cThread;
-  // concurrent queue of messages to be processed
-  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cQueue;
+  // separate thread for message sending, stays sequential
+  std::thread *c2cSendThread;
+  // concurrent queue of messages to be sent
+  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cSendQueue;
+  // separate thread for message receiving, stays sequential
+  std::thread *c2cReceiveThread;
+  // concurrent queue of messages to be received
+  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cReceiveQueue;
 
   // for hmacs
   std::unordered_map<uint64_t, std::string> sessionKeys;

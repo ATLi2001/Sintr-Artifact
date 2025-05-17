@@ -63,7 +63,7 @@
 
       "watermark_time_delta": 30000,
 
-      "sign_client_proposals": false,
+      "sign_client_proposals": true,
       "sign_messages": true,
       "validate_proofs": true,
       "hash_digest": true,
