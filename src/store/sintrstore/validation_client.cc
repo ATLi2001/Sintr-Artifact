@@ -101,6 +101,8 @@ void ValidationClient::Get(const std::string &key, get_callback gcb,
     txn->add_involved_groups(i);
   }
 
+  a->second->seenReads.insert(key);
+
   // read locally in buffer
   // if (BufferGet(a->second, key, vrcb)) {
   //   Debug(
@@ -367,6 +369,8 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
   if(pendingQuery->is_point){
     Debug("Encoded key: %s", EncodeTableRow(pendingQuery->table_name, pendingQuery->p_col_values).c_str()); 
     std::string encoded_key = EncodeTableRow(pendingQuery->table_name, pendingQuery->p_col_values);
+
+    a->second->seenReads.insert(encoded_key);
     // auto itr = a->second->point_read_cache.find(encoded_key);
     // if(itr != a->second->point_read_cache.end()){
     //   Debug("Supply point query result from cache!");
@@ -400,6 +404,8 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
   } 
   else{
     Debug("Query gen id: %s", BytesToHex(pendingQuery->query_gen_id, 16).c_str());
+
+    a->second->seenQueries.insert(pendingQuery->query_gen_id);
 
     // check if query is in cache
     // auto itr = a->second->scan_read_cache.find(query);
@@ -512,6 +518,18 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       a->second->pendingForwardedPointQuery.size(),
       a->second->pendingForwardedQuery.size(),
       a->second->pendingForwardedRead.size());
+  }
+
+  // prevent initiating client from hiding reads by telling validating client to ignore them
+  std::set<std::string> readsInReadset;
+  for (const auto &read : txn->read_set()) {
+    readsInReadset.insert(read.key());
+  }
+  if (readsInReadset != a->second->seenReads) {
+    Panic("Transaction readset does not match the reads seen by the validating client.");
+  }
+  if (a->second->queriesAddedToReadset != a->second->seenQueries) {
+    Panic("Transaction queries added to readset does not match the queries seen by the validating client.");
   }
   
   Debug("Committing validation for client id %lu, seq num %lu and txn ID: %s", txn_client_id, txn_client_seq_num,
@@ -807,9 +825,10 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
 
   // lambda for editing txn state
   auto editTxnStateCB = [
-    this, &curr_query_result, &fwdQueryResult, addReadset
+    this, &curr_query_gen_id, &curr_query_result, &fwdQueryResult, addReadset
   ](AllValidationTxnState *allValTxnState, const std::string &query_cmd, sql::QueryResultProtoWrapper *q_result, bool cache_result) {
     if (addReadset) {
+      allValTxnState->queriesAddedToReadset.insert(curr_query_gen_id);
       AddQueryReadset(allValTxnState, fwdQueryResult);
     }
     if (cache_result && q_result != nullptr && !q_result->empty()) {
