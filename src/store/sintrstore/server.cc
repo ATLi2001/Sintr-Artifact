@@ -2484,9 +2484,9 @@ void Server::Prepare(const std::string &txnDigest, const proto::Transaction &txn
 
   for (const auto &policyRead : implicitPolicyReads) {
     Debug(
-      "PREPARE[%s] Implicit Policy Read to id %lu at timestamp %lu.%lu",
+      "PREPARE[%s] Implicit Policy Read to id %s at timestamp %lu.%lu",
       BytesToHex(txnDigest, 16).c_str(),
-      policyRead.first,
+      policyRead.first.c_str(),
       policyRead.second.getTimestamp(),
       policyRead.second.getID()
     );

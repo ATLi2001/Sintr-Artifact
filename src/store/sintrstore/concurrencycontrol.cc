@@ -525,7 +525,9 @@ proto::ConcurrencyControl::Result Server::DoOCCCheck(
     const std::string &txnDigest, proto::Transaction &txn, //const proto::Transaction &txn,
     Timestamp &retryTs, const proto::CommittedProof* &conflict,
     const proto::Transaction* &abstain_conflict,
-    bool fallback_flow, bool isGossip) {
+    bool fallback_flow, bool isGossip, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb) {
+
+  UW_ASSERT(!params.sintr_params.parallelEndorsementCheck || delay_prepare_cb != nullptr);
 
   if(txn.timestamp().timestamp() <= 10000) Panic("Trying to store TX TS [%lu:%lu]", txn.timestamp().timestamp(), txn.timestamp().id());
   proto::ConcurrencyControl::Result result;
@@ -584,7 +586,7 @@ proto::ConcurrencyControl::Result Server::DoOCCCheck(
   
   switch (occType) {
     case MVTSO:
-      result = DoMVTSOOCCCheck(reqId, remote, txnDigest, txn, *readSet, *depSet, *predSet, conflict, abstain_conflict, fallback_flow, isGossip);
+      result = DoMVTSOOCCCheck(reqId, remote, txnDigest, txn, *readSet, *depSet, *predSet, conflict, abstain_conflict, fallback_flow, isGossip, delay_prepare_cb);
       break;
     case TAPIR:
       result = DoTAPIROCCCheck(txnDigest, txn, retryTs);
@@ -622,11 +624,13 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     uint64_t reqId, const TransportAddress &remote,
     const std::string &txnDigest, const proto::Transaction &txn, const ReadSet &readSet, const DepSet &depSet, const PredSet &predSet,
     const proto::CommittedProof* &conflict, const proto::Transaction* &abstain_conflict,
-    bool fallback_flow, bool isGossip) {
+    bool fallback_flow, bool isGossip, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb) {
 
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+
+  std::function<void(void)> *call_prepare = nullptr;
   
   Debug("DoMVTSOCheck[%lu:%lu][%s] with ts %lu.%lu.",
       txn.client_id(), txn.client_seq_num(),
@@ -662,7 +666,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     }
 
     // also extract out the policy reads that are done
-    std::set<std::pair<std::string, Timestamp>> implicitPolicyReads;
+    std::set<std::pair<std::string, Timestamp>> *implicitPolicyReads = new std::set<std::pair<std::string, Timestamp>>();
     //2) Validate read set conflicts.
     for (const auto &read : readSet){//txn.read_set()) {
        if(read.is_table_col_version()){   //Don't do the OCC check for table_versions (likewise, Prepare/Commit won't write them) (//TODO: Also skip column versions. Note: Currently just disabled col versions)
@@ -787,14 +791,14 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
           continue;
         }
         // hack to change txn to mutable
-        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, implicitPolicyReads);
+        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
         if(tempResult != proto::ConcurrencyControl::COMMIT) {
           return tempResult;
         }
       } else {
         // add implicit policy read for gov txn writeset
         // writeset key is policy ID for gov txn
-        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, implicitPolicyReads);
+        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
         if(tempResult != proto::ConcurrencyControl::COMMIT) {
           return tempResult;
         }
@@ -1042,25 +1046,59 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     // auto duration = end - start;
     // ccc_us.add(duration);
 
-    //6) Prepare Transaction: No conflicts, No dependencies aborted --> Make writes visible.
-    Prepare(txnDigest, txn, readSet, implicitPolicyReads); 
+    call_prepare = new std::function([this, txnDigest, &txn, &readSet, implicitPolicyReads]() {
+      Debug("Prepare called for txn %s", BytesToHex(txnDigest, 16).c_str());
+      //6) Prepare Transaction: No conflicts, No dependencies aborted --> Make writes visible.
+      Prepare(txnDigest, txn, readSet, *implicitPolicyReads);
+      delete implicitPolicyReads;
+    });
+
+    if (!params.sintr_params.parallelEndorsementCheck) {
+      (*call_prepare)();
+      delete call_prepare;
+    }
+    else {
+      // don't know result of endorsement check yet, so must delay making stuff visible
+    }
   }
+
+  auto call_dependencies_check = [this, txnDigest, &txn, &remote, reqId, fallback_flow, isGossip]() {
+    //7) Check whether all outstanding dependencies have committed
+      // If not, wait.
+    bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
+
+    if (!allFinished) {
+      stats.Increment("cc_waits", 1);
+      return proto::ConcurrencyControl::WAIT;
+    } else {
+      //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
+      Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
+      return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
+      //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
+      //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+    }
+  };
   
-
-  //7) Check whether all outstanding dependencies have committed
-    // If not, wait.
-  bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
-
-  if (!allFinished) {
-    stats.Increment("cc_waits", 1);
-    return proto::ConcurrencyControl::WAIT;
-  } else {
-    //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
-    Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
-    return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
-    //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
-    //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+  if (!params.sintr_params.parallelEndorsementCheck) {
+    return call_dependencies_check();
   }
+  else {
+    UW_ASSERT(delay_prepare_cb != nullptr);
+    Debug("Delaying prepare for txn %s", BytesToHex(txnDigest, 16).c_str());
+    *delay_prepare_cb = new std::function<proto::ConcurrencyControl::Result(void)>(
+      [this, call_prepare, call_dependencies_check]() {
+        Debug("delay_prepare_cb called");
+        if (call_prepare != nullptr) {
+          (*call_prepare)();
+          delete call_prepare;
+        }
+        return call_dependencies_check();
+      }
+    );
+  }
+
+  // in the parallel case, return commit for now but will be updated 
+  return proto::ConcurrencyControl::COMMIT;
 }
 
 //TODO: CheckDepPresence, ManageDeps, CheckDependencies txn --> implement versions for queries:  Input: const ReadSet &readSet,

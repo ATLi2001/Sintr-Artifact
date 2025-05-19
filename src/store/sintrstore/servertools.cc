@@ -1031,12 +1031,15 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         Debug("Launching async endorsement check for txn: %s", BytesToHex(txnDigest, 16).c_str());
         EndorsementCheck(*asyncValidatePrepare, oldTxnDigest, txn);
 
-        result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
-            committedProof, abstain_conflict, false, isGossip); //forwarded messages dont need to be treated as original client.
+        // need to delay prepare making things visible until the endorsement check is done
+        std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb = nullptr;
+        result = DoOCCCheck(reqId, *remote_ptr, txnDigest, *txn, retryTs,
+            committedProof, abstain_conflict, false, isGossip, &delay_prepare_cb); //forwarded messages dont need to be treated as original client.
         
         // if the endorsement checks are done, this will trigger HandlePhase1CB
         // otherwise, HandlePhase1CB will be called when all endorsements checks finish
-        bool done = asyncValidatePrepare->SetCCResult(result);
+        bool done = asyncValidatePrepare->SetCCResult(result, delay_prepare_cb);
+        Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
 
         if (done) {
           delete asyncValidatePrepare;
@@ -1106,12 +1109,15 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           EndorsementCheck(*asyncValidatePrepare, oldTxnDigest, txn);
 
           Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
+          // need to delay prepare making things visible until the endorsement check is done
+          std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb = nullptr;
           result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
-            *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
+            *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip, &delay_prepare_cb));
           
           // if the endorsement checks are done, this will trigger HandlePhase1CB
           // otherwise, HandlePhase1CB will be called when all endorsements checks finish
-          bool done = asyncValidatePrepare->SetCCResult(*result);
+          bool done = asyncValidatePrepare->SetCCResult(*result, delay_prepare_cb);
+          Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
 
           if (done) {
             delete asyncValidatePrepare;
