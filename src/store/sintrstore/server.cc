@@ -3178,12 +3178,9 @@ bool Server::EndorsementCheck(const proto::SignedMessages *endorsements, const s
   return ValidateEndorsements(policyClient, endorsements, txn->client_id(), txnDigest);
 }
 
-void Server::EndorsementCheck(const proto::SignedMessages *endorsements, const std::string &txnDigest, const proto::Transaction *txn,
-    AsyncValidateEndorsements &asyncValidateEndorsements) {
-  PolicyClient *policyClient = new PolicyClient();
-  asyncValidateEndorsements.policyClient = policyClient;
-  ExtractPolicy(txn, *policyClient);
-  ValidateEndorsements(endorsements, txn->client_id(), txnDigest, asyncValidateEndorsements);
+void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn) {
+  ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
+  ValidateEndorsements(asyncValidatePrepare, txn->client_id(), txnDigest);
 }
 
 void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient) {
@@ -3207,7 +3204,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       policyId = write.key();
     }
 
-    Debug("Extracting policy %lu for key %s", policyId, BytesToHex(write.key(), 16).c_str());
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
 
     std::pair<Timestamp, PolicyStoreValue> tsPolicy;
     if(params.sintr_params.useOCCForPolicies) {
@@ -3226,7 +3223,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
   
       std::string policyId = policyIdFunction(read.key(), "");
-      Debug("Extracting policy %lu for key %s", policyId, BytesToHex(read.key(), 16).c_str());
+      Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       if(params.sintr_params.useOCCForPolicies) {
@@ -3271,29 +3268,31 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
   return policyClient.IsSatisfied(endorsers);
 }
 
-void Server::ValidateEndorsements(const proto::SignedMessages *endorsements, uint64_t client_id,
-    const std::string &txnDigest, AsyncValidateEndorsements &asyncValidateEndorsements) {
+void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, uint64_t client_id,
+    const std::string &txnDigest) {
 
   // client initiating txn is always an endorser
   // no need for mutex since no parallel validations initiated yet
-  asyncValidateEndorsements.endorsers.insert(client_id);
+  asyncValidatePrepare.endorsers.insert(client_id);
 
-  if (endorsements != nullptr) {
-    for (const auto &endorsement : endorsements->sig_msgs()) {
+  if (asyncValidatePrepare.endorsements != nullptr) {
+    for (const auto &endorsement : asyncValidatePrepare.endorsements->sig_msgs()) {
       // send validation to worker threads
-      auto f = [this, &endorsement, &txnDigest, &asyncValidateEndorsements](){
-        if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
-          Debug(
-            "Txn %s failed to validate endorsement from client %lu",
-            BytesToHex(txnDigest, 16).c_str(),
-            endorsement.process_id()
-          );
-          asyncValidateEndorsements.num_validations--;
-          return (void*) false;
+      auto f = [this, &endorsement, &txnDigest, &asyncValidatePrepare](){
+        bool valid = ValidateEndorsementHelper(endorsement, txnDigest);
+        Debug("Txn %s endorsement from client %lu validation: %d",
+          BytesToHex(txnDigest, 16).c_str(),
+          endorsement.process_id(),
+          valid
+        );
+
+        bool done = asyncValidatePrepare.AddCompletedValidation(valid, endorsement.process_id());
+
+        // free if all done
+        if (done) {
+          delete &asyncValidatePrepare;
         }
-        std::lock_guard<std::mutex> lock(asyncValidateEndorsements.endorsers_mutex);
-        asyncValidateEndorsements.endorsers.insert(endorsement.process_id());
-        asyncValidateEndorsements.num_validations--;
+
         return (void*) true;
       };
       transport->DispatchTP_noCB(std::move(f));
