@@ -1621,7 +1621,11 @@ void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result re
   const proto::CommittedProof* &committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote, 
   const proto::Transaction *abstain_conflict, bool isGossip, bool forceMaterialize, bool failEndorsementCheck){
 
-
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // handle_phase1_cb_us = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = handle_phase1_cb_us - try_prepare_us;
+  // prepare_us.add(duration);
 
   Debug("Call HandleP1CB for txn[%s][%lu:%lu] with result %d", BytesToHex(txnDigest, 16).c_str(), txn->timestamp().timestamp(), txn->timestamp().id(), result);
   if(result == proto::ConcurrencyControl::IGNORE) return;
@@ -3171,6 +3175,7 @@ bool Server::EndorsementCheck(const proto::SignedMessages *endorsements, const s
   //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
   //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
+  //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
   // }
 
   PolicyClient policyClient;
@@ -3179,6 +3184,14 @@ bool Server::EndorsementCheck(const proto::SignedMessages *endorsements, const s
 }
 
 void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn) {
+  // if (extract_policy_us.count > 0 && extract_policy_us.count % 2000 == 0) {
+  //   std::cerr << "Mean extract policy latency: " << extract_policy_us.mean() << std::endl;
+  //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
+  //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
+  //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
+  //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
+  // }
+  
   ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
   ValidateEndorsements(asyncValidatePrepare, txn->client_id(), txnDigest);
 }

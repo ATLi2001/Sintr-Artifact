@@ -1391,10 +1391,14 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   void TEST_READ_MATERIALIZED_f();
   void TEST_READ_FROM_SS_f();
 
+  uint64_t try_prepare_us;
+  uint64_t handle_phase1_cb_us;
+
   mean_tracker extract_policy_us;
   mean_tracker validate_endorsements_us;
   mean_tracker new_digest_us;
   mean_tracker ccc_us;
+  mean_tracker prepare_us;
 };
 
 } // namespace sintrstore
