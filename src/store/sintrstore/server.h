@@ -955,9 +955,12 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
   struct AsyncValidatePrepare {
     AsyncValidatePrepare(uint32_t total_validations, proto::SignedMessages *endorsements,
-        std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb, TransportAddress *remote) : 
+        std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb,
+        std::function<void(void)> phase1_fail_endorsement_cb,
+        TransportAddress *remote) : 
         done(false), total_validations(total_validations), endorsements(endorsements), completed_validations(0), 
-        phase1_cb(phase1_cb), delay_prepare_cb(nullptr), ccDone(false), remote(remote) {
+        phase1_cb(phase1_cb), phase1_fail_endorsement_cb(phase1_fail_endorsement_cb),
+        delay_prepare_cb(nullptr), ccDone(false), remote(remote), cbDone(false) {
       policyClient = new PolicyClient();
     }
     ~AsyncValidatePrepare() {
@@ -975,8 +978,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
     // endorsement from endorser_id with result valid
     // if valid, add endorser_id to endorsers
-    // if ccDone and all validations are done, call the phase1_cb
-    // return bool indicating if done (phase1_cb was called)
+    // return bool indicating if done (cc and all validations finished)
     bool AddCompletedValidation(bool valid, uint64_t endorser_id) {
       std::lock_guard<std::mutex> lock(validation_state_mutex);
       if (valid) {
@@ -984,19 +986,32 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       }
       completed_validations++;
 
-      // if CC is done, and this is the last validation, then phase1_cb
+      // if CC is done, and this is the last validation, then done
       if (ccDone && completed_validations == total_validations) {
         done = true;
-        // delay_prepare_cb could be nullptr if CC check failed early
-        if (delay_prepare_cb != nullptr) {
-          result = (*delay_prepare_cb)();
-        }
 
-        if (policyClient->IsSatisfied(endorsers)) {
-          phase1_cb(result, false);
+        // if have not called callback yet
+        if (!cbDone) {
+          // delay_prepare_cb could be nullptr if CC check failed early
+          if (delay_prepare_cb != nullptr) {
+            result = (*delay_prepare_cb)();
+          }
+  
+          if (policyClient->IsSatisfied(endorsers)) {
+            phase1_cb(result, false);
+          }
+          else {
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+          }
+          cbDone = true;
         }
-        else {
-          phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+      }
+      // all endorsement validations are done
+      else if (completed_validations == total_validations) {
+        // if endorsements don't satisfy policy, call phase1_cb early
+        if (!policyClient->IsSatisfied(endorsers)) {
+          phase1_fail_endorsement_cb();
+          cbDone = true;
         }
       }
 
@@ -1011,29 +1026,37 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       this->result = result;
       this->delay_prepare_cb = delay_prepare_cb;
 
-      // if endorsements are done, call the phase1_cb
+      // if endorsements are also done, then overall done
       if (completed_validations == total_validations) {
         done = true;
-        // delay_prepare_cb could be nullptr if CC check failed early
-        if (delay_prepare_cb != nullptr) {
-          this->result = (*delay_prepare_cb)();
-        }
 
-        if (policyClient->IsSatisfied(endorsers)) {
-          phase1_cb(this->result, false);
-        }
-        else {
-          phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+        // if have not called callback yet
+        if (!cbDone) {
+          // delay_prepare_cb could be nullptr if CC check failed early
+          if (delay_prepare_cb != nullptr) {
+            this->result = (*delay_prepare_cb)();
+          }
+  
+          if (policyClient->IsSatisfied(endorsers)) {
+            phase1_cb(this->result, false);
+          }
+          else {
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+          }
+          cbDone = true;
         }
       }
       // if cc result is ABSTAIN or ABORT, call the phase1_cb without having to wait for all validations
       else if (result == proto::ConcurrencyControl::ABSTAIN || result == proto::ConcurrencyControl::ABORT) {
         phase1_cb(result, false);
+        cbDone = true;
       }
 
       return done;
     }
 
+    // done indicates if cc and all validations are done
+    // indicates safe to delete this object
     bool done;
     std::mutex validation_state_mutex;
     std::set<uint64_t> endorsers;
@@ -1047,12 +1070,19 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     // phase1_cb is std::bind of HandlePhase1CB with everything except 
     // a result and a boolean indicating failEndorsementCheck
     std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb;
+    // phase1_fail_endorsement_cb is std::bind of HandlePhase1CB
+    // this is safe to call even if cc is not done 
+    // does not have pointers that cc can modify
+    std::function<void(void)> phase1_fail_endorsement_cb;
     // delay_prepare_cb will make the prepare effects visible
     std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb;
     TransportAddress *remote;
 
     bool ccDone;
     proto::ConcurrencyControl::Result result;
+
+    // callback done
+    bool cbDone;
   };
   
 
