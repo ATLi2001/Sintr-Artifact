@@ -3291,7 +3291,8 @@ void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, ui
   if (asyncValidatePrepare.endorsements != nullptr) {
     for (const auto &endorsement : asyncValidatePrepare.endorsements->sig_msgs()) {
       // send validation to worker threads
-      auto f = [this, &endorsement, &txnDigest, &asyncValidatePrepare](){
+      // txnDigest can potentially go out of scope before f is executed
+      auto f = [this, &endorsement, txnDigest, &asyncValidatePrepare](){
         bool valid = ValidateEndorsementHelper(endorsement, txnDigest);
         Debug("Txn %s endorsement from client %lu validation: %d",
           BytesToHex(txnDigest, 16).c_str(),

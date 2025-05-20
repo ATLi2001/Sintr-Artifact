@@ -527,7 +527,7 @@ proto::ConcurrencyControl::Result Server::DoOCCCheck(
     const proto::Transaction* &abstain_conflict,
     bool fallback_flow, bool isGossip, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb) {
 
-  UW_ASSERT(!params.sintr_params.parallelEndorsementCheck || delay_prepare_cb != nullptr);
+  UW_ASSERT(!params.sintr_params.parallelEndorsementCheck || fallback_flow || delay_prepare_cb != nullptr);
 
   if(txn.timestamp().timestamp() <= 10000) Panic("Trying to store TX TS [%lu:%lu]", txn.timestamp().timestamp(), txn.timestamp().id());
   proto::ConcurrencyControl::Result result;
@@ -1079,7 +1079,8 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     }
   };
   
-  if (!params.sintr_params.parallelEndorsementCheck) {
+  // if fallback, then there is no parallel endorsement check so call right away
+  if (!params.sintr_params.parallelEndorsementCheck || fallback_flow) {
     return call_dependencies_check();
   }
   else {
