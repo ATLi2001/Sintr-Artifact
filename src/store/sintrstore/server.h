@@ -954,11 +954,11 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     const proto::Transaction **preparedTxn = nullptr);
 
   struct AsyncValidatePrepare {
-    AsyncValidatePrepare(uint32_t total_validations, proto::SignedMessages *endorsements,
+    AsyncValidatePrepare(uint32_t total_validations,
         std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb,
         std::function<void(void)> phase1_fail_endorsement_cb,
         TransportAddress *remote) : 
-        done(false), total_validations(total_validations), endorsements(endorsements), completed_validations(0), 
+        done(false), total_validations(total_validations), completed_validations(0), 
         phase1_cb(phase1_cb), phase1_fail_endorsement_cb(phase1_fail_endorsement_cb),
         delay_prepare_cb(nullptr), ccDone(false), remote(remote), cbDone(false) {
       policyClient = new PolicyClient();
@@ -967,9 +967,6 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       // all validations should be done when destructor is called
       UW_ASSERT(done);
       delete policyClient;
-      if (endorsements != nullptr) {
-        delete endorsements;
-      }
       if (delay_prepare_cb != nullptr) {
         delete delay_prepare_cb;
       }
@@ -1064,9 +1061,6 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     const uint32_t total_validations;
     uint32_t completed_validations;
 
-    // need endorsements to stay alive until validation is done
-    // so keep a pointer to them and delete them in the destructor
-    proto::SignedMessages *endorsements;
     // phase1_cb is std::bind of HandlePhase1CB with everything except 
     // a result and a boolean indicating failEndorsementCheck
     std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb;
@@ -1097,7 +1091,8 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
     uint64_t client_id, const std::string &txnDigest);
   // parallelizable version
-  void ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, uint64_t client_id, const std::string &txnDigest);
+  void ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest);
   // parallel endorsement check helper
   bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
 

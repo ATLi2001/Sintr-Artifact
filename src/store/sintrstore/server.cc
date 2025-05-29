@@ -3193,7 +3193,7 @@ void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const 
   // }
   
   ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
-  ValidateEndorsements(asyncValidatePrepare, txn->client_id(), txnDigest);
+  ValidateEndorsements(asyncValidatePrepare, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
 void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient) {
@@ -3281,17 +3281,18 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
   return policyClient.IsSatisfied(endorsers);
 }
 
-void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, uint64_t client_id,
-    const std::string &txnDigest) {
+void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest) {
 
   // client initiating txn is always an endorser
   // no need for mutex since no parallel validations initiated yet
   asyncValidatePrepare.endorsers.insert(client_id);
 
-  if (asyncValidatePrepare.endorsements != nullptr) {
-    for (const auto &endorsement : asyncValidatePrepare.endorsements->sig_msgs()) {
+  if (endorsements != nullptr) {
+    for (const auto &endorsement : endorsements->sig_msgs()) {
       // send validation to worker threads
-      // txnDigest can potentially go out of scope before f is executed
+      // txnDigest can potentially go out of scope before f is executed so copy
+      // endorsements are from the txn object which should stay alive
       auto f = [this, &endorsement, txnDigest, &asyncValidatePrepare](){
         bool valid = ValidateEndorsementHelper(endorsement, txnDigest);
         Debug("Txn %s endorsement from client %lu validation: %d",

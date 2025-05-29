@@ -1027,8 +1027,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
         };
         AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
-          txn->endorsements->sig_msgs_size(),
-          std::move(endorsements),
+          txn->endorsements().sig_msgs_size(),
           std::move(callback),
           std::move(fail_endorsement_cb),
           remote_ptr
@@ -1108,8 +1107,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
             HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
           };
           AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
-            txn->endorsements->sig_msgs_size(),
-            std::move(endorsements),
+            txn->endorsements().sig_msgs_size(),
             std::move(callback),
             std::move(fail_endorsement_cb),
             remote_ptr
