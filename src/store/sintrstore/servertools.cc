@@ -958,6 +958,10 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
   {
     Debug("Calling TryPrepare for txn[%s] on MainThread %d", BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
 
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // try_prepare_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+
     //New: Now waking after applyTablewrite
     // CheckWaitingQueries(txnDigest, txn->timestamp().timestamp(), txn->timestamp().id(), false, true, 1); //is_abort = false //non_blocking = true, only wake TS => Check for waiting queries in non-blocking fashion.
     //NOTE: If want to incorporate the result from prepare (in case it is abort), then need to move this after Occ Check.
@@ -992,38 +996,63 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     tempTxn.clear_txndigest();
     std::string oldTxnDigest = TransactionDigest(tempTxn, params.hashDigest);
     if(!params.parallel_CCC || !params.mainThreadDispatching){
-      AsyncValidateEndorsements asyncValidateEndorsements;
       if (!params.sintr_params.parallelEndorsementCheck) {
         if (!EndorsementCheck(oldTxnDigest, txn)) {
           Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
           result = proto::ConcurrencyControl::ABSTAIN;
-          // free endorsements
           HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
           return (void*) true;
         }
+
+        result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
+            committedProof, abstain_conflict, false, isGossip); //forwarded messages dont need to be treated as original client.
+
+        HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, false);
+
+        return (void*) true;
       }
       else {
+        auto remote_ptr = remote.clone();
+        auto callback = [this, reqId, committedProof, txnDigest, txn, remote_ptr, 
+            abstain_conflict, isGossip, forceMaterialize]
+            (proto::ConcurrencyControl::Result result, bool failEndorsementCheck) mutable {
+          HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
+        };
+        // this callback is safe to call before CC finishes
+        // does not use committedProof or abstain_conflict so CC cannot cause thread safety issues
+        // technically txn could be unsafe because CC does modify it, but callback should not?
+        auto fail_endorsement_cb = [this, reqId, remote_ptr, txnDigest, txn, isGossip, forceMaterialize]() mutable {
+          const proto::CommittedProof *committedProof = nullptr;
+          const proto::Transaction *abstain_conflict = nullptr;
+          HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
+        };
+        AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
+          txn->endorsements().sig_msgs_size(),
+          std::move(callback),
+          std::move(fail_endorsement_cb),
+          remote_ptr
+        );
+        
         // launch async validate endorsements
-        asyncValidateEndorsements.num_validations = txn->endorsements().sig_msgs_size();
-        EndorsementCheck(oldTxnDigest, txn, asyncValidateEndorsements);
-      }
+        Debug("Launching async endorsement check for txn: %s", BytesToHex(txnDigest, 16).c_str());
+        EndorsementCheck(*asyncValidatePrepare, oldTxnDigest, txn);
 
-      result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
-            committedProof, abstain_conflict, false, isGossip); //forwarded messages dont need to be treated as original client.
-      
-      if (params.sintr_params.parallelEndorsementCheck) {
-        // wait async validate endorsements
-        if (!asyncValidateEndorsements.GetValidationResult()) {
-          Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
-          result = proto::ConcurrencyControl::ABSTAIN;
-          HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
-          return (void*) true;
+        // need to delay prepare making things visible until the endorsement check is done
+        std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb = nullptr;
+        result = DoOCCCheck(reqId, *remote_ptr, txnDigest, *txn, retryTs,
+            committedProof, abstain_conflict, false, isGossip, &delay_prepare_cb); //forwarded messages dont need to be treated as original client.
+        
+        // if the endorsement checks are done, this will trigger HandlePhase1CB
+        // otherwise, HandlePhase1CB will be called when all endorsements checks finish
+        bool done = asyncValidatePrepare->SetCCResult(result, delay_prepare_cb);
+        Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
+
+        if (done) {
+          delete asyncValidatePrepare;
         }
+
+        return (void*) true;
       }
-
-      HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, false);
-
-      return (void*) true;
     }
     else{ // if mainThreadDispatching && parallel OCC.
       auto f = [this, reqId, remote_ptr = remote.clone(), txnDigest, txn, committedProof, abstain_conflict, isGossip, forceMaterialize, oldTxnDigest]() mutable {
@@ -1050,41 +1079,61 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           o.release();
         proto::ConcurrencyControl::Result *result;
         bool endorsementCheckFail = false;
-        AsyncValidateEndorsements asyncValidateEndorsements;
         if (!params.sintr_params.parallelEndorsementCheck) {
           if (!EndorsementCheck(oldTxnDigest, txn)) {
             Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
             result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
             endorsementCheckFail = true;
           }
-        }
-        else {
-          // launch async validate endorsements
-          asyncValidateEndorsements.num_validations = txn->endorsements().sig_msgs_size();
-          EndorsementCheck(oldTxnDigest, txn, asyncValidateEndorsements);
-        }
-
-        // in non parallel path can skip concurrency control check if endorsement check fails
-        if (!endorsementCheckFail) {
           Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
           result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
           *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
-        }
 
-        if (params.sintr_params.parallelEndorsementCheck) {
-          // wait async validate endorsements
-          if (!asyncValidateEndorsements.GetValidationResult()) {
-            Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
-            result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
-            endorsementCheckFail = true;
+          HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail);
+
+          delete result;
+          delete remote_ptr;
+          return (void*) true;
+        }
+        else {
+          auto callback = [this, reqId, committedProof, txnDigest, txn, remote_ptr, 
+              abstain_conflict, isGossip, forceMaterialize]
+              (proto::ConcurrencyControl::Result result, bool failEndorsementCheck) mutable {
+            HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
+          };
+          auto fail_endorsement_cb = [this, reqId, remote_ptr, txnDigest, txn, isGossip, forceMaterialize]() mutable {
+            const proto::CommittedProof *committedProof = nullptr;
+            const proto::Transaction *abstain_conflict = nullptr;
+            HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
+          };
+          AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
+            txn->endorsements().sig_msgs_size(),
+            std::move(callback),
+            std::move(fail_endorsement_cb),
+            remote_ptr
+          );
+          // launch async validate endorsements
+          Debug("Launching async endorsement check for txn: %s", BytesToHex(txnDigest, 16).c_str());
+          EndorsementCheck(*asyncValidatePrepare, oldTxnDigest, txn);
+
+          Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
+          // need to delay prepare making things visible until the endorsement check is done
+          std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb = nullptr;
+          result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
+            *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip, &delay_prepare_cb));
+          
+          // if the endorsement checks are done, this will trigger HandlePhase1CB
+          // otherwise, HandlePhase1CB will be called when all endorsements checks finish
+          bool done = asyncValidatePrepare->SetCCResult(*result, delay_prepare_cb);
+          Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
+
+          if (done) {
+            delete asyncValidatePrepare;
           }
+
+          delete result;
+          return (void*) true;
         }
-
-        HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail);
-
-        delete result;
-        delete remote_ptr;
-        return (void*) true;
       };
       transport->DispatchTP_noCB(std::move(f));
       return (void*) true;

@@ -1481,7 +1481,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
   ///*
-  if(params.sintr_params.hashEndorsements && txn->has_endorsements()) {
+  if(params.sintr_params.hashEndorsements && txn->endorsements().sig_msgs_size() > 0) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
@@ -1621,7 +1621,11 @@ void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result re
   const proto::CommittedProof* &committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote, 
   const proto::Transaction *abstain_conflict, bool isGossip, bool forceMaterialize, bool failEndorsementCheck){
 
-
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // handle_phase1_cb_us = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = handle_phase1_cb_us - try_prepare_us;
+  // prepare_us.add(duration);
 
   Debug("Call HandleP1CB for txn[%s][%lu:%lu] with result %d", BytesToHex(txnDigest, 16).c_str(), txn->timestamp().timestamp(), txn->timestamp().id(), result);
   if(result == proto::ConcurrencyControl::IGNORE) return;
@@ -2484,9 +2488,9 @@ void Server::Prepare(const std::string &txnDigest, const proto::Transaction &txn
 
   for (const auto &policyRead : implicitPolicyReads) {
     Debug(
-      "PREPARE[%s] Implicit Policy Read to id %lu at timestamp %lu.%lu",
+      "PREPARE[%s] Implicit Policy Read to id %s at timestamp %lu.%lu",
       BytesToHex(txnDigest, 16).c_str(),
-      policyRead.first,
+      policyRead.first.c_str(),
       policyRead.second.getTimestamp(),
       policyRead.second.getID()
     );
@@ -3171,6 +3175,7 @@ bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transac
   //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
   //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
+  //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
   // }
 
   PolicyClient policyClient;
@@ -3178,12 +3183,17 @@ bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transac
   return ValidateEndorsements(policyClient, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
-void Server::EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn,
-    AsyncValidateEndorsements &asyncValidateEndorsements) {
-  PolicyClient *policyClient = new PolicyClient();
-  asyncValidateEndorsements.policyClient = policyClient;
-  ExtractPolicy(txn, *policyClient);
-  ValidateEndorsements(&txn->endorsements(), txn->client_id(), txnDigest, asyncValidateEndorsements);
+void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn) {
+  // if (extract_policy_us.count > 0 && extract_policy_us.count % 2000 == 0) {
+  //   std::cerr << "Mean extract policy latency: " << extract_policy_us.mean() << std::endl;
+  //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
+  //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
+  //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
+  //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
+  // }
+  
+  ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
+  ValidateEndorsements(asyncValidatePrepare, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
 void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient) {
@@ -3207,7 +3217,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       policyId = write.key();
     }
 
-    Debug("Extracting policy %lu for key %s", policyId, BytesToHex(write.key(), 16).c_str());
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
 
     std::pair<Timestamp, PolicyStoreValue> tsPolicy;
     if(params.sintr_params.useOCCForPolicies) {
@@ -3226,7 +3236,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
   
       std::string policyId = policyIdFunction(read.key(), "");
-      Debug("Extracting policy %lu for key %s", policyId, BytesToHex(read.key(), 16).c_str());
+      Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       if(params.sintr_params.useOCCForPolicies) {
@@ -3271,29 +3281,33 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
   return policyClient.IsSatisfied(endorsers);
 }
 
-void Server::ValidateEndorsements(const proto::SignedMessages *endorsements, uint64_t client_id,
-    const std::string &txnDigest, AsyncValidateEndorsements &asyncValidateEndorsements) {
+void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest) {
 
   // client initiating txn is always an endorser
   // no need for mutex since no parallel validations initiated yet
-  asyncValidateEndorsements.endorsers.insert(client_id);
+  asyncValidatePrepare.endorsers.insert(client_id);
 
   if (endorsements != nullptr) {
     for (const auto &endorsement : endorsements->sig_msgs()) {
       // send validation to worker threads
-      auto f = [this, &endorsement, &txnDigest, &asyncValidateEndorsements](){
-        if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
-          Debug(
-            "Txn %s failed to validate endorsement from client %lu",
-            BytesToHex(txnDigest, 16).c_str(),
-            endorsement.process_id()
-          );
-          asyncValidateEndorsements.num_validations--;
-          return (void*) false;
+      // txnDigest can potentially go out of scope before f is executed so copy
+      // endorsements are from the txn object which should stay alive
+      auto f = [this, &endorsement, txnDigest, &asyncValidatePrepare](){
+        bool valid = ValidateEndorsementHelper(endorsement, txnDigest);
+        Debug("Txn %s endorsement from client %lu validation: %d",
+          BytesToHex(txnDigest, 16).c_str(),
+          endorsement.process_id(),
+          valid
+        );
+
+        bool done = asyncValidatePrepare.AddCompletedValidation(valid, endorsement.process_id());
+
+        // free if all done
+        if (done) {
+          delete &asyncValidatePrepare;
         }
-        std::lock_guard<std::mutex> lock(asyncValidateEndorsements.endorsers_mutex);
-        asyncValidateEndorsements.endorsers.insert(endorsement.process_id());
-        asyncValidateEndorsements.num_validations--;
+
         return (void*) true;
       };
       transport->DispatchTP_noCB(std::move(f));

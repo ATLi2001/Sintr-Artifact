@@ -784,7 +784,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       const std::string &txnDigest, proto::Transaction &txn, //const proto::Transaction &txn,
       Timestamp &retryTs, const proto::CommittedProof* &conflict,
       const proto::Transaction* &abstain_conflict,
-      bool fallback_flow = false, bool isGossip = false);
+      bool fallback_flow = false, bool isGossip = false, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb = nullptr);
   proto::ConcurrencyControl::Result DoTAPIROCCCheck(
       const std::string &txnDigest, const proto::Transaction &txn,
       Timestamp &retryTs);
@@ -792,7 +792,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       uint64_t reqId, const TransportAddress &remote,
       const std::string &txnDigest, const proto::Transaction &txn, const ReadSet &readSet, const DepSet &depSet, const PredSet &predSet,
       const proto::CommittedProof* &conflict, const proto::Transaction* &abstain_conflict,
-      bool fallback_flow = false, bool isGossip = false);
+      bool fallback_flow = false, bool isGossip = false, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb = nullptr);
 
   void RegisterTxTS(const std::string &txnDigest, const proto::Transaction *txn);
   void AddOngoing(std::string &txnDigest, proto::Transaction* txn);
@@ -953,38 +953,137 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     std::pair<Timestamp, PolicyStoreValue> &tsPolicy, const bool checkPrepared = false,
     const proto::Transaction **preparedTxn = nullptr);
 
-  struct AsyncValidateEndorsements {
-    AsyncValidateEndorsements() : num_validations(0), policyClient(nullptr) {}
-    ~AsyncValidateEndorsements() {
+  struct AsyncValidatePrepare {
+    AsyncValidatePrepare(uint32_t total_validations,
+        std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb,
+        std::function<void(void)> phase1_fail_endorsement_cb,
+        TransportAddress *remote) : 
+        done(false), total_validations(total_validations), completed_validations(0), 
+        phase1_cb(phase1_cb), phase1_fail_endorsement_cb(phase1_fail_endorsement_cb),
+        delay_prepare_cb(nullptr), ccDone(false), remote(remote), cbDone(false) {
+      policyClient = new PolicyClient();
+    }
+    ~AsyncValidatePrepare() {
       // all validations should be done when destructor is called
-      UW_ASSERT(num_validations == 0);
-      if (policyClient != nullptr) {
-        delete policyClient;
+      UW_ASSERT(done);
+      delete policyClient;
+      if (delay_prepare_cb != nullptr) {
+        delete delay_prepare_cb;
       }
+      delete remote;
     }
 
-    // await for num validations to finish
-    bool GetValidationResult() {
-      while (num_validations > 0) {
-        std::this_thread::yield();
+    // endorsement from endorser_id with result valid
+    // if valid, add endorser_id to endorsers
+    // return bool indicating if done (cc and all validations finished)
+    bool AddCompletedValidation(bool valid, uint64_t endorser_id) {
+      std::lock_guard<std::mutex> lock(validation_state_mutex);
+      if (valid) {
+        endorsers.insert(endorser_id);
+      }
+      completed_validations++;
+
+      // if CC is done, and this is the last validation, then done
+      if (ccDone && completed_validations == total_validations) {
+        done = true;
+
+        // if have not called callback yet
+        if (!cbDone) {  
+          if (policyClient->IsSatisfied(endorsers)) {
+            // only call delay_prepare_cb if endorsements satisfy policy
+            // delay_prepare_cb could be nullptr if CC check failed early
+            if (delay_prepare_cb != nullptr) {
+              result = (*delay_prepare_cb)();
+            }
+            phase1_cb(result, false);
+          }
+          else {
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+          }
+          cbDone = true;
+        }
+      }
+      // all endorsement validations are done
+      else if (completed_validations == total_validations) {
+        // if endorsements don't satisfy policy, call phase1_cb early
+        if (!policyClient->IsSatisfied(endorsers)) {
+          phase1_fail_endorsement_cb();
+          cbDone = true;
+        }
       }
 
-      std::lock_guard<std::mutex> lock(endorsers_mutex);
-      return policyClient->IsSatisfied(endorsers);
+      return done;
     }
-    
+
+    // set the cc result and call the phase1_cb if all validations are done
+    // return bool indicating if done (cc and all validations finished)
+    bool SetCCResult(proto::ConcurrencyControl::Result result, std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb) {
+      std::lock_guard<std::mutex> lock(validation_state_mutex);
+      ccDone = true;
+      this->result = result;
+      this->delay_prepare_cb = delay_prepare_cb;
+
+      // if endorsements are also done, then overall done
+      if (completed_validations == total_validations) {
+        done = true;
+
+        // if have not called callback yet
+        if (!cbDone) {  
+          if (policyClient->IsSatisfied(endorsers)) {
+            // only call delay_prepare_cb if endorsements satisfy policy
+            // delay_prepare_cb could be nullptr if CC check failed early
+            if (delay_prepare_cb != nullptr) {
+              this->result = (*delay_prepare_cb)();
+            }
+            phase1_cb(this->result, false);
+          }
+          else {
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+          }
+          cbDone = true;
+        }
+      }
+      // if cc result is ABSTAIN or ABORT, call the phase1_cb without having to wait for all validations
+      else if (result == proto::ConcurrencyControl::ABSTAIN || result == proto::ConcurrencyControl::ABORT) {
+        phase1_cb(result, false);
+        cbDone = true;
+      }
+
+      return done;
+    }
+
+    // done indicates if cc and all validations are done
+    // indicates safe to delete this object
+    bool done;
+    std::mutex validation_state_mutex;
     std::set<uint64_t> endorsers;
-    std::mutex endorsers_mutex;
     PolicyClient *policyClient;
-    std::atomic<int> num_validations;
+    const uint32_t total_validations;
+    uint32_t completed_validations;
+
+    // phase1_cb is std::bind of HandlePhase1CB with everything except 
+    // a result and a boolean indicating failEndorsementCheck
+    std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb;
+    // phase1_fail_endorsement_cb is std::bind of HandlePhase1CB
+    // this is safe to call even if cc is not done 
+    // does not have pointers that cc can modify
+    std::function<void(void)> phase1_fail_endorsement_cb;
+    // delay_prepare_cb will make the prepare effects visible
+    std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb;
+    TransportAddress *remote;
+
+    bool ccDone;
+    proto::ConcurrencyControl::Result result;
+
+    // callback done
+    bool cbDone;
   };
   
 
   // perform check on endorsements with respect to txn
   bool EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn);
   // parallelizable version
-  void EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn,
-    AsyncValidateEndorsements &asyncValidateEndorsements);
+  void EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn);
   // policyClient tracks policy from transaction writeset
   void ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient);
   // validate endorsements have valid signatures and matching data, and satisfy the policyClient policy
@@ -992,8 +1091,8 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
     uint64_t client_id, const std::string &txnDigest);
   // parallelizable version
-  void ValidateEndorsements(const proto::SignedMessages *endorsements, uint64_t client_id,
-    const std::string &txnDigest, AsyncValidateEndorsements &asyncValidateEndorsements);
+  void ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest);
   // parallel endorsement check helper
   bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
 
@@ -1317,10 +1416,14 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   void TEST_READ_MATERIALIZED_f();
   void TEST_READ_FROM_SS_f();
 
+  uint64_t try_prepare_us;
+  uint64_t handle_phase1_cb_us;
+
   mean_tracker extract_policy_us;
   mean_tracker validate_endorsements_us;
   mean_tracker new_digest_us;
   mean_tracker ccc_us;
+  mean_tracker prepare_us;
 };
 
 } // namespace sintrstore
