@@ -988,13 +988,13 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
         done = true;
 
         // if have not called callback yet
-        if (!cbDone) {
-          // delay_prepare_cb could be nullptr if CC check failed early
-          if (delay_prepare_cb != nullptr) {
-            result = (*delay_prepare_cb)();
-          }
-  
+        if (!cbDone) {  
           if (policyClient->IsSatisfied(endorsers)) {
+            // only call delay_prepare_cb if endorsements satisfy policy
+            // delay_prepare_cb could be nullptr if CC check failed early
+            if (delay_prepare_cb != nullptr) {
+              result = (*delay_prepare_cb)();
+            }
             phase1_cb(result, false);
           }
           else {
@@ -1016,7 +1016,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     }
 
     // set the cc result and call the phase1_cb if all validations are done
-    // return bool indicating if done (phase1_cb was called)
+    // return bool indicating if done (cc and all validations finished)
     bool SetCCResult(proto::ConcurrencyControl::Result result, std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb) {
       std::lock_guard<std::mutex> lock(validation_state_mutex);
       ccDone = true;
@@ -1028,13 +1028,13 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
         done = true;
 
         // if have not called callback yet
-        if (!cbDone) {
-          // delay_prepare_cb could be nullptr if CC check failed early
-          if (delay_prepare_cb != nullptr) {
-            this->result = (*delay_prepare_cb)();
-          }
-  
+        if (!cbDone) {  
           if (policyClient->IsSatisfied(endorsers)) {
+            // only call delay_prepare_cb if endorsements satisfy policy
+            // delay_prepare_cb could be nullptr if CC check failed early
+            if (delay_prepare_cb != nullptr) {
+              this->result = (*delay_prepare_cb)();
+            }
             phase1_cb(this->result, false);
           }
           else {
