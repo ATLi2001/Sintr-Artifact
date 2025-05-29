@@ -1481,7 +1481,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
   ///*
-  if(params.sintr_params.hashEndorsements && txn->has_endorsements()) {
+  if(params.sintr_params.hashEndorsements && txn->endorsements().sig_msgs_size() > 0) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
