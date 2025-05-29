@@ -3169,7 +3169,7 @@ void Server::GetPolicy(const std::string policyId, const Timestamp &ts,
   }
 }
 
-bool Server::EndorsementCheck(const proto::SignedMessages *endorsements, const std::string &txnDigest, const proto::Transaction *txn) {
+bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn) {
   // if (extract_policy_us.count > 0 && extract_policy_us.count % 2000 == 0) {
   //   std::cerr << "Mean extract policy latency: " << extract_policy_us.mean() << std::endl;
   //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
@@ -3180,7 +3180,7 @@ bool Server::EndorsementCheck(const proto::SignedMessages *endorsements, const s
 
   PolicyClient policyClient;
   ExtractPolicy(txn, policyClient);
-  return ValidateEndorsements(policyClient, endorsements, txn->client_id(), txnDigest);
+  return ValidateEndorsements(policyClient, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
 void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn) {

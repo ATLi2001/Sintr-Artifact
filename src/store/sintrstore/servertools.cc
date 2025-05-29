@@ -953,8 +953,8 @@ bool Server::VerifyClientProposal(proto::Phase1FB &msg, const proto::Transaction
 //Tries to Prepare a transaction by calling the OCC-Check and the Reply Handler afterwards
 //Dispatches the job to a worker thread if parallel_CCC = true
 void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::Transaction *txn,
-                        std::string &txnDigest, bool isGossip, bool forceMaterialize,
-                        proto::SignedMessages *endorsements) //, const proto::CommittedProof *committedProof, const proto::Transaction *abstain_conflict, proto::ConcurrencyControl::Result &result)
+                        std::string &txnDigest, bool isGossip, bool forceMaterialize)
+                        //, const proto::CommittedProof *committedProof, const proto::Transaction *abstain_conflict, proto::ConcurrencyControl::Result &result)
   {
     Debug("Calling TryPrepare for txn[%s] on MainThread %d", BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
 
@@ -997,21 +997,15 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     std::string oldTxnDigest = TransactionDigest(tempTxn, params.hashDigest);
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck) {
-        if (!EndorsementCheck(endorsements, oldTxnDigest, txn)) {
+        if (!EndorsementCheck(oldTxnDigest, txn)) {
           Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
           result = proto::ConcurrencyControl::ABSTAIN;
-          // free endorsements
-          delete endorsements;
-          endorsements = nullptr;
           HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
           return (void*) true;
         }
 
         result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
             committedProof, abstain_conflict, false, isGossip); //forwarded messages dont need to be treated as original client.
-
-        delete endorsements;
-        endorsements = nullptr;
 
         HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, false);
 
@@ -1033,7 +1027,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
         };
         AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
-          endorsements->sig_msgs_size(),
+          txn->endorsements->sig_msgs_size(),
           std::move(endorsements),
           std::move(callback),
           std::move(fail_endorsement_cb),
@@ -1062,7 +1056,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
       }
     }
     else{ // if mainThreadDispatching && parallel OCC.
-      auto f = [this, reqId, remote_ptr = remote.clone(), txnDigest, txn, committedProof, abstain_conflict, isGossip, forceMaterialize, endorsements, oldTxnDigest]() mutable {
+      auto f = [this, reqId, remote_ptr = remote.clone(), txnDigest, txn, committedProof, abstain_conflict, isGossip, forceMaterialize, oldTxnDigest]() mutable {
         Timestamp retryTs;
           //check if concurrently committed/aborted already, and if so return
           ongoingMap::const_accessor o;
@@ -1087,7 +1081,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         proto::ConcurrencyControl::Result *result;
         bool endorsementCheckFail = false;
         if (!params.sintr_params.parallelEndorsementCheck) {
-          if (!EndorsementCheck(endorsements, oldTxnDigest, txn)) {
+          if (!EndorsementCheck(oldTxnDigest, txn)) {
             Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
             result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
             endorsementCheckFail = true;
@@ -1095,9 +1089,6 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
           result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
           *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
-
-          delete endorsements;
-          endorsements = nullptr;
 
           HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail);
 
@@ -1117,7 +1108,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
             HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
           };
           AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
-            endorsements->sig_msgs_size(),
+            txn->endorsements->sig_msgs_size(),
             std::move(endorsements),
             std::move(callback),
             std::move(fail_endorsement_cb),
@@ -1219,8 +1210,6 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     //If verification fails, remove it again. Keep track of num_concurrent_clients to make sure we don't delete if it is still necessary.
     AddOngoing(txnDigest, txn);
 
-    proto::SignedMessages *endorsements = new proto::SignedMessages(txn->endorsements());
-
     if(!params.multiThreading || !params.signClientProposals){
     //if(!params.multiThreading){
         Debug("ProcessProposal for txn[%s] on MainThread %d", BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
@@ -1229,13 +1218,13 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           return; 
         }
         
-        TryPrepare(msg.req_id(), remote, txn, txnDigest, isGossip, forceMaterialize, endorsements); //, committedProof, abstain_conflict, result); //Includes call to HandlePhase1CB(..);
+        TryPrepare(msg.req_id(), remote, txn, txnDigest, isGossip, forceMaterialize); //, committedProof, abstain_conflict, result); //Includes call to HandlePhase1CB(..);
          //FREE MESSAGE HERE! --> Async TryPrepare only needs reqId.
         if((params.mainThreadDispatching && (!params.dispatchMessageReceive || params.parallel_CCC)) || (params.multiThreading && params.signClientProposals)) FreePhase1message(&msg);
     }
     else{ //multithreading && sign Client Proposal
         //Note: Ideally would clone remote
-        auto try_prep(std::bind(&Server::TryPrepare, this, msg.req_id(), std::ref(remote), txn, txnDigest, isGossip, forceMaterialize, endorsements)); //,committedProof, abstain_conflict, result));
+        auto try_prep(std::bind(&Server::TryPrepare, this, msg.req_id(), std::ref(remote), txn, txnDigest, isGossip, forceMaterialize)); //,committedProof, abstain_conflict, result));
         auto f = [this, msg_ptr = &msg, txn, txnDigest, try_prep]() mutable {
             Debug("ProcessProposal for txn[%s] on WorkerThread %d", BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
             if(!CheckProposalValidity(*msg_ptr, txn, txnDigest)){  //Check Proposal Validity already cleans up message in this case.
