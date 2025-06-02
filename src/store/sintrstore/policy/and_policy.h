@@ -24,47 +24,49 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_ENDORSEMENT_ACL_POLICY_H_
-#define _SINTR_ENDORSEMENT_ACL_POLICY_H_
+#ifndef _SINTR_ENDORSEMENT_AND_POLICY_H_
+#define _SINTR_ENDORSEMENT_AND_POLICY_H_
 
 #include "store/sintrstore/policy/policy.h"
+#include "store/sintrstore/policy/policy_types.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 
 #include <set>
 
 namespace sintrstore {
 
-// this class represents an endorsement policy that is access control list based
-class ACLPolicy : public Policy {
+// this class represents an endorsement policy that is an AND of clients
+class ANDPolicy : public Policy {
  public:
-  ACLPolicy(const std::set<uint64_t> &access_control_list);
-  ACLPolicy(const ACLPolicy &other);
+  ANDPolicy(const std::set<uint64_t> &client_ids);
+  ANDPolicy(const ANDPolicy &other);
 
-  void operator= (const ACLPolicy &other);
-  bool operator== (const ACLPolicy &other) const;
-  bool operator!= (const ACLPolicy &other) const;
-  bool operator< (const ACLPolicy &other) const;
-  bool operator> (const ACLPolicy &other) const;
-  bool operator<= (const ACLPolicy &other) const;
-  bool operator>= (const ACLPolicy &other) const;
+  void operator= (const ANDPolicy &other);
+  bool operator== (const ANDPolicy &other) const;
+  bool operator!= (const ANDPolicy &other) const;
+  bool operator< (const ANDPolicy &other) const;
+  bool operator> (const ANDPolicy &other) const;
+  bool operator<= (const ANDPolicy &other) const;
+  bool operator>= (const ANDPolicy &other) const;
 
-  std::string Type() const override;
+  PolicyType Type() const override;
   Policy *Clone() const override;
-  std::set<uint64_t> GetAccessControlList() const;
+  std::set<uint64_t> GetANDList() const;
   bool IsSatisfied(const std::set<uint64_t> &endorsements) const override;
   void MergePolicy(const Policy *other) override;
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const override;
   bool IsImpliedBy(const Policy *other) const override;
   void SerializeToProtoMessage(proto::PolicyObject *msg) const override;
   void Reset() override;
+  std::string ToString() const override;
 
  private:
   // type
-  const std::string type = "acl";
-  // access control list says exactly which client ids need to endorse
-  std::set<uint64_t> access_control_list;
+  const PolicyType type = POLICY_TYPE_AND;
+  // policy is all client ids need to endorse
+  std::set<uint64_t> client_ids;
 };
 
 } // namespace sintrstore
 
-#endif /* _SINTR_ENDORSEMENT_ACL_POLICY_H_ */
+#endif /* _SINTR_ENDORSEMENT_AND_POLICY_H_ */

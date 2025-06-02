@@ -28,6 +28,7 @@
 #define _SINTR_ENDORSEMENT_WEIGHT_POLICY_H_
 
 #include "store/sintrstore/policy/policy.h"
+#include "store/sintrstore/policy/policy_types.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 
 #include <set>
@@ -50,7 +51,7 @@ class WeightPolicy : public Policy {
   bool operator<= (const WeightPolicy &other) const;
   bool operator>= (const WeightPolicy &other) const;
 
-  std::string Type() const override;
+  PolicyType Type() const override;
   Policy *Clone() const override;
   uint64_t GetWeight() const;
   bool IsSatisfied(const std::set<uint64_t> &endorsements) const override;
@@ -59,10 +60,11 @@ class WeightPolicy : public Policy {
   bool IsImpliedBy(const Policy *other) const override;
   void SerializeToProtoMessage(proto::PolicyObject *msg) const override;
   void Reset() override;
+  std::string ToString() const override;
 
  private:
   // type
-  const std::string type = "weight";
+  const PolicyType type = POLICY_TYPE_WEIGHT;
   // weight says number of endorsements needed
   uint64_t weight;
 };

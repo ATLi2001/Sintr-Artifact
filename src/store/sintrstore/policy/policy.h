@@ -27,6 +27,7 @@
 #ifndef _SINTR_POLICY_H_
 #define _SINTR_POLICY_H_
 
+#include "store/sintrstore/policy/policy_types.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 
 #include <set>
@@ -42,7 +43,7 @@ class Policy {
   virtual ~Policy() {};
 
   // policy type
-  virtual std::string Type() const = 0;
+  virtual PolicyType Type() const = 0;
   // clone a new copy on the heap
   virtual Policy *Clone() const = 0;
   // does endorsements satisfy this Policy object?
@@ -59,6 +60,7 @@ class Policy {
   // serialize to proto version
   virtual void SerializeToProtoMessage(proto::PolicyObject *msg) const = 0;
   virtual void Reset() = 0;
+  virtual std::string ToString() const = 0;
 };
 
 } // namespace sintrstore

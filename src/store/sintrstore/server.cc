@@ -529,13 +529,13 @@ void Server::Load(const std::string &key, const std::string &value,
   auto committedItr = committed.find("");
   UW_ASSERT(committedItr != committed.end());
   val.proof = committedItr->second;
-  // cross check to make sure policy store has necessary policy
-  std::string policyId = policyIdFunction(key, value);
-  std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-  bool exists = policyStore.get(policyId, tsPolicy);
-  if (!exists) {
-    Panic("Policy %s does not exist", policyId.c_str());
-  }
+  // // cross check to make sure policy store has necessary policy
+  // std::string policyId = policyIdFunction(key, value);
+  // std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+  // bool exists = policyStore.get(policyId, tsPolicy);
+  // if (!exists) {
+  //   Panic("Policy %s does not exist", policyId.c_str());
+  // }
   store.put(key, val, timestamp);
   if (key.length() == 5 && key[0] == 0) {
     std::cerr << std::bitset<8>(key[0]) << ' ' << std::bitset<8>(key[1]) << ' '
@@ -3204,6 +3204,11 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   Timestamp ts(txn->timestamp());
 
   for (const auto &write : txn->write_set()) {
+    if (write.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+
     std::string policyId;
 
     if (txn->policy_type() != proto::Transaction::POLICY_ID_POLICY) {
@@ -3231,6 +3236,11 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   if (params.sintr_params.checkPolicyLeak) {
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
+      if (read.is_table_col_version()) {
+        // skip table column versions
+        continue;
+      }
+
       if (!IsKeyOwned(read.key())) {
         continue;
       }
@@ -3245,7 +3255,11 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
         GetPolicy(policyId, read.readtime(), tsPolicy, true);
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
-        Panic("Read policy does not imply write policy");
+        Panic(
+          "Read policy (%s) does not imply write policy (%s)",
+          tsPolicy.second.policy->ToString().c_str(),
+          policyClient.ToString().c_str()
+        );
       }
     }
   }

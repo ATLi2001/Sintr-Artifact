@@ -75,4 +75,11 @@ void PolicyClient::Reset() {
   policy = nullptr;
 }
 
+std::string PolicyClient::ToString() const {
+  if (policy == nullptr) {
+    return "";
+  }
+  return policy->ToString();
+}
+
 } // namespace sintrstore

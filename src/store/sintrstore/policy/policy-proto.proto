@@ -6,6 +6,6 @@ message WeightPolicyMessage {
   required uint64 weight = 1;
 }
 
-message ACLPolicyMessage {
-  repeated uint64 access_control_list = 1;
+message ANDPolicyMessage {
+  repeated uint64 client_ids = 1;
 }

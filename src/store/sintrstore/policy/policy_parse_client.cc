@@ -25,9 +25,10 @@
  **********************************************************************/
 
 #include "store/sintrstore/policy/policy_parse_client.h"
+#include "store/sintrstore/policy/policy_types.h"
 #include "store/sintrstore/policy/policy-proto.pb.h"
 #include "store/sintrstore/policy/weight_policy.h"
-#include "store/sintrstore/policy/acl_policy.h"
+#include "store/sintrstore/policy/and_policy.h"
 #include "lib/message.h"
 
 #include <fstream>
@@ -79,19 +80,22 @@ std::map<std::string, Policy *> PolicyParseClient::ParseConfigFile(const std::st
 }
 
 Policy *PolicyParseClient::Create(const std::string &policyType, const std::vector<std::string> &policyArgs) {
-  if (policyType == "weight") {
-    if (policyArgs.size() != 1) {
-      Panic("Weight policy requires exactly one argument");
+  switch (GetPolicyTypeEnum(policyType)) {
+    case POLICY_TYPE_WEIGHT: {
+      if (policyArgs.size() != 1) {
+        Panic("Weight policy requires exactly one argument");
+      }
+      return new WeightPolicy(std::stoull(policyArgs[0]));
     }
-    return new WeightPolicy(std::stoull(policyArgs[0]));
-  } else if (policyType == "acl") {
-    std::set<uint64_t> access_control_list;
-    for (const std::string &arg : policyArgs) {
-      access_control_list.insert(std::stoull(arg));
+    case POLICY_TYPE_AND: {
+      std::set<uint64_t> client_ids;
+      for (const std::string &arg : policyArgs) {
+        client_ids.insert(std::stoull(arg));
+      }
+      return new ANDPolicy(client_ids);
     }
-    return new ACLPolicy(access_control_list);
-  } else {
-    Panic("Received unexpected policy type: %s", policyType.c_str());
+    default:
+      Panic("Received unexpected policy type: %s", policyType.c_str());
   }
 }
 
@@ -103,10 +107,10 @@ Policy *PolicyParseClient::Parse(const proto::PolicyObject &protoPolicy) {
       return new WeightPolicy(weightPolicyMsg.weight());
     }
     case proto::PolicyObject::ACL_POLICY: {
-      proto::ACLPolicyMessage aclPolicyMsg;
-      aclPolicyMsg.ParseFromString(protoPolicy.policy_data());
-      std::set<uint64_t> access_control_list(aclPolicyMsg.access_control_list().begin(), aclPolicyMsg.access_control_list().end());
-      return new ACLPolicy(access_control_list);
+      proto::ANDPolicyMessage ANDPolicyMsg;
+      ANDPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      std::set<uint64_t> client_ids(ANDPolicyMsg.client_ids().begin(), ANDPolicyMsg.client_ids().end());
+      return new ANDPolicy(client_ids);
     }
     default:
       Panic("Received unexpected policy type: %d", protoPolicy.policy_type());

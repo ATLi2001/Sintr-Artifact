@@ -57,7 +57,7 @@ bool WeightPolicy::operator>= (const WeightPolicy &other) const {
   return (other <= *this);
 }
 
-std::string WeightPolicy::Type() const {
+PolicyType WeightPolicy::Type() const {
   return type;
 }
 
@@ -113,6 +113,10 @@ void WeightPolicy::SerializeToProtoMessage(proto::PolicyObject *msg) const {
 
 void WeightPolicy::Reset() {
   weight = 0;
+}
+
+std::string WeightPolicy::ToString() const {
+  return GetPolicyTypeName(type) + " " + std::to_string(weight);
 }
 
 } // namespace sintrstore
