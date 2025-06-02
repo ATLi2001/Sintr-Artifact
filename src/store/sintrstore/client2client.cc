@@ -803,7 +803,7 @@ void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remo
 }
 
 void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
-  if (!params.sintr_params.c2cReceiveThread) {
+  if (!params.sintr_params.c2cReceiveThread && !params.sintr_params.parallelEndorsementCheck) {
     finishValTxnMsg.ParseFromString(data);
     HandleFinishValidateTxnMessage(finishValTxnMsg);
   }
