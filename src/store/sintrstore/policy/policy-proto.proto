@@ -9,3 +9,7 @@ message WeightPolicyMessage {
 message ANDPolicyMessage {
   repeated uint64 client_ids = 1;
 }
+
+message ORPolicyMessage {
+  repeated uint64 client_ids = 1;
+}

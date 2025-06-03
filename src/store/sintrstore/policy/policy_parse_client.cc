@@ -29,6 +29,7 @@
 #include "store/sintrstore/policy/policy-proto.pb.h"
 #include "store/sintrstore/policy/weight_policy.h"
 #include "store/sintrstore/policy/and_policy.h"
+#include "store/sintrstore/policy/or_policy.h"
 #include "lib/message.h"
 
 #include <fstream>
@@ -94,6 +95,13 @@ Policy *PolicyParseClient::Create(const std::string &policyType, const std::vect
       }
       return new ANDPolicy(client_ids);
     }
+    case POLICY_TYPE_OR: {
+      std::set<uint64_t> client_ids;
+      for (const std::string &arg : policyArgs) {
+        client_ids.insert(std::stoull(arg));
+      }
+      return new ORPolicy(client_ids);
+    }
     default:
       Panic("Received unexpected policy type: %s", policyType.c_str());
   }
@@ -106,11 +114,17 @@ Policy *PolicyParseClient::Parse(const proto::PolicyObject &protoPolicy) {
       weightPolicyMsg.ParseFromString(protoPolicy.policy_data());
       return new WeightPolicy(weightPolicyMsg.weight());
     }
-    case proto::PolicyObject::ACL_POLICY: {
-      proto::ANDPolicyMessage ANDPolicyMsg;
-      ANDPolicyMsg.ParseFromString(protoPolicy.policy_data());
-      std::set<uint64_t> client_ids(ANDPolicyMsg.client_ids().begin(), ANDPolicyMsg.client_ids().end());
+    case proto::PolicyObject::AND_POLICY: {
+      proto::ANDPolicyMessage andPolicyMsg;
+      andPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      std::set<uint64_t> client_ids(andPolicyMsg.client_ids().begin(), andPolicyMsg.client_ids().end());
       return new ANDPolicy(client_ids);
+    }
+    case proto::PolicyObject::OR_POLICY: {
+      proto::ORPolicyMessage orPolicyMsg;
+      orPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      std::set<uint64_t> client_ids(orPolicyMsg.client_ids().begin(), orPolicyMsg.client_ids().end());
+      return new ORPolicy(client_ids);
     }
     default:
       Panic("Received unexpected policy type: %d", protoPolicy.policy_type());

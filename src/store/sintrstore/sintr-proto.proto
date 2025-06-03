@@ -558,7 +558,8 @@ message FinishValidateTxnMessage {
 message PolicyObject {
   enum Type {
     WEIGHT_POLICY = 0;
-    ACL_POLICY = 1;
+    AND_POLICY = 1;
+    OR_POLICY = 2;
   }
   required Type policy_type = 1;
   required bytes policy_data = 2;

@@ -117,7 +117,7 @@ void ANDPolicy::SerializeToProtoMessage(proto::PolicyObject *msg) const {
   for (const auto &client_id : client_ids) {
     ANDPolicyMsg.add_client_ids(client_id);
   }
-  msg->set_policy_type(proto::PolicyObject::ACL_POLICY);
+  msg->set_policy_type(proto::PolicyObject::AND_POLICY);
   ANDPolicyMsg.SerializeToString(msg->mutable_policy_data());
 }
 
