@@ -24,11 +24,10 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/policy/weight_policy.h"
-#include "store/sintrstore/policy/policy-proto.pb.h"
+#include "store/common/policy/weight_policy.h"
+#include "store/common/policy/policy-proto.pb.h"
 #include "lib/assert.h"
 
-namespace sintrstore {
 
 WeightPolicy::WeightPolicy() : weight(0) {}
 WeightPolicy::WeightPolicy(uint64_t weight) : weight(weight) {}
@@ -104,10 +103,10 @@ bool WeightPolicy::IsImpliedBy(const Policy *other) const {
   return *otherWeightPolicy >= *this;
 }
 
-void WeightPolicy::SerializeToProtoMessage(proto::PolicyObject *msg) const {
-  proto::WeightPolicyMessage weightPolicyMsg;
+void WeightPolicy::SerializeToProtoMessage(PolicyObject *msg) const {
+  WeightPolicyMessage weightPolicyMsg;
   weightPolicyMsg.set_weight(weight);
-  msg->set_policy_type(proto::PolicyObject::WEIGHT_POLICY);
+  msg->set_policy_type(PolicyObject::WEIGHT_POLICY);
   weightPolicyMsg.SerializeToString(msg->mutable_policy_data());
 }
 
@@ -118,5 +117,3 @@ void WeightPolicy::Reset() {
 std::string WeightPolicy::ToString() const {
   return GetPolicyTypeName(type) + " " + std::to_string(weight);
 }
-
-} // namespace sintrstore

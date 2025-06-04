@@ -35,7 +35,7 @@
 #include "store/sintrstore/basicverifier.h"
 #include "store/sintrstore/common.h"
 #include "store/sintrstore/common2.h"
-#include "store/sintrstore/policy/policy.h"
+#include "store/common/policy/policy.h"
 #include "store/sintrstore/estimate_policy.h"
 #include <sys/time.h>
 #include <algorithm>
@@ -292,7 +292,7 @@ void Client::Get(const std::string &key, get_callback gcb,
         const std::string &val, const Timestamp &ts, const proto::Dependency &dep,
         bool hasDep, bool addReadSet,
         const proto::CommittedProof &proof, const std::string &serializedWrite, 
-        const std::string &serializedWriteTypeName, const proto::EndorsementPolicyMessage &policyMsg,
+        const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg,
         const proto::Dependency &policyDep, bool hasPolicyDep) {
 
       uint64_t ns = 0; //Latency_End(&getLatency);
@@ -790,7 +790,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
                                   int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                                   const proto::Dependency &dep, bool hasDep, bool addReadSet,
                                   const proto::CommittedProof &proof, const std::string &serializedWrite, 
-                                  const std::string &serializedWriteTypeName, const proto::EndorsementPolicyMessage &policyMsg) 
+                                  const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg) 
 { 
   
    if(PROFILING_LAT){
@@ -880,7 +880,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
 void Client::QueryResultCallback(PendingQuery *pendingQuery,  
                                   int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                                   const std::vector<proto::SignedMessage> &query_sigs,
-                                  const std::map<std::string, std::pair<proto::EndorsementPolicyMessage, Timestamp>> &queryPolicyMap) 
+                                  const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &queryPolicyMap) 
 { 
 
   if(PROFILING_LAT){
@@ -1001,7 +1001,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
   for (const auto &policyEntry : queryPolicyMap) {
     std::string id = policyEntry.first;
-    const proto::EndorsementPolicyMessage &policyMsg = policyEntry.second.first;
+    const EndorsementPolicyMessage &policyMsg = policyEntry.second.first;
     UW_ASSERT(id == policyMsg.policy_id());
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id);

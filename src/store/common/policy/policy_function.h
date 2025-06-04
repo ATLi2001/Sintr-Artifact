@@ -24,10 +24,10 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_POLICY_FUNCTION_H_
-#define _SINTR_POLICY_FUNCTION_H_
+#ifndef _POLICY_FUNCTION_H_
+#define _POLICY_FUNCTION_H_
 
-#include "store/sintrstore/policy/policy.h"
+#include "store/common/policy/policy.h"
 #include "store/benchmark/async/tpcc/tpcc-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_schema.h"
 #include "store/common/table_kv_encoder.h"
@@ -35,7 +35,6 @@
 
 #include <string>
 
-namespace sintrstore {
 
 // a policy function takes in the key and value and returns a new policy object
 typedef std::function<Policy *(const std::string &, const std::string &)> policy_function;
@@ -114,6 +113,4 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
   }
 }
 
-} // namespace sintrstore
-
-#endif /* _SINTR_POLICY_FUNCTION_H_ */
+#endif /* _POLICY_FUNCTION_H_ */

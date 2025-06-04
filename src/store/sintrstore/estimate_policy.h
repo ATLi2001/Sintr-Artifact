@@ -30,8 +30,8 @@
 #include "lib/assert.h"
 #include "store/common/common-proto.pb.h"
 #include "store/common/frontend/validation_transaction.h"
-#include "store/sintrstore/policy/policy.h"
-#include "store/sintrstore/policy/policy_client.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_client.h"
 #include "store/sintrstore/endorsement_client.h"
 
 namespace sintrstore {

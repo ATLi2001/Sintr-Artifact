@@ -24,16 +24,15 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_ENDORSEMENT_AND_POLICY_H_
-#define _SINTR_ENDORSEMENT_AND_POLICY_H_
+#ifndef _AND_POLICY_H_
+#define _AND_POLICY_H_
 
-#include "store/sintrstore/policy/policy.h"
-#include "store/sintrstore/policy/policy_types.h"
-#include "store/sintrstore/sintr-proto.pb.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_types.h"
+#include "store/common/common-proto.pb.h"
 
 #include <set>
 
-namespace sintrstore {
 
 // this class represents an endorsement policy that is an AND of clients
 class ANDPolicy : public Policy {
@@ -56,7 +55,7 @@ class ANDPolicy : public Policy {
   void MergePolicy(const Policy *other) override;
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const override;
   bool IsImpliedBy(const Policy *other) const override;
-  void SerializeToProtoMessage(proto::PolicyObject *msg) const override;
+  void SerializeToProtoMessage(PolicyObject *msg) const override;
   void Reset() override;
   std::string ToString() const override;
 
@@ -67,6 +66,4 @@ class ANDPolicy : public Policy {
   std::set<uint64_t> client_ids;
 };
 
-} // namespace sintrstore
-
-#endif /* _SINTR_ENDORSEMENT_AND_POLICY_H_ */
+#endif /* _AND_POLICY_H_ */

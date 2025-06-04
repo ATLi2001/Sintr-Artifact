@@ -14,7 +14,7 @@ LIB-store-common := $(LIB-message) $(o)common-proto.o $(o)promise.o \
 		$(o)timestamp.o $(o)tracer.o $(o)transaction.o $(o)truetime.o \
 		$(LIB-store-common-stats) $(LIB-store-backend-sql-encoding) $(o)partitioner.o $(o)pinginitiator.o 
 
-include $(d)backend/Rules.mk $(d)frontend/Rules.mk $(d)query_result/Rules.mk
+include $(d)backend/Rules.mk $(d)frontend/Rules.mk $(d)query_result/Rules.mk $(d)policy/Rules.mk
 
 
 

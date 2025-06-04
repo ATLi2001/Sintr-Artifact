@@ -24,16 +24,15 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_ENDORSEMENT_OR_POLICY_H_
-#define _SINTR_ENDORSEMENT_OR_POLICY_H_
+#ifndef _OR_POLICY_H_
+#define _OR_POLICY_H_
 
-#include "store/sintrstore/policy/policy.h"
-#include "store/sintrstore/policy/policy_types.h"
-#include "store/sintrstore/sintr-proto.pb.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_types.h"
+#include "store/common/common-proto.pb.h"
 
 #include <set>
 
-namespace sintrstore {
 
 // this class represents an endorsement policy that is an OR of clients
 // simplifying assumption - disallow merging OR policies that result in CNF with multiple clauses
@@ -57,7 +56,7 @@ class ORPolicy : public Policy {
   void MergePolicy(const Policy *other) override;
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const override;
   bool IsImpliedBy(const Policy *other) const override;
-  void SerializeToProtoMessage(proto::PolicyObject *msg) const override;
+  void SerializeToProtoMessage(PolicyObject *msg) const override;
   void Reset() override;
   std::string ToString() const override;
 
@@ -68,6 +67,4 @@ class ORPolicy : public Policy {
   std::set<uint64_t> client_ids;
 };
 
-} // namespace sintrstore
-
-#endif /* _SINTR_ENDORSEMENT_OR_POLICY_H_ */
+#endif /* _OR_POLICY_H_ */

@@ -24,18 +24,17 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/policy/policy_parse_client.h"
-#include "store/sintrstore/policy/policy_types.h"
-#include "store/sintrstore/policy/policy-proto.pb.h"
-#include "store/sintrstore/policy/weight_policy.h"
-#include "store/sintrstore/policy/and_policy.h"
-#include "store/sintrstore/policy/or_policy.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_types.h"
+#include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/weight_policy.h"
+#include "store/common/policy/and_policy.h"
+#include "store/common/policy/or_policy.h"
 #include "lib/message.h"
 
 #include <fstream>
 #include <sstream>
 
-namespace sintrstore {
 
 std::map<std::string, Policy *> PolicyParseClient::ParseConfigFile(const std::string &configFilePath) {
   std::map<std::string, Policy *> policies;
@@ -107,21 +106,21 @@ Policy *PolicyParseClient::Create(const std::string &policyType, const std::vect
   }
 }
 
-Policy *PolicyParseClient::Parse(const proto::PolicyObject &protoPolicy) {
+Policy *PolicyParseClient::Parse(const PolicyObject &protoPolicy) {
   switch (protoPolicy.policy_type()) {
-    case proto::PolicyObject::WEIGHT_POLICY: {
-      proto::WeightPolicyMessage weightPolicyMsg;
+    case PolicyObject::WEIGHT_POLICY: {
+      WeightPolicyMessage weightPolicyMsg;
       weightPolicyMsg.ParseFromString(protoPolicy.policy_data());
       return new WeightPolicy(weightPolicyMsg.weight());
     }
-    case proto::PolicyObject::AND_POLICY: {
-      proto::ANDPolicyMessage andPolicyMsg;
+    case PolicyObject::AND_POLICY: {
+      ANDPolicyMessage andPolicyMsg;
       andPolicyMsg.ParseFromString(protoPolicy.policy_data());
       std::set<uint64_t> client_ids(andPolicyMsg.client_ids().begin(), andPolicyMsg.client_ids().end());
       return new ANDPolicy(client_ids);
     }
-    case proto::PolicyObject::OR_POLICY: {
-      proto::ORPolicyMessage orPolicyMsg;
+    case PolicyObject::OR_POLICY: {
+      ORPolicyMessage orPolicyMsg;
       orPolicyMsg.ParseFromString(protoPolicy.policy_data());
       std::set<uint64_t> client_ids(orPolicyMsg.client_ids().begin(), orPolicyMsg.client_ids().end());
       return new ORPolicy(client_ids);
@@ -130,5 +129,3 @@ Policy *PolicyParseClient::Parse(const proto::PolicyObject &protoPolicy) {
       Panic("Received unexpected policy type: %d", protoPolicy.policy_type());
   }
 }
-
-} // namespace sintrstore

@@ -1,10 +1,4 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
-cd := $(d)
-
-include $(d)policy/Rules.mk
-
-# is there a better way to reset the d variable?
-d := $(cd)
 
 SRCS += $(addprefix $(d), client.cc shardclient.cc server.cc server_fallback.cc servertools.cc concurrencycontrol.cc store.cc common.cc \
 		phase1validator.cc localbatchsigner.cc sharedbatchsigner.cc \
@@ -33,7 +27,7 @@ LIB-sintr-store := $(o)server.o $(o)server_fallback.o $(o)servertools.o $(o)quer
 	$(LIB-configuration) $(LIB-store-common) $(LIB-transport) $(o)phase1validator.o \
 	$(o)localbatchsigner.o $(o)sharedbatchsigner.o $(o)basicverifier.o $(o)localbatchverifier.o $(o)sharedbatchverifier.o \
 	$(LIB-query-engine) $(o)table_store_interface_peloton.o $(o)table_store_interface_toy.o \
-	$(LIB-sintr-policy)  #$(o)table_store_interface_old.o
+	$(LIB-policy)  #$(o)table_store_interface_old.o
 
 LIB-sintr-validation := $(LIB-store-frontend) $(LIB-validation-tpcc) $(LIB-rw-val) $(LIB-rw-sql-val) \
 	$(o)validation_parse_client.o $(o)validation_client.o $(o)estimate_policy.o
@@ -43,7 +37,7 @@ LIB-sintr-client := $(LIB-udptransport) \
 	$(o)shardclient.o $(o)querysync-client.o $(o)client.o $(LIB-bft-tapir-config) \
 	$(LIB-crypto) $(LIB-batched-sigs) $(LIB-sintr-common) $(o)phase1validator.o \
 	$(o)basicverifier.o $(o)localbatchverifier.o $(LIB-sintr-validation) \
-	$(o)client2client.o $(o)endorsement_client.o $(LIB-sintr-policy)
+	$(o)client2client.o $(o)endorsement_client.o $(LIB-policy)
 
 
 LIB-proto := $(o)sintr-proto.o $(o)query-proto.o

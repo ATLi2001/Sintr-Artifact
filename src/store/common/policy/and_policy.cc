@@ -24,13 +24,12 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/policy/and_policy.h"
-#include "store/sintrstore/policy/policy-proto.pb.h"
+#include "store/common/policy/and_policy.h"
+#include "store/common/policy/policy-proto.pb.h"
 #include "lib/assert.h"
 
 #include <algorithm>
 
-namespace sintrstore {
 
 ANDPolicy::ANDPolicy(const std::set<uint64_t> &client_ids) : 
   client_ids(client_ids) {}
@@ -112,12 +111,12 @@ bool ANDPolicy::IsImpliedBy(const Policy *other) const {
   return *otherANDPolicy >= *this;
 }
 
-void ANDPolicy::SerializeToProtoMessage(proto::PolicyObject *msg) const {
-  proto::ANDPolicyMessage ANDPolicyMsg;
+void ANDPolicy::SerializeToProtoMessage(PolicyObject *msg) const {
+  ANDPolicyMessage ANDPolicyMsg;
   for (const auto &client_id : client_ids) {
     ANDPolicyMsg.add_client_ids(client_id);
   }
-  msg->set_policy_type(proto::PolicyObject::AND_POLICY);
+  msg->set_policy_type(PolicyObject::AND_POLICY);
   ANDPolicyMsg.SerializeToString(msg->mutable_policy_data());
 }
 
@@ -132,5 +131,3 @@ std::string ANDPolicy::ToString() const {
   }
   return ret;
 }
-
-} // namespace sintrstore

@@ -49,7 +49,7 @@
 #include "store/sintrstore/validation_client.h"
 #include "store/sintrstore/validation_parse_client.h"
 #include "store/sintrstore/endorsement_client.h"
-#include "store/sintrstore/policy/policy.h"
+#include "store/common/policy/policy.h"
 #include "store/sintrstore/sql_interpreter.h"
 
 #include <map>
