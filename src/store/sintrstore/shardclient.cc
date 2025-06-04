@@ -707,7 +707,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
           BytesToHex(key, 16).c_str(), BytesToHex(write.value(), 16).c_str());
       rcb(REPLY_OK, key, write.value(), Timestamp(), proto::Dependency(),
           false, false,
-          proto::CommittedProof(), std::string(), std::string(), proto::EndorsementPolicyMessage(),
+          proto::CommittedProof(), std::string(), std::string(), EndorsementPolicyMessage(),
           proto::Dependency(), false);
       return true;
     }
@@ -721,7 +721,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
       std::cerr << "already added (buffer) key " << BytesToHex(key, 16) << "to read set" << std::endl;
       rcb(REPLY_OK, key, readValues[key], read.readtime(), proto::Dependency(),
           false, false,
-          proto::CommittedProof(), std::string(), std::string(), proto::EndorsementPolicyMessage(),
+          proto::CommittedProof(), std::string(), std::string(), EndorsementPolicyMessage(),
           proto::Dependency(), false);
       return true;
     }

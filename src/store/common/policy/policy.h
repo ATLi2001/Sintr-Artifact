@@ -24,16 +24,15 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_POLICY_H_
-#define _SINTR_POLICY_H_
+#ifndef _POLICY_H_
+#define _POLICY_H_
 
-#include "store/sintrstore/policy/policy_types.h"
-#include "store/sintrstore/sintr-proto.pb.h"
+#include "store/common/policy/policy_types.h"
+#include "store/common/common-proto.pb.h"
 
 #include <set>
 #include <vector>
 
-namespace sintrstore {
 
 // this abstract class represents a generic endorsement policy
 // underlying assumption - policies of the same type can be merged
@@ -58,11 +57,9 @@ class Policy {
   // is this policy implied by other?
   virtual bool IsImpliedBy(const Policy *other) const = 0;
   // serialize to proto version
-  virtual void SerializeToProtoMessage(proto::PolicyObject *msg) const = 0;
+  virtual void SerializeToProtoMessage(PolicyObject *msg) const = 0;
   virtual void Reset() = 0;
   virtual std::string ToString() const = 0;
 };
 
-} // namespace sintrstore
-
-#endif /* _SINTR_POLICY_H_ */
+#endif /* _POLICY_H_ */

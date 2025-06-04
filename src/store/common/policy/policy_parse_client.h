@@ -26,13 +26,12 @@
 #ifndef _POLICY_PARSE_CLIENT_H_
 #define _POLICY_PARSE_CLIENT_H_
 
-#include "store/sintrstore/policy/policy.h"
-#include "store/sintrstore/sintr-proto.pb.h"
+#include "store/common/policy/policy.h"
+#include "store/common/common-proto.pb.h"
 
 #include <string>
 #include <map>
 
-namespace sintrstore {
 
 class PolicyParseClient {
  public:
@@ -44,9 +43,7 @@ class PolicyParseClient {
   // given a policy type and arguments, create a new policy object
   Policy *Create(const std::string &policyType, const std::vector<std::string> &policyArgs);
   // given a proto policy object, create a new policy object
-  Policy *Parse(const proto::PolicyObject &protoPolicy);
+  Policy *Parse(const PolicyObject &protoPolicy);
 };
-
-} // namespace sintrstore
 
 #endif

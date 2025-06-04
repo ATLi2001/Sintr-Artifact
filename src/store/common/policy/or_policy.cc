@@ -24,13 +24,12 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/policy/or_policy.h"
-#include "store/sintrstore/policy/policy-proto.pb.h"
+#include "store/common/policy/or_policy.h"
+#include "store/common/policy/policy-proto.pb.h"
 #include "lib/assert.h"
 
 #include <algorithm>
 
-namespace sintrstore {
 
 ORPolicy::ORPolicy(const std::set<uint64_t> &client_ids) : 
   client_ids(client_ids) {}
@@ -137,12 +136,12 @@ bool ORPolicy::IsImpliedBy(const Policy *other) const {
   return *otherORPolicy >= *this;
 }
 
-void ORPolicy::SerializeToProtoMessage(proto::PolicyObject *msg) const {
-  proto::ORPolicyMessage ORPolicyMsg;
+void ORPolicy::SerializeToProtoMessage(PolicyObject *msg) const {
+  ORPolicyMessage ORPolicyMsg;
   for (const auto &client_id : client_ids) {
     ORPolicyMsg.add_client_ids(client_id);
   }
-  msg->set_policy_type(proto::PolicyObject::OR_POLICY);
+  msg->set_policy_type(PolicyObject::OR_POLICY);
   ORPolicyMsg.SerializeToString(msg->mutable_policy_data());
 }
 
@@ -157,5 +156,3 @@ std::string ORPolicy::ToString() const {
   }
   return ret;
 }
-
-} // namespace sintrstore

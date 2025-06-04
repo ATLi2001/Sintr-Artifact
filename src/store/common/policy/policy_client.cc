@@ -24,10 +24,9 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/policy/policy_client.h"
+#include "store/common/policy/policy_client.h"
 #include "lib/assert.h"
 
-namespace sintrstore {
 
 PolicyClient::~PolicyClient() {
   Reset();
@@ -81,5 +80,3 @@ std::string PolicyClient::ToString() const {
   }
   return policy->ToString();
 }
-
-} // namespace sintrstore

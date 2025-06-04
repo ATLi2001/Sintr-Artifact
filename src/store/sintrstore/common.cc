@@ -36,7 +36,7 @@
 #include "store/common/transaction.h"
 //#include "../../query-engine/type/value.h"
 #include <utility>
-#include "store/sintrstore/policy/policy_function.h"
+#include "store/common/policy/policy_function.h"
 #include <regex>
 
 #include "lib/batched_sigs.h"

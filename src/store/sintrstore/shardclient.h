@@ -45,6 +45,7 @@
 #include "store/common/transaction.h"
 #include "store/common/frontend/txnclient.h"
 #include "store/common/common-proto.pb.h"
+#include "store/common/policy/policy-proto.pb.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "store/sintrstore/phase1validator.h"
 #include "store/common/pinginitiator.h"
@@ -69,7 +70,7 @@ typedef std::function<void(int, const std::string &,
     const std::string &, const Timestamp &, const proto::Dependency &,
     bool, bool,
     const proto::CommittedProof &, const std::string &, const std::string &,
-    const proto::EndorsementPolicyMessage &,
+    const EndorsementPolicyMessage &,
     const proto::Dependency &, bool)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
@@ -77,11 +78,11 @@ typedef std::function<void(int, const std::string &)> read_timeout_callback;
 //typedef std::function<void(int, int, std::map<std::string, TimestampMessage> &, std::string &, std::string &, bool)> result_callback; //status, group, read_set, result_hash, result, success
 typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string &, bool,
   const std::vector<proto::SignedMessage> &,
-  const std::map<std::string, std::pair<proto::EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
+  const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
   const proto::Dependency &, bool, bool,
   const proto::CommittedProof &, const std::string &, const std::string &,
-  const proto::EndorsementPolicyMessage &)> point_result_callback;  //TODO: This == Get callback.
+  const EndorsementPolicyMessage &)> point_result_callback;  //TODO: This == Get callback.
 
 typedef std::function<void(int)> result_timeout_callback;
 
@@ -260,7 +261,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     std::string maxSerializedWrite;
     std::string maxSerializedWriteTypeName;
     // endorsement policy corresponding to maxValue
-    proto::EndorsementPolicyMessage maxPolicy;
+    EndorsementPolicyMessage maxPolicy;
 
     Timestamp maxPolicyTs;
     // prepared policy map from timestamp to (write containing prepared policy, count)
@@ -362,7 +363,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     std::string *table_name;
     
     // max policy and timestamp for this query
-    std::map<std::string, std::pair<proto::EndorsementPolicyMessage, Timestamp>> queryPolicyMap;
+    std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> queryPolicyMap;
   };
 
 

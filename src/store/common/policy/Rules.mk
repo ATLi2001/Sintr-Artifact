@@ -5,5 +5,5 @@ SRCS += $(addprefix $(d), policy_client.cc policy_parse_client.cc weight_policy.
 
 PROTOS += $(addprefix $(d), policy-proto.proto)
 
-LIB-sintr-policy := $(LIB-store-frontend) $(o)policy_client.o $(o)policy-proto.o \
+LIB-policy := $(LIB-store-common) $(o)policy_client.o $(o)policy-proto.o \
 	$(o)policy_parse_client.o $(o)weight_policy.o $(o)and_policy.o $(o)or_policy.o

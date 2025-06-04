@@ -2831,7 +2831,7 @@ void Server::CommitToStore(proto::CommittedProof *proof, proto::Transaction *txn
     else if (txn->policy_type() == proto::Transaction::POLICY_ID_POLICY) {
       Debug("Committing for policy id %s new policy.", write.key().c_str());
       PolicyStoreValue policyVal;
-      proto::PolicyObject policyMsg;
+      PolicyObject policyMsg;
       policyMsg.ParseFromString(write.value());
       policyVal.policy = policyParseClient->Parse(policyMsg);
       // parse allocates a new policy so need to free it at end
@@ -3145,7 +3145,7 @@ void Server::GetPolicy(const std::string policyId, const Timestamp &ts,
     for (const auto &w : mostRecentPrepared->write_set()) {
       if (w.key() == policyId) {
         // policy change transaction writeset value is a new policy
-        proto::PolicyObject policyMsg;
+        PolicyObject policyMsg;
         policyMsg.ParseFromString(w.value());
         // parse results in a new allocation, so need to free it later
         Policy *policy = policyParseClient->Parse(policyMsg);

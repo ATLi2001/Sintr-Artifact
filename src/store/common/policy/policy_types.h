@@ -1,6 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2024 Austin Li <atl63@cornell.edu>
+ * Copyright 2025 Austin Li <atl63@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -9,10 +9,10 @@
  * modify, merge, publish, distribute, sublicense, and/or sell copies
  * of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -23,40 +23,46 @@
  * SOFTWARE.
  *
  **********************************************************************/
+#ifndef POLICY_TYPES_H
+#define POLICY_TYPES_H
 
-#ifndef _SINTR_POLICY_CLIENT_H_
-#define _SINTR_POLICY_CLIENT_H_
+#include "lib/message.h"
 
-#include "store/sintrstore/policy/policy.h"
+#include <string>
 
-#include <set>
-#include <vector>
 
-namespace sintrstore {
-
-// a policy client serves as a wrapper around the abstract policy class
-// it is used to track the current policy for a transaction
-// assume that all policies are of the same type
-class PolicyClient {
- public:
-  PolicyClient() : policy(nullptr) {};
-  ~PolicyClient();
-
-  // does endorsements satisfy this PolicyClient object?
-  bool IsSatisfied(const std::set<uint64_t> &endorsements) const;
-  // add a policy to the current transaction policies
-  void AddPolicy(const Policy *other);
-  // what client ids does potentialEndorsements need to get this policy satisfied?
-  std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const;
-  // is this policy implied by other?
-  bool IsImpliedBy(const Policy *other) const;
-  void Reset();
-  std::string ToString() const;
-
- private:
-  Policy *policy;
+enum PolicyType {
+  POLICY_TYPE_WEIGHT,
+  POLICY_TYPE_AND,
+  POLICY_TYPE_OR
 };
 
-} // namespace sintrstore
+inline std::string GetPolicyTypeName(PolicyType policy_type) {
+  switch (policy_type) {
+    case POLICY_TYPE_WEIGHT:
+      return "weight";
+    case POLICY_TYPE_AND:
+      return "and";
+    case POLICY_TYPE_OR:
+      return "or";
+    default:
+      Panic("Received unexpected policy type: %d", policy_type);
+  }
+}
 
-#endif /* _SINTR_POLICY_CLIENT_H_ */
+inline PolicyType GetPolicyTypeEnum(const std::string &policy_type_name) {
+  if (policy_type_name == "weight") {
+    return POLICY_TYPE_WEIGHT;
+  }
+  else if (policy_type_name == "and") {
+    return POLICY_TYPE_AND;
+  }
+  else if (policy_type_name == "or") {
+    return POLICY_TYPE_OR;
+  }
+  else {
+    Panic("Received unexpected policy type name: %s", policy_type_name.c_str());
+  }
+}
+
+#endif /* POLICY_TYPES_H */

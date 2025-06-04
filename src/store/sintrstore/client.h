@@ -48,8 +48,9 @@
 #include "store/common/common-proto.pb.h"
 #include "store/sintrstore/client2client.h"
 #include "store/sintrstore/endorsement_client.h"
-#include "store/sintrstore/policy/policy_parse_client.h"
-#include "store/sintrstore/policy/policy_function.h"
+#include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_function.h"
 #include <sys/time.h>
 #include "store/common/stats.h"
 #include <unistd.h>
@@ -221,11 +222,11 @@ class Client : public ::Client {
                             int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                             const proto::Dependency &dep, bool hasDep, bool addReadSet,
                             const proto::CommittedProof &proof, const std::string &serializedWrite, 
-                            const std::string &serializedWriteTypeName, const proto::EndorsementPolicyMessage &policyMsg); 
+                            const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                             const std::vector<proto::SignedMessage> &query_sigs,
-                            const std::map<std::string, std::pair<proto::EndorsementPolicyMessage, Timestamp>> &queryPolicyMap);  //free parameters
+                            const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &queryPolicyMap);  //free parameters
   void ClearTxnQueries();
   void ClearQuery(PendingQuery *pendingQuery);
   void RetryQuery(PendingQuery *pendingQuery);

@@ -27,8 +27,8 @@
 #ifndef _SINTR_ENDORSEMENT_CLIENT_H_
 #define _SINTR_ENDORSEMENT_CLIENT_H_
 
-#include "store/sintrstore/policy/policy_client.h"
-#include "store/sintrstore/policy/policy_function.h"
+#include "store/common/policy/policy_client.h"
+#include "store/common/policy/policy_function.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "lib/keymanager.h"
 

@@ -27,7 +27,7 @@
 #include "store/benchmark/async/tpcc/validation/policy_change.h"
 #include "store/benchmark/async/tpcc/tpcc_utils.h"
 #include "store/sintrstore/sintr-proto.pb.h"
-#include "store/sintrstore/policy/policy-proto.pb.h"
+#include "store/common/policy/policy-proto.pb.h"
 
 
 namespace tpcc {
@@ -53,9 +53,9 @@ transaction_status_t ValidationPolicyChange::Validate(::SyncClient &client) {
   client.Begin(timeout);
 
   // distict table has policy id 1, change it to be policy of random weight
-  ::sintrstore::proto::PolicyObject policy;
-  policy.set_policy_type(::sintrstore::proto::PolicyObject::WEIGHT_POLICY);
-  ::sintrstore::proto::WeightPolicyMessage weight_policy;
+  PolicyObject policy;
+  policy.set_policy_type(PolicyObject::WEIGHT_POLICY);
+  WeightPolicyMessage weight_policy;
   weight_policy.set_weight(randWeight);
   weight_policy.SerializeToString(policy.mutable_policy_data());
   
