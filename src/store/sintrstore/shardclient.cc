@@ -48,7 +48,8 @@ ShardClient::ShardClient(transport::Configuration *config, Transport *transport,
     client_id(client_id), transport(transport), config(config), group(group),
     timeServer(timeServer), pingReplicas(pingReplicas), readMessages(readMessages), readQuorumSize(readQuorumSize), params(params),
     keyManager(keyManager), verifier(verifier), phase1DecisionTimeout(phase1DecisionTimeout),
-    lastReqId(0UL), failureActive(false), consecutiveMax(consecutiveMax), sql_interpreter(sql_interpreter), stats(stats) {
+    lastReqId(0UL), failureActive(false), consecutiveMax(consecutiveMax), sql_interpreter(sql_interpreter), stats(stats),
+    get_policy_shard_client(false) {
   transport->Register(this, *config, -1, -1); //phase1DecisionTimeout(1000UL)
 
   if (closestReplicas_.size() == 0) {
