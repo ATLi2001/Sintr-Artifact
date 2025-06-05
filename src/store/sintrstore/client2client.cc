@@ -161,6 +161,13 @@ Client2Client::~Client2Client() {
     c2cReceiveThread->join();
     delete c2cReceiveThread;
   }
+  for (auto t : parallelSigCheckThreads) {
+    parallelSigCheckQueue.push(nullptr);
+  }
+  for (auto t : parallelSigCheckThreads) {
+    t->join();
+    delete t;
+  }
   delete valClient;
   delete clients_verifier;
   delete valParseClient;
@@ -1107,6 +1114,12 @@ void Client2Client::HandleForwardQueryResultMessage(const proto::ForwardQueryRes
       }
     }
     else {
+      Debug("HandleForwardQueryResult parallel query sig check: from client id %lu, seq num %lu, query gen id %s, query result %s",
+        curr_client_id, 
+        curr_client_seq_num,
+        BytesToHex(curr_query_gen_id, 16).c_str(),
+        BytesToHex(curr_query_result, 16).c_str()
+      );
       // this will be async so no need to check the result or tell valClient
       CheckPreparedCommittedEvidence(fwdQueryResult, fwdQueryResultMsg);
       return;
@@ -1479,6 +1492,14 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
           ] {
             bool is_valid = this->CheckQuerySigHelper(query_sig, query_gen_id, query_result, query_read_set, query_read_set_hash);
             std::lock_guard<std::mutex> lock(asyncQuerySigCheck->mtx);
+
+            Debug(
+              "Async query sig check for client id %lu, seq num %lu, query gen id %s, is valid %d",
+              curr_client_id,
+              curr_client_seq_num,
+              BytesToHex(query_gen_id, 16).c_str(),
+              is_valid
+            );
 
             if (is_valid) {
               ++asyncQuerySigCheck->num_check_passed;
