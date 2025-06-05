@@ -514,6 +514,7 @@ DEFINE_bool(sintr_parallel_query_sigs_check, false, "parallelize query signature
 DEFINE_bool(sintr_blind_write_message, false, "send a blind write message to validating clients");
 DEFINE_bool(sintr_sort_writeset, true, "sort write set in order to get endorsement matches");
 DEFINE_bool(sintr_profile_one_client_load, false, "profiling with only one client load (other clients are validating only)");
+DEFINE_uint32(sintr_max_client_sig_check_threads, 0, "maximum number of parallel client threads for signature checks");
 
 ///////////////////////////////////////////////////////////
 
@@ -1657,7 +1658,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_hash_endorsements,
         FLAGS_sintr_parallel_query_sigs_check,
         FLAGS_sintr_blind_write_message,
-        FLAGS_sintr_sort_writeset
+        FLAGS_sintr_sort_writeset,
+        FLAGS_sintr_max_client_sig_check_threads
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
