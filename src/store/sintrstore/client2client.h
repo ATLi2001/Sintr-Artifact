@@ -145,8 +145,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   };
 
   // for sending/receiving messages from other clients
-  struct Client2ClientMessageExecutor {
-    Client2ClientMessageExecutor(std::function<void*(void)> f) : f(std::move(f)) {}
+  struct Client2ClientExecutor {
+    Client2ClientExecutor(std::function<void*(void)> f) : f(std::move(f)) {}
     std::function<void*(void)> f;
   };
 
@@ -199,8 +199,10 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     AsyncQuerySigCheck(uint64_t resultQuorum) : resultQuorum(resultQuorum), num_check_passed(0), num_finished(0) {} 
 
     const uint64_t resultQuorum;
-    std::atomic<uint64_t> num_check_passed;
-    std::atomic<uint64_t> num_finished;
+    std::mutex mtx;
+    uint64_t num_check_passed;
+    uint64_t num_finished;
+    bool called_val_client = false;
   };
 
   void SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
@@ -259,7 +261,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
 
   void ValidationThreadFunction();
-  void Client2ClientMessageThreadFunction(tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> &c2cQueue);
+  void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
 
   bool ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data);
   // create an hmac from msg and place into signature
@@ -311,11 +313,15 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // separate thread for message sending, stays sequential
   std::thread *c2cSendThread;
   // concurrent queue of messages to be sent
-  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cSendQueue;
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cSendQueue;
   // separate thread for message receiving, stays sequential
   std::thread *c2cReceiveThread;
   // concurrent queue of messages to be received
-  tbb::concurrent_bounded_queue<Client2ClientMessageExecutor *> c2cReceiveQueue;
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cReceiveQueue;
+
+  // for parallel signature checks
+  std::vector<std::thread *> parallelSigCheckThreads;
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> parallelSigCheckQueue;
 
   // for hmacs
   std::unordered_map<uint64_t, std::string> sessionKeys;

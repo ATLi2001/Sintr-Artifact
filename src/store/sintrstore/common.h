@@ -870,13 +870,14 @@ typedef struct SintrParameters {
   const bool parallelQuerySigsCheck; // parallel query signature check on forwarded query results
   const bool blindWriteMessage; // send a blind write message to validating clients
   const bool sortWriteset; // sort write set in order to get endorsement matches
+  const uint32_t maxClientSigCheckThreads; // maximum number of parallel client signature check threads
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
     std::string policyConfigPath, uint32_t readIncludePolicy, CLIENT_VALIDATION_HEURISTIC clientValidationHeuristic,
     bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
-    bool blindWriteMessage, bool sortWriteset) :
+    bool blindWriteMessage, bool sortWriteset, uint32_t maxClientSigCheckThreads) :
     maxValThreads(maxValThreads), 
     signFwdReadResults(signFwdReadResults), 
     signFinishValidation(signFinishValidation),
@@ -896,11 +897,18 @@ typedef struct SintrParameters {
     hashEndorsements(hashEndorsements),
     parallelQuerySigsCheck(parallelQuerySigsCheck),
     blindWriteMessage(blindWriteMessage),
-    sortWriteset(sortWriteset) {
+    sortWriteset(sortWriteset),
+    maxClientSigCheckThreads(maxClientSigCheckThreads) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message
         UW_ASSERT(sortWriteset || blindWriteMessage);
+
+        if (parallelEndorsementCheck || parallelQuerySigsCheck) {
+            if (maxClientSigCheckThreads == 0) {
+                Warning("Parallel endorsement check or query signature check is enabled, but maxClientSigCheckThreads is set to 0.");
+            }
+        }
     }
 
 } SintrParameters;
