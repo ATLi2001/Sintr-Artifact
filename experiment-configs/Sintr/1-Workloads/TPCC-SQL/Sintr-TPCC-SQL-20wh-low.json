@@ -29,6 +29,7 @@
   "benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",
 
   "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
+  "_NOTE: 75 for 20wh + gdb": false,
   "server_load_time": 47,
 
   "_TPCC_SQL_ARGS_": 0,
@@ -72,7 +73,7 @@
       "merkle_branch_factor": 2,
 
       "signature_type": 4,
-      "sig_batch": 4,
+      "sig_batch": 1,
       "sig_batch_timeout": 2,
       "key_path": "/usr/local/etc/indicus-keys/donna",
       "shared_mem_batch": false,
@@ -174,7 +175,7 @@
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
 
-  "client_total": [[24]],
+  "client_total": [[6]],
   "client_processes_per_client_node": [[4]],
   "client_threads_per_process": [[1]],
 
@@ -183,15 +184,15 @@
   "pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
   "pin_client_processes": [0, 2, 4, 6],
   "client_debug_output": false,
-  "_client_debug_output": "store/sintrstore/validation_client.cc,store/sintrstore/client2client.cc,store/sintrstore/endorsement_client.cc",
+  "_client_debug_output": "store/sintrstore/client.cc",
   "server_debug_output": false,
   "_server_debug_output": "store/sintrstore/server.cc",
   "server_debug_stats": false,
   "client_debug_stats": false,
 
-  "client_experiment_length": 60,
-  "client_ramp_down": 15,
-  "client_ramp_up": 15,
+  "client_experiment_length": 30,
+  "client_ramp_down": 5,
+  "client_ramp_up": 5,
 
   "default_remote_shell": "bash",
 
