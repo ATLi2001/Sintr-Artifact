@@ -836,13 +836,13 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
       return (void*) true;
     };
 
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
     if (params.sintr_params.parallelEndorsementCheck) {
       // fully parallelize the endorsement check so that each one can be handled by a worker thread
-      transport->DispatchTP_noCB(std::move(f));
+      parallelSigCheckQueue.push(executor);
     }
     else {
       // only moves the function to be off the main client thread, but still sequential on client2client message thread
-      Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
       c2cReceiveQueue.push(executor);
     }
   }
