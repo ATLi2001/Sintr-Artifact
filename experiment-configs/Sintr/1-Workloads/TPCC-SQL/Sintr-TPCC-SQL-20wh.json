@@ -165,7 +165,8 @@
     "sintr_hash_endorsements": true,
     "sintr_use_occ_for_policies": true,
     "sintr_blind_write_message": false,
-    "sintr_sort_writeset": true
+    "sintr_sort_writeset": true,
+    "sintr_max_client_sig_check_threads": 0
   },
 
   "experiment_name": "sintr",
