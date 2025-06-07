@@ -191,6 +191,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_profile_one_client_load=%s' % str(config['sintr_protocol_settings']['sintr_profile_one_client_load']).lower()
             if 'sintr_max_client_sig_check_threads' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_max_client_sig_check_threads %d' % config['sintr_protocol_settings']['sintr_max_client_sig_check_threads']
+            if 'sintr_hide_timestamps' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_hide_timestamps=%s' % str(config['sintr_protocol_settings']['sintr_hide_timestamps']).lower()
 
         if config['replication_protocol'] == 'pequin':
             ##Sync protocol settings
@@ -603,6 +605,8 @@ class IndicusCodebase(ExperimentCodebase):
                 replica_command += ' --sintr_use_occ_for_policies=%s' % str(config['sintr_protocol_settings']['sintr_use_occ_for_policies']).lower()
             if 'sintr_hash_endorsements' in config['sintr_protocol_settings']:
                 replica_command += ' --sintr_hash_endorsements=%s' % str(config['sintr_protocol_settings']['sintr_hash_endorsements']).lower()
+            if 'sintr_hide_timestamps' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_hide_timestamps=%s' % str(config['sintr_protocol_settings']['sintr_hide_timestamps']).lower()
 
         #if 'rw_or_retwis' in config:
         #    replica_command += ' --rw_or_retwis=%s' % str(config['rw_or_retwis']).lower()

@@ -899,8 +899,12 @@ void Server::SendQueryReply(QueryMetaData *query_md){
     result->set_query_seq_num(query_md->query_seq_num); 
     result->set_client_id(query_md->client_id); 
     result->set_replica_id(id);
-    result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts));
-    
+    if(params.sintr_params.hideTimestamps) {
+        result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts,
+            TimestampDigest(query_md->ts.getID(), query_md->ts.getTimestamp())));
+    } else {
+        result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts, ""));
+    }    
     queryResultReply->set_req_id(query_md->req_id); //this implicitly captures retry-version
 
     //5) (Sign and) send reply 

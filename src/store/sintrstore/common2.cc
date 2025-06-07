@@ -32,7 +32,7 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
     const std::string &key, const std::string &value, const std::string &table_name, sql::QueryResultProtoWrapper *query_result,
     SQLTransformer *sql_interpreter,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier)
+    KeyManager *keyManager, Verifier *verifier, bool hashedTS)
 {
 
 
@@ -86,7 +86,7 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
   UW_ASSERT(query_result->size() == 1); //Point read should have just one row.
 
   //Check that txn in proof matches reported timestamp
-  if (Timestamp(proof.txn().timestamp()) != timestamp) {
+  if (!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
       proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(), timestamp.getTimestamp(), timestamp.getID());
     return false;

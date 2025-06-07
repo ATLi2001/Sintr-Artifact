@@ -342,8 +342,13 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
 
   Debug("Query[%lu:%lu] (client:tx-seq). TS: [%lu:%lu]: %s.", 
       client_id, txn_client_seq_num, txn->timestamp().timestamp(), txn->timestamp().id(), query.c_str());
-
-  PendingValidationQuery *pendingQuery = new PendingValidationQuery(Timestamp(txn->timestamp()), query, qcb, cache_result);
+  
+  PendingValidationQuery *pendingQuery;
+  if(params.sintr_params.hideTimestamps) {
+    pendingQuery = new PendingValidationQuery(Timestamp(), query, qcb, cache_result, txn->hashed_timestamp());
+  } else {
+    pendingQuery = new PendingValidationQuery(Timestamp(txn->timestamp()), query, qcb, cache_result, "");
+  } 
   // map query gen ID to query command
   a->second->queryIDToCmd[pendingQuery->query_gen_id] = query;
 
@@ -599,7 +604,8 @@ void ValidationClient::SetThreadValSQLInterpreter() {
   }
 }
 
-void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num, const Timestamp &ts, bool isPolicyTransaction) {
+void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num, const Timestamp &ts, bool isPolicyTransaction,
+    const std::string &hashed_ts) {
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
   allValTxnStatesMap::accessor a;
   const bool isNewKey = allValTxnStates.insert(a, txn_id);
@@ -613,7 +619,10 @@ void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_clie
   else {
     txn = a->second->txn;
   }
-  ts.serialize(txn->mutable_timestamp());
+  if(params.sintr_params.hideTimestamps) {
+    txn->set_hashed_timestamp(hashed_ts);
+  }
+  ts.serialize(txn->mutable_timestamp()); // sets to default ts if hide timestamps is true
   if(isPolicyTransaction) {
     txn->set_policy_type(proto::Transaction::POLICY_ID_POLICY);
   }
@@ -634,7 +643,13 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     const proto::Dependency &policyDep, bool hasPolicyDep) {
   std::string curr_key = fwdReadResult.key();
   std::string curr_value = fwdReadResult.value();
-  Timestamp curr_ts = Timestamp(fwdReadResult.timestamp());
+  Timestamp curr_ts;
+  std::string hashed_ts = "";
+  if(!params.sintr_params.hideTimestamps) {
+    curr_ts = Timestamp(fwdReadResult.timestamp());
+  } else {
+    hashed_ts = fwdReadResult.hashed_timestamp();
+  }
   Debug(
     "ProcessForwardReadResult from client id %lu, seq num %lu for key %s", 
     txn_client_id,
@@ -644,10 +659,10 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
 
   // lambda for editing txn state
   auto editTxnStateCB = [
-    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset, &policyDep, hasPolicyDep
+    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset, &policyDep, hasPolicyDep, &hashed_ts
   ](AllValidationTxnState *allValTxnState) {
     if (addReadset) {
-      AddReadset(allValTxnState, curr_key, curr_value, curr_ts);
+      AddReadset(allValTxnState, curr_key, curr_value, curr_ts, true, false, hashed_ts);
     }
     if (hasDep) {
       AddDep(allValTxnState, dep);
@@ -726,7 +741,13 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
 
   std::string curr_key = fwdReadResult.key();
   std::string curr_value = fwdReadResult.value();
-  Timestamp curr_ts = Timestamp(fwdReadResult.timestamp());
+  std::string hashed_ts = "";
+  Timestamp curr_ts;
+  if(!params.sintr_params.hideTimestamps) {
+    curr_ts = Timestamp(fwdReadResult.timestamp());
+  } else {
+    hashed_ts = fwdReadResult.hashed_timestamp();
+  }
   Debug(
     "ProcessForwardPointQueryResult from client id %lu, seq num %lu for key %s", 
     txn_client_id,
@@ -736,11 +757,11 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
 
   // lambda for editing txn state
   auto editTxnStateCB = [
-    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset
+    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset, &hashed_ts
   ](AllValidationTxnState *allValTxnState, const std::string &query_cmd) {
     if (addReadset) {
       bool cache_point = !curr_value.empty() && query_cmd.find("SELECT *") != std::string::npos;
-      AddReadset(allValTxnState, curr_key, curr_value, curr_ts, false, cache_point);
+      AddReadset(allValTxnState, curr_key, curr_value, curr_ts, false, cache_point, hashed_ts);
     }
     if (hasDep) {
       AddDep(allValTxnState, dep);
@@ -1000,12 +1021,16 @@ bool ValidationClient::BufferGet(const AllValidationTxnState *allValTxnState, co
 
 void ValidationClient::AddReadset(AllValidationTxnState *allValTxnState,
     const std::string &key, const std::string &value, const Timestamp &ts,
-    bool is_get, bool cache_point) {
+    bool is_get, bool cache_point, std::string hashedTS) {
   // add to readset
   proto::Transaction *txn = allValTxnState->txn;
   ReadMessage *read = txn->add_read_set();
   read->set_key(key);
-  ts.serialize(read->mutable_readtime());
+  if(!params.sintr_params.hideTimestamps) {
+    ts.serialize(read->mutable_readtime());
+  } else {
+    read->set_hashed_readtime(hashedTS);
+  }
 
   if (is_get) {
     // add to readValues for future BufferGets

@@ -994,7 +994,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     proto::Transaction tempTxn = *txn;
     // remove the hack added in server.cc to compare txn digests
     tempTxn.clear_txndigest();
-    std::string oldTxnDigest = TransactionDigest(tempTxn, params.hashDigest);
+    std::string oldTxnDigest = TransactionDigest(tempTxn, params.hashDigest, params.sintr_params.hideTimestamps);
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck) {
         if (!EndorsementCheck(oldTxnDigest, txn)) {

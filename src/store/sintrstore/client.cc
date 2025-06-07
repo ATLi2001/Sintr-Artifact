@@ -966,6 +966,10 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       if(params.query_params.mergeActiveAtClient){
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
+          if(params.sintr_params.hideTimestamps) {
+            std::string hashedTS = TimestampDigest(read.readtime().id(), read.readtime().timestamp());
+            read.set_hashed_readtime(hashedTS);
+          }
           ReadMessage* add_read = txn.add_read_set();
           *add_read = std::move(read);
         }
@@ -983,6 +987,11 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
          for(auto &pred: *query_read_set->mutable_read_predicates()){
             if(!txn.read_predicates().empty() && pred.pred_instances_size() == 1){ //This is just a simple check that sees if there are 2 consecutive preds (that only have 1 instantiation) with the same pred_instance
                 if(pred.pred_instances()[0] == txn.read_predicates()[txn.read_predicates_size()-1].pred_instances()[0]) continue;
+            }
+            if(params.sintr_params.hideTimestamps) {
+              // hide table versions of predicates
+              std::string hashedTS = TimestampDigest(pred.table_version().id(), pred.table_version().timestamp());
+              pred.set_hashed_table_version(hashedTS);
             }
             proto::ReadPredicate *add_pred = txn.add_read_predicates();
             *add_pred = std::move(pred);
@@ -1378,7 +1387,11 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     if (params.sintr_params.debugEndorseCheck) {
       endorseClient->DebugSetExpectedTxnOutput(txn);
     }
-    endorseClient->SetExpectedTxnOutput(digest);
+    if(params.sintr_params.hideTimestamps) {
+      endorseClient->SetExpectedTxnOutput(TransactionDigest(txn, params.hashDigest, true));
+    } else {
+      endorseClient->SetExpectedTxnOutput(digest);
+    }
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;

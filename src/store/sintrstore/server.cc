@@ -1111,7 +1111,11 @@ void Server::HandleRead(const TransportAddress &remote,
         msg.timestamp().id(), msg.req_id(), tsVal.second.val.length(), tsVal.first.getTimestamp(),
         tsVal.first.getID());
     readReply->mutable_write()->set_committed_value(tsVal.second.val);
-    tsVal.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
+    if(params.sintr_params.hideTimestamps) {
+      readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsVal.first.getID(), tsVal.first.getTimestamp()));
+    } else {
+      tsVal.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
+    }
     if (params.validateProofs) {
       *readReply->mutable_proof() = *tsVal.second.proof;
     }
@@ -1121,7 +1125,11 @@ void Server::HandleRead(const TransportAddress &remote,
       std::string policyId = policyIdFunction(msg.key(), tsVal.second.val);
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       GetPolicy(policyId, ts, tsPolicy);
-      tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+      if(params.sintr_params.hideTimestamps) {
+        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+      } else {
+        tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+      }
       readReply->mutable_write()->mutable_committed_policy()->set_policy_id(policyId);
       tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_committed_policy()->mutable_policy());
       if (params.validateProofs) {
@@ -1203,7 +1211,11 @@ void Server::HandleRead(const TransportAddress &remote,
             //std::cerr << "Dependency depth: " << (DependencyDepth(mostRecent)) << std::endl;
             if (params.maxDepDepth == -1 || DependencyDepth(mostRecent) <= params.maxDepDepth) {
               readReply->mutable_write()->set_prepared_value(preparedValue);
-              *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
+              if(params.sintr_params.hideTimestamps) {
+                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecent->timestamp().id(), mostRecent->timestamp().timestamp()));
+              } else {
+                *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
+              }
               std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest);
               if(params.sintr_params.hashEndorsements) {
                 tempDigest = EndorsedTxnDigest(tempDigest, *mostRecent, params.hashDigest);
@@ -1230,7 +1242,11 @@ void Server::HandleRead(const TransportAddress &remote,
           UW_ASSERT(!params.sintr_params.useOCCForPolicies);
           Debug("Prepared policy id write with most recent ts %lu.%lu.",
                   tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-          tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
+          if(params.sintr_params.hideTimestamps) {
+            readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+          } else {
+            tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
+          }
           readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(preparedPolicyId);
           tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
           std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest);
@@ -1240,7 +1256,11 @@ void Server::HandleRead(const TransportAddress &remote,
           *readReply->mutable_write()->mutable_prepared_policy_txn_digest() = tempDigest;
         } else {
           // using a committed policy for a prepared write
-          tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+          if(params.sintr_params.hideTimestamps) {
+            readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+          } else {
+            tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+          }
           readReply->mutable_write()->mutable_committed_policy()->set_policy_id(preparedPolicyId);
           tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_committed_policy()->mutable_policy());
           if (params.validateProofs) {
@@ -1272,10 +1292,15 @@ void Server::HandleRead(const TransportAddress &remote,
       // make sure policy value exists
       UW_ASSERT(preparedPolicyVal != "");
       readReply->mutable_write()->set_prepared_value(preparedPolicyVal);
-      *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
+      if(params.sintr_params.hideTimestamps) {
+        readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+      } else {
+        *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
+        tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
+      }
       Debug("Prepared policy id write with most recent ts %lu.%lu.",
               tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-      tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
       readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(msg.key());
       tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
       std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest);
@@ -1295,9 +1320,14 @@ void Server::HandleRead(const TransportAddress &remote,
       // make sure policy value exists
       UW_ASSERT(policyVal != "");
       readReply->mutable_write()->set_committed_value(policyVal);
-      tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
       // using a committed policy for a prepared write
-      tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+      if(params.sintr_params.hideTimestamps) {
+        readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+      } else {
+        tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
+        tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
+      }
       readReply->mutable_write()->mutable_committed_policy()->set_policy_id(msg.key());
       tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_committed_policy()->mutable_policy());
       if (params.validateProofs) {
@@ -2655,6 +2685,10 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Timestamp ts(txn->timestamp());
+  if(params.sintr_params.hideTimestamps) {
+    txn->set_hashed_timestamp(TimestampDigest(ts.getID(), ts.getTimestamp()));
+    txn->clear_timestamp();
+  }
 
   if (params.validateProofs) {
     // CAUTION: we no longer own txn pointer (which we allocated during Phase1  and stored in ongoing)

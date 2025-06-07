@@ -480,6 +480,8 @@ DEFINE_bool(sintr_check_policy_leak, true, "check for policy information leak (r
 DEFINE_bool(sintr_parallel_endorsement_check, false, "parallelize endorsement check");
 DEFINE_bool(sintr_use_occ_for_policies, false, "Use OCC instead of MVTSO for policies");
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
+DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
+
 /**
  * Experiment settings.
  */
@@ -845,7 +847,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_check_policy_leak, false, 0, false, false,
         FLAGS_sintr_parallel_endorsement_check,
         FLAGS_sintr_use_occ_for_policies,
-        FLAGS_sintr_hash_endorsements, false, false, true, 1
+        FLAGS_sintr_hash_endorsements, false, false, true, FLAGS_sintr_hide_timestamps, 1
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

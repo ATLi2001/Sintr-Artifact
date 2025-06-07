@@ -864,7 +864,7 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
      };
     asyncValidateTransactionWrite(reply->proof(), &committedTxnDigest, req->key, write->committed_value(),
     write->committed_timestamp(), config, params.signedMessages, keyManager, verifier, mcb, transport,
-    true);
+    true, params.sintr_params.hideTimestamps);
     return;
   }
 }
@@ -1068,7 +1068,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       }
       if (!ValidateTransactionWrite(reply.proof(), &committedTxnDigest,
           req->key, write->committed_value(), write->committed_timestamp(),
-          config, params.signedMessages, keyManager, verifier)) {
+          config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
         Debug("[group %i] Failed to validate committed value for read %lu.",group, reply.req_id());
         // invalid replies can be treated as if we never received a reply from a crashed replica
         return;
@@ -1115,7 +1115,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         write->committed_policy().policy().SerializeToString(&policyObjectStr);
         if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
             write->committed_policy().policy_id(), policyObjectStr, write->committed_policy_timestamp(),
-            config, params.signedMessages, keyManager, verifier)) {
+            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
           Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
           return;
         }

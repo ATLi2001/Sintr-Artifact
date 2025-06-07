@@ -154,8 +154,12 @@ class Client : public ::Client {
       *queryMsg.mutable_query_cmd() = std::move(query_cmd);
       *queryMsg.mutable_timestamp() = client->txn.timestamp();
       queryMsg.set_retry_version(0);
-
-      query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp());
+      if(client->params.sintr_params.hideTimestamps) {
+        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
+          TimestampDigest(client->txn.timestamp().id(), client->txn.timestamp().timestamp()));
+      } else {
+        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "");
+      }
     }
     ~PendingQuery(){
        ClearReplySets();

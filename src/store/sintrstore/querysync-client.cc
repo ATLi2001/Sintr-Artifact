@@ -1225,7 +1225,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
         bool valid = false; 
         if(read_type == read_t::GET){
-            valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), write->committed_timestamp(), config, params.signedMessages, keyManager, verifier);
+            valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), write->committed_timestamp(), config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps);
         } 
         else { //if read type POINT 
             //std::cerr << "WriteValue: " << write->committed_value() << std::endl;   
@@ -1276,7 +1276,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                 write->committed_policy().policy().SerializeToString(&policyObjectStr);
                 if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
                     write->committed_policy().policy_id(), policyObjectStr, write->committed_policy_timestamp(),
-                    config, params.signedMessages, keyManager, verifier)) {
+                    config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
                     Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
                     return false;
                 }
@@ -1465,7 +1465,7 @@ bool ShardClient::ValidateTransactionTableWrite(const proto::CommittedProof &pro
     const std::string &key, const std::string &value, const std::string &table_name, sql::QueryResultProtoWrapper *query_result)
 {
     return ::sintrstore::ValidateTransactionTableWrite(proof, txnDigest, timestamp, key, value, table_name, query_result,
-        sql_interpreter, config, params.signedMessages, keyManager, verifier);
+        sql_interpreter, config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps);
 
 /*
     Debug("[group %i] Trying to validate committed TableWrite.", group);
