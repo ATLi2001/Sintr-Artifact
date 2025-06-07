@@ -1,3 +1,4 @@
+#!/bin/bash
 
 CLIENTS=3
 F=0
