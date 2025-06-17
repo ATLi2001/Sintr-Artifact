@@ -191,6 +191,10 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_profile_one_client_load=%s' % str(config['sintr_protocol_settings']['sintr_profile_one_client_load']).lower()
             if 'sintr_max_client_sig_check_threads' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_max_client_sig_check_threads %d' % config['sintr_protocol_settings']['sintr_max_client_sig_check_threads']
+            if 'sintr_val_client_selector' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_val_client_selector %s' % config['sintr_protocol_settings']['sintr_val_client_selector']
+            if 'sintr_val_client_selector_zipf' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_val_client_selector_zipf %f' % config['sintr_protocol_settings']['sintr_val_client_selector_zipf']
 
         if config['replication_protocol'] == 'pequin':
             ##Sync protocol settings
