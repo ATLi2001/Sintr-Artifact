@@ -43,6 +43,9 @@
 #include "store/common/frontend/sync_client.h"
 #include "store/common/frontend/async_client.h"
 #include "store/common/frontend/async_adapter_client.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/uniform_client_selector.h"
+#include "store/common/policy/zipf_client_selector.h"
 #include "store/strongstore/client.h"
 #include "store/weakstore/client.h"
 #include "store/tapirstore/client.h"
@@ -516,6 +519,36 @@ DEFINE_bool(sintr_sort_writeset, true, "sort write set in order to get endorseme
 DEFINE_bool(sintr_profile_one_client_load, false, "profiling with only one client load (other clients are validating only)");
 DEFINE_uint32(sintr_max_client_sig_check_threads, 0, "maximum number of parallel client threads for signature checks");
 
+// if sintr client has choice of which clients to contact, define the selection heuristic
+enum val_client_selector_t {
+  VAL_CLIENT_SELECTOR_UNKNOWN,
+  VAL_CLIENT_SELECTOR_RING, // choose validation client with next largest client id
+  VAL_CLIENT_SELECTOR_UNIFORM, // choose validation client uniformly at random
+  VAL_CLIENT_SELECTOR_ZIPF // choose validation client according to a zipf distribution
+};
+const std::string sintr_val_client_selector_args[] = {
+	"ring",
+  "uniform",
+  "zipf"
+};
+const val_client_selector_t sintr_val_client_selector[] {
+  VAL_CLIENT_SELECTOR_RING,
+  VAL_CLIENT_SELECTOR_UNIFORM,
+  VAL_CLIENT_SELECTOR_ZIPF
+};
+static bool ValidateSintrValClientSelector(const char* flagname,
+    const std::string &value) {
+  int n = sizeof(sintr_val_client_selector_args);
+  for (int i = 0; i < n; ++i) {
+    if (value == sintr_val_client_selector_args[i]) return true;
+  }
+  std::cerr << "Invalid value for --" << flagname << ": " << value << std::endl;
+  return false;
+}
+DEFINE_string(sintr_val_client_selector, sintr_val_client_selector_args[0], "if sintr client has choice of which clients to contact, define the selection heuristic");
+DEFINE_validator(sintr_val_client_selector, &ValidateSintrValClientSelector);
+DEFINE_double(sintr_val_client_selector_zipf, 0.5, "zipf parameter for sintr client validation client selector");
+
 ///////////////////////////////////////////////////////////
 
 DEFINE_bool(debug_stats, false, "record stats related to debugging");
@@ -884,6 +917,7 @@ KeyManager *keyManager;
 Partitioner *part;
 KeySelector *keySelector;
 QuerySelector *querySelector;
+ClientSelector *sintrValClientSelector = nullptr;
 
 void Cleanup(int signal);
 void FlushStats();
@@ -1083,6 +1117,20 @@ int main(int argc, char **argv) {
     }
   }
 
+  // parse sintr validation client selector
+  val_client_selector_t  sintr_val_client_selector_type = VAL_CLIENT_SELECTOR_UNKNOWN;
+  int numSintrValClientSelectors = sizeof(sintr_val_client_selector_args);
+  for (int i = 0; i < numSintrValClientSelectors; ++i) {
+    if (FLAGS_sintr_val_client_selector == sintr_val_client_selector_args[i]) {
+      sintr_val_client_selector_type = sintr_val_client_selector[i];
+      break;
+    }
+  }
+  if (mode == PROTO_SINTR && sintr_val_client_selector_type == VAL_CLIENT_SELECTOR_UNKNOWN) {
+    std::cerr << "Unknown sintr validation client selector." << std::endl;
+    return 1;
+  }
+
 
 //////////////////////////
 
@@ -1140,7 +1188,9 @@ int main(int argc, char **argv) {
 
   Debug("transport protocol used: %d",trans);
 
-  if(FLAGS_zipf_coefficient == 1.0) Panic("Use a Zipf coefficient != 1.0. E.g. 0.99 or 1.01. 1.0 is not supported");
+  if(FLAGS_zipf_coefficient == 1.0 || FLAGS_sintr_val_client_selector_zipf == 1.0) {
+    Panic("Use a Zipf coefficient != 1.0. E.g. 0.99 or 1.01. 1.0 is not supported");
+  }
 
   switch (keySelectionMode) {
     case KEYS_UNIFORM:
@@ -1384,6 +1434,19 @@ int main(int argc, char **argv) {
       case PROTO_TAPIR:
            break;
       case PROTO_SINTR:
+        switch(sintr_val_client_selector_type) {
+          case VAL_CLIENT_SELECTOR_RING:
+            sintrValClientSelector = nullptr;
+            break;
+          case VAL_CLIENT_SELECTOR_UNIFORM:
+            sintrValClientSelector = new UniformClientSelector(client_total);
+            break;
+          case VAL_CLIENT_SELECTOR_ZIPF:
+            sintrValClientSelector = new ZipfClientSelector(client_total, FLAGS_sintr_val_client_selector_zipf);
+            break;
+          default:
+            NOT_REACHABLE();
+        }
       case PROTO_PEQUIN:
          switch (query_sync_quorum) {
           case QUERY_SYNC_QUROUM_ONE:
@@ -1725,6 +1788,7 @@ int main(int argc, char **argv) {
                                           FLAGS_sql_bench,
 																					TrueTime(FLAGS_clock_skew, FLAGS_clock_error),
                                           clients_config,
+                                          sintrValClientSelector,
                                           keys); // for benchmarks that need keys, need to give the validating client access
         break;
     }
@@ -2236,6 +2300,9 @@ void Cleanup(int signal) {
   delete part;
 
   if(FLAGS_sql_bench && querySelector != nullptr) delete querySelector;
+  if (sintrValClientSelector != nullptr) {
+    delete sintrValClientSelector;
+  }
   Notice("Finished Cleanup. Exiting");
   //exit(0); Allow segfault for duplicate config deletion to mask printing endless ASAN leaks that we can't fix...
 }

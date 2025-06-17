@@ -51,6 +51,7 @@
 #include "store/common/policy/policy-proto.pb.h"
 #include "store/common/policy/policy_parse_client.h"
 #include "store/common/policy/policy_function.h"
+#include "store/common/policy/client_selector.h"
 #include <sys/time.h>
 #include "store/common/stats.h"
 #include <unistd.h>
@@ -93,6 +94,7 @@ class Client : public ::Client {
       bool sql_bench = false,
       TrueTime timeserver = TrueTime(0,0),
       transport::Configuration *clients_config = nullptr,
+      ClientSelector *valClientSelector = nullptr,
       const std::vector<std::string> &keys = std::vector<std::string>());
   virtual ~Client();
 
@@ -415,6 +417,10 @@ class Client : public ::Client {
   // for keySelector based benchmark validation, need copy of keys for validator as well
   const std::vector<std::string> &keys;
 
+  // if policy allows for choosing a validation client
+  // if valClientSelector is nullptr, then the client will use the default ring heuristic
+  ClientSelector *valClientSelector;
+  std::mt19937 rand;
 
   // true after client waits params.injectFailure.timeMs
   bool failureEnabled;
