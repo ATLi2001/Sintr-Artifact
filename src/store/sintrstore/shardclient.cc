@@ -214,8 +214,7 @@ static uint64_t commit_start;
 
 //////////// Commit Protocol 
 void ShardClient::Phase1(uint64_t id, const proto::Transaction &transaction, const std::string &txnDigest,
-  phase1_callback pcb, phase1_timeout_callback ptcb, relayP1_callback rcb, finishConflictCB fcb, uint32_t timeout,
-  const proto::SignedMessages &endorsements) {
+  phase1_callback pcb, phase1_timeout_callback ptcb, relayP1_callback rcb, finishConflictCB fcb, uint32_t timeout) {
   uint64_t reqId = lastReqId++;
   Debug("[group %i] Sending PHASE1[%s] for id[%lu], reqId[%lu]", group, BytesToHex(txnDigest, 16).c_str(), id, reqId);
   client_seq_num_mapping[id].pendingP1_id = reqId;

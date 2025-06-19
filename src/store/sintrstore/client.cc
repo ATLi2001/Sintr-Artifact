@@ -1451,10 +1451,12 @@ void Client::Phase1(PendingRequest *req) {
   }
   */
 
-  // add endorsement to txn
-  *(req->txn.mutable_endorsements()) = protoEndorsements;
-  // this does not modify transaction itself, so need to modify below
-  *txn.mutable_endorsements() = protoEndorsements;
+  if (protoEndorsements.sig_msgs_size() > 0) {
+    // add endorsement to txn
+    *(req->txn.mutable_endorsements()) = protoEndorsements;
+    // this does not modify transaction itself, so need to modify below
+    *txn.mutable_endorsements() = protoEndorsements;
+  }
   if(params.sintr_params.hashEndorsements) {
     req->txnDigest = EndorsedTxnDigest(req->txnDigest, txn, params.hashDigest);
   }
@@ -1473,8 +1475,7 @@ void Client::Phase1(PendingRequest *req) {
           std::placeholders::_1),
         std::bind(&Client::RelayP1callback, this, req->id, std::placeholders::_1, std::placeholders::_2),
         std::bind(&Client::FinishConflict, this, req->id, std::placeholders::_1, std::placeholders::_2),
-        req->timeout,
-        protoEndorsements);
+        req->timeout);
     req->outstandingPhase1s++;
   }
   //schedule timeout for when we allow starting FB P1.

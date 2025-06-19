@@ -157,8 +157,7 @@ class ShardClient : public TransportReceiver, public PingInitiator, public PingT
 
  //////////// Commit Protocol
   virtual void Phase1(uint64_t id, const proto::Transaction &transaction, const std::string &txnDigest,
-    phase1_callback pcb, phase1_timeout_callback ptcb, relayP1_callback rcb, finishConflictCB fcb, uint32_t timeout,
-    const proto::SignedMessages &endorsements);
+    phase1_callback pcb, phase1_timeout_callback ptcb, relayP1_callback rcb, finishConflictCB fcb, uint32_t timeout);
   virtual void StopP1(uint64_t client_seq_num);
   virtual void Phase2(uint64_t id, const proto::Transaction &transaction,
       const std::string &txnDigest, proto::CommitDecision decision,
