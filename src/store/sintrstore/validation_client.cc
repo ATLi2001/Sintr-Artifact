@@ -88,6 +88,8 @@ void ValidationClient::Get(const std::string &key, get_callback gcb,
   GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
+  Debug("Validation GET[%lu:%lu] key %s", txn_client_id, txn_client_seq_num, BytesToHex(key,16).c_str());
+
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, txn_id)) {
     // Get should always happen after SetTxnTimestamp, which inserts at txn_id
@@ -178,6 +180,8 @@ void ValidationClient::Put(const std::string &key, const std::string &value,
   uint64_t txn_client_id, txn_client_seq_num;
   GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+
+  Debug("Validation PUT[%lu:%lu] key %s value %s", txn_client_id, txn_client_seq_num, BytesToHex(key,16).c_str(), BytesToHex(value,16).c_str());
 
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, txn_id)) {
@@ -514,6 +518,9 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     for(auto const &i : a->second->pendingForwardedQuery) {
       Debug("extra fwd query ID: %s", BytesToHex(i.first, 16).c_str());
     }
+    for(auto const &i : a->second->pendingForwardedRead) {
+      Debug("extra fwd read KEY: %s", BytesToHex(i.first, 16).c_str());
+    }
     Panic("Transaction includes more values in readset than necessary, extra forwarded point queries: %d, forwarded queries: %d, forwarded reads: %d",
       a->second->pendingForwardedPointQuery.size(),
       a->second->pendingForwardedQuery.size(),
@@ -677,7 +684,9 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     txn->set_client_seq_num(txn_client_seq_num);
     a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num, txn);
     editTxnStateCB(a->second);
-    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
+    if(addReadset) {
+      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
+    }
     return;
   }
 
@@ -693,7 +702,9 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
       txn_client_seq_num,
       BytesToHex(curr_key, 16).c_str()
     );
-    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
+    if(addReadset) {
+      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
+    }
     editTxnStateCB(a->second);
     return;
   }
