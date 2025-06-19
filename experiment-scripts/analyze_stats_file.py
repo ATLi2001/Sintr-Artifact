@@ -109,7 +109,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
         latency = client_groups["latency"].mean()
-        plt.plot(tput, latency, "-o", label=experiment_name)
+        plt.plot(tput, latency, "-o", label=experiment_name[0])
     plt.legend()
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
 
