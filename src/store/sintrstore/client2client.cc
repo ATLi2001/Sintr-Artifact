@@ -1239,6 +1239,10 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     valTxnDigest = signedMsg.data();
   }
   else {
+    // dummy signed message
+    signedMsg.set_process_id(peer_client_id);
+    signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
+    signedMsg.set_signature("");
     valTxnDigest = finishValTxnMsg.validation_txn_digest();
   }
 
