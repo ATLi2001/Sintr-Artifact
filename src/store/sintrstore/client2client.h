@@ -50,6 +50,7 @@
 #include "store/sintrstore/validation_parse_client.h"
 #include "store/sintrstore/endorsement_client.h"
 #include "store/common/policy/policy.h"
+#include "store/common/policy/client_selector.h"
 #include "store/sintrstore/sql_interpreter.h"
 
 #include <map>
@@ -69,6 +70,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool pingClients,
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
+      ClientSelector *valClientSelector, std::mt19937 &rand,
       const std::vector<std::string> &keys = std::vector<std::string>());
   virtual ~Client2Client();
 
@@ -289,6 +291,12 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   bool failureActive;
   // for keySelector based benchmark validation, need copy of keys for validator as well
   const std::vector<std::string> &keys;
+
+  ClientSelector *valClientSelector;
+  std::mt19937 &rand;
+  // order of validation clients to contacts
+  std::vector<uint64_t> valClientOrder;
+
   // current transaction sequence number (to send to others)
   uint64_t client_seq_num;
   // current set of transport ids begin validation message has been sent to

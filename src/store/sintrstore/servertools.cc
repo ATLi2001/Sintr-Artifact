@@ -1085,9 +1085,11 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
             result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
             endorsementCheckFail = true;
           }
-          Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
-          result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
-          *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
+          if(!endorsementCheckFail){
+            Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
+            result = new proto::ConcurrencyControl::Result(this->DoOCCCheck(reqId,
+            *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
+          }
 
           HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail);
 

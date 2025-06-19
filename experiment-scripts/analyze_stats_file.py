@@ -28,12 +28,38 @@ import os
 import argparse
 import matplotlib.pyplot as plt
 import time
+import shutil
 
 
+ORIGINAL_STATS_DIR = "experiment-results/original"
 RESULTS_DIR = "experiment-results/stats_json"
 OUTPUT_DIR = "experiment-results/analyzed"
 ANALYSIS_TYPES = ["latency_throughput"]
 
+
+# collect original stats.json files and places them into results_dir under unique names
+def collect_original_stats(original_stats_dir, results_dir):
+    for subdir in os.listdir(original_stats_dir):
+        for file in os.listdir(os.path.join(original_stats_dir, subdir)):
+            # read in config file
+            if file != "stats.json" and file.endswith(".json"):
+                with open(os.path.join(original_stats_dir, subdir, file), 'r') as f:
+                    config = json.load(f)
+
+                    if "analysis_name" in config:
+                        analysis_name = config["analysis_name"]
+                    else:
+                        protocol = config["client_protocol_mode"]
+                        benchmark = config["benchmark_name"]
+                        analysis_name = f"{protocol}-{benchmark}"
+                    num_clients = config["client_total"]
+                    # create a unique name for the stats file
+                    unique_name = f"{analysis_name}_{num_clients}_{subdir}.json"
+                    # copy the stats.json file to the results_dir with the unique name
+                    shutil.copyfile(
+                        os.path.join(original_stats_dir, subdir, "stats.json"),
+                        os.path.join(results_dir, unique_name)
+                    )
 
 # reads all stats.json files in the given directory and returns a dictionary of dictionaries.
 # each dictionary corresponds to a stats.json file.
@@ -54,14 +80,15 @@ def read_stats_files(results_dir):
 
 # converts a dictionary of stats dictionaries to a latency-throughput CSV file.
 def stats_to_lat_tput_csv(stats_dicts, output_dir, now_string):
-    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "tput", "latency"])
+    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
 
     for name, stat_json in stats_dicts.items():
-        experiment_name, num_clients = name.split("_")
+        experiment_name, num_clients, timestamp = name.split("_")
         num_clients = int(num_clients)
         out_df.loc[len(out_df)] = [
             experiment_name,
             num_clients,
+            timestamp,
             stat_json["run_stats"]["combined"]["tput"]["p50"],
             stat_json["run_stats"]["combined"]["mean"]["p50"]
         ]
@@ -78,8 +105,11 @@ def create_lat_tput_plots(df, output_dir, now_string):
     plt.ylabel("Latency (ms)")
     plt.grid(True)
 
-    for experiment_name, group in df.groupby("experiment_name"):
-        plt.plot(group["tput"], group["latency"], "-o", label=experiment_name)
+    for experiment_name, group in df.groupby(["experiment_name"]):
+        client_groups = group.groupby("num_clients")
+        tput = client_groups["tput"].mean()
+        latency = client_groups["latency"].mean()
+        plt.plot(tput, latency, "-o", label=experiment_name[0])
     plt.legend()
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
 
@@ -101,6 +131,13 @@ if __name__ == "__main__":
         help=f"Where to write the output files (default: {OUTPUT_DIR})"
     )
     parser.add_argument(
+        "-s", "--original_stats_dir",
+        default=ORIGINAL_STATS_DIR,
+        type=str,
+        required=False,
+        help=f"Where to look for original stats.json files (default: {ORIGINAL_STATS_DIR})"
+    )
+    parser.add_argument(
         "-t", "--analysis_type",
         default=ANALYSIS_TYPES[0],
         choices=ANALYSIS_TYPES,
@@ -113,6 +150,7 @@ if __name__ == "__main__":
 
     now_string = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
 
+    collect_original_stats(args.original_stats_dir, args.results_dir)
     stats_dicts = read_stats_files(args.results_dir)
     if args.analysis_type == ANALYSIS_TYPES[0]:
         lat_tput_df = stats_to_lat_tput_csv(stats_dicts, args.output_dir, now_string)

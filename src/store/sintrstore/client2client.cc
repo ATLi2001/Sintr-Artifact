@@ -47,13 +47,14 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool pingClients,
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
+      ClientSelector *valClientSelector, std::mt19937 &rand,
       const std::vector<std::string> &keys) :
       PingInitiator(this, transport, clients_config->n),
       client_id(client_id), transport(transport), config(config), clients_config(clients_config), 
       nshards(nshards), ngroups(ngroups),
       group(group), part(part), pingClients(pingClients), params(params),
       keyManager(keyManager), verifier(verifier), endorseClient(endorseClient), sql_interpreter(sql_interpreter),
-      keys(keys) {
+      keys(keys), valClientSelector(valClientSelector), rand(rand) {
   
   // separate verifier from main client instance
   clients_verifier = new BasicVerifier(transport);
@@ -264,6 +265,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   beginValSent.clear();
   std::unique_lock lock(sentFwdResultsMutex);
   sentFwdResults.clear();
+  valClientOrder.clear();
 
   Debug("beginValTxnMsg client id %lu, seq num %lu", client_id, client_seq_num);
 
@@ -283,6 +285,12 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   }
   // other heuristics depend on actual policy that was estimated
   else {
+    // precompute the order of clients to contact
+    if (valClientSelector != nullptr) {
+      // false = without replacement
+      valClientOrder = valClientSelector->GetClientIds(rand, clients_config->n, false);
+    }
+
     // extract out the clients that need to be contacted
     std::set<uint64_t> clients;
     // need to use DifferenceToSatisfied to account for self
@@ -1269,6 +1277,10 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     valTxnDigest = signedMsg.data();
   }
   else {
+    // dummy signed message
+    signedMsg.set_process_id(peer_client_id);
+    signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
+    signedMsg.set_signature("");
     valTxnDigest = finishValTxnMsg.validation_txn_digest();
   }
 
@@ -1657,21 +1669,37 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &query_sig,
 
 void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients) {
   int offset = 1;
+  size_t order_index = 0;
   for (const auto &i : policySatSet) {
     if (i == client_id) {
       continue;
     }
     else if (i < 0) {
-      for (; offset < clients_config->n; offset++) {
-        uint64_t target = (client_id + offset) % clients_config->n;
-        if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
-          clients.insert(target);
-          break;
+      if (valClientSelector != nullptr) {
+        for (; order_index < valClientOrder.size(); order_index++) {
+          uint64_t target = valClientOrder[order_index];
+          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
+            clients.insert(target);
+            break;
+          }
+        }
+        if (order_index == valClientOrder.size()) {
+          Panic("Policy requires more endorsements than available clients");
         }
       }
-      // if we reach the end of the loop, then we have exhausted all clients
-      if (offset == clients_config->n) {
-        Panic("Policy requires more endorsements than available clients");
+      // if no selector, then use offset for ring style selection
+      else {
+        for (; offset < clients_config->n; offset++) {
+          uint64_t target = (client_id + offset) % clients_config->n;
+          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
+            clients.insert(target);
+            break;
+          }
+        }
+        // if we reach the end of the loop, then we have exhausted all clients
+        if (offset == clients_config->n) {
+          Panic("Policy requires more endorsements than available clients");
+        }
       }
     }
     else {
