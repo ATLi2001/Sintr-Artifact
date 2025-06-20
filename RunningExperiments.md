@@ -250,7 +250,7 @@ To directly compare against the numbers reported in our paper please refer to th
 
 > **Notice**: When running experiments with load load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
 
-> **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes). These should have none, if very little impact on performances, but we acknowledge it nonetheless for completeness. The main claims remain consistent.
+> **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes or experienced miscellaneous changes to debug logging). This should have very little impact on performance, but we acknowledge it nonetheless for completeness. The main claims remain consistent.
 
 
 ### **1 - Workloads**:
@@ -611,14 +611,16 @@ Before running Postgres-PB, you must configure BFTSmart using the instructions f
 
 #### 8. **CockroachDB (CRDB)**: 
 
+> :warning: To run CRDB please switch to branch 'CRDB'. CockroachDB on the branch 'main' is deprecated.
+
 
 > **NOTE**: CRDB incurs higher query processing overhead compared to Peloton and Postgres. To alleviate it's CPU bottleneck, we allow CRDB to scale horizontally across 6 shards. Shard management in CRDB (i.e. how data is partitioned and where it is placed) is mostly automatic, and may reconfigure itself throughout an experiment. To account for this, we run CRDB experiments with a high warmup time (long enough for the performance to converge). We note, however, that regardless CRDB exhibits fairly volatile performance. We further find, that for low load (few clients) latency is noticeably higher than under load; we thus opted omit results for low load configurations.
 
 > **NOTE**: Client's issuing transactions against CRDB must issue their operations sequentially. This, alongside CRDB's innately slow processing results in high latency for long transactions (e.g. in TPC-C). On a contentded workload such as TPC-C, this in turn results in limited throughput. On the less contended workloads (Auctionmark and SEATS) the effects are less pronounced, and thus CRDB is able to scale to throughput comparable to Peloton and Postgres.
 
-    - TPCC: Peak Throughput: 1333 tx/s, Ankle Latency: ~48ms
+    - TPCC: Peak Throughput: 1033 tx/s, Ankle Latency: ~48ms
     
-         Config file: `/experiment-configs/CRDB/TODO` //FIXME: 
+         Config file: `/experiment-configs/CRDB/CRDB-TPCC-SQL-6` 
 
         | #Clients    |  25   |  30   |   35   |   40   |   45   |   50   |   60   |
         |-------------|-------|-------|--------|--------|--------|--------|--------|
@@ -628,7 +630,7 @@ Before running Postgres-PB, you must configure BFTSmart using the instructions f
 
     - Auctionmark: Peak Throughput: 5289 tx/s, Ankle Latency: ~13ms
 
-         Config file: `/experiment-configs/CRDB/TODO` //FIXME: 
+         Config file: `/experiment-configs/CRDB/CRDB-Auctionmark-SQL-6`
 
         | #Clients    |  25   |   30   |   35   |   40   |   45   |   55   |   65   |   80   |   90   |
         |-------------|------ |--------|--------|--------|--------|--------|--------|--------|--------|
@@ -638,7 +640,7 @@ Before running Postgres-PB, you must configure BFTSmart using the instructions f
 
     - Seats: Peak Throughput: 5697 tx/s, Ankle Latency ~13ms
 
-        Config file: `/experiment-configs/CRDB/TODO' //FIXME:
+        Config file: `/experiment-configs/CRDB/CRDB-Seats-SQL-6'
 
         | #Clients    |   20  |   25  |   30   |   35   |   40   |   45   |   50   |   60   |   70   |   85  |  100   |  110   |
         |-------------|-------|-------|--------|--------|--------|--------|--------|--------|--------|-------|--------|--------|
@@ -676,6 +678,7 @@ We report below the peak reported throughput. The configuration files referened 
 
 #### 2. CRDB
 
+> :warning: To run CRDB please switch to branch 'CRDB'. CockroachDB on the branch 'main' is deprecated.
 
 No additional setup should be necessary to run CRDB. If you run into troubles, please e-mail <larzola@ucsd.edu>.
 
@@ -685,12 +688,12 @@ No additional setup should be necessary to run CRDB. If you run into troubles, p
 
     Use the following three configs:
     - 1 shard: `experiment-configs/Cockroach/CRDB-TPCC-SQL-1.json` 
-    - 5 shards: `experiment-configs/Cockroach/CRDB-TPCC-SQL-6.json` 
+    - 6 shards: `experiment-configs/Cockroach/CRDB-TPCC-SQL-6.json` -- This is the same experiment as above / you do not need to re-run.
     - 9 shards: `experiment-configs/Cockroach/CRDB-TPCC-SQL-9.json`. NOTE: You will need 9 server machines for this. Change your CloudLab expeirment according to the `server_names` in the config.
 
     Peak results reported were:
 
-    | #Shards     |   1   |   5   |   9   |  
+    | #Shards     |   1   |   6   |   9   |  
     |-------------|-------|-------|-------|
     | Tput (tx/s) |  400  | 1033  | 1357  |
 
@@ -943,6 +946,7 @@ PG-SMR supports three modes (`SMR_mode`): $0$ runs Postgres via a server proxy, 
 
 
 ## CRDB configuration
+> :warning: To run CRDB please switch to branch 'CRDB'. CockroachDB on the branch 'main' is deprecated.
 For an indepth look into our CRDB configuration please refer to `src/store/cockroachdb`.
 
 We disable replication (number of replica = 1), but shard the DB across several nodes.
