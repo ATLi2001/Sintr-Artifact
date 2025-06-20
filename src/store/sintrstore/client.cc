@@ -565,7 +565,7 @@ void Client::Write(std::string &write_statement, write_callback wcb,
       else{
         Debug("Issuing re-con Query");
         stats.Increment("total_recon_reads");
-        Query(read_statement, std::move(write_cont_update_policy), wtcb, timeout, false, skip_query_interpretation); //cache_result = false
+        QueryInternal(read_statement, write_cont_update_policy, wtcb, timeout, false, skip_query_interpretation); //cache_result = false
         //Note: don't to cache results of intermediary queries: otherwise we will not be able to read our own updated version //TODO: Eventually add a cache containing own writes (to support read your own writes)
         //TODO: add a field for "is_point" (for Inserts we already know!)
       }
