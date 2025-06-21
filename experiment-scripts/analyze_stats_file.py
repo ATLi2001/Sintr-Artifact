@@ -23,10 +23,11 @@
 """
 
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 import json
 import os
 import argparse
-import matplotlib.pyplot as plt
 import time
 import shutil
 
@@ -34,7 +35,7 @@ import shutil
 ORIGINAL_STATS_DIR = "experiment-results/original"
 RESULTS_DIR = "experiment-results/stats_json"
 OUTPUT_DIR = "experiment-results/analyzed"
-ANALYSIS_TYPES = ["latency_throughput"]
+ANALYSIS_TYPES = ["latency_throughput", "throughput_bar"]
 
 
 # collect original stats.json files and places them into results_dir under unique names
@@ -112,6 +113,63 @@ def create_lat_tput_plots(df, output_dir, now_string):
         plt.plot(tput, latency, "-o", label=experiment_name[0])
     plt.legend()
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
+    plt.close()
+
+# grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
+# x_labels is a list of labels for the x-axis
+# grouped_data values should be the same length as x_labels
+def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string):
+    x = np.arange(len(x_labels))  # the label locations
+    width = 0.25  # the width of the bars
+    multiplier = 0
+
+    fig, ax = plt.subplots(layout='constrained')
+
+    for attribute, measurement in grouped_data.items():
+        print(attribute, measurement)
+        offset = width * multiplier
+        rects = ax.bar(x + offset, measurement, width, label=attribute)
+        ax.bar_label(rects, padding=3)
+        multiplier += 1
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel(y_label)
+    ax.set_xticks(x + width, x_labels)
+    ax.legend()
+
+    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
+    plt.close()
+
+def create_throughput_bar_plot(df, output_dir, now_string):
+    # dictionary from base experiment name to list of sig and no-sig throughput
+    sig_no_sig_tput = {"sig": [], "no-sig": []}
+    experiment_labels = []
+    for experiment_name, group in df.groupby(["experiment_name"]):
+        client_groups = group.groupby("num_clients")
+        tput = client_groups["tput"].mean()
+
+        # sig and no-sig versions have the same base experiment name
+        if experiment_name[0].endswith("-nosig"):
+            base_experiment_name = experiment_name[0][:-6]
+            sig_no_sig_tput["no-sig"].append(tput.values[0])
+        else:
+            base_experiment_name = experiment_name[0]
+            sig_no_sig_tput["sig"].append(tput.values[0])
+        
+        if base_experiment_name not in experiment_labels:
+            experiment_labels.append(base_experiment_name)
+    
+    sig_no_sig_tput["no-sig"].insert(0, 0)  
+    print(sig_no_sig_tput)
+
+    create_grouped_bar_plot(
+        sig_no_sig_tput,
+        experiment_labels,
+        "Throughput (txn/s)",
+        output_dir,
+        ANALYSIS_TYPES[1],
+        now_string
+    )
 
 
 if __name__ == "__main__":
@@ -156,3 +214,7 @@ if __name__ == "__main__":
         lat_tput_df = stats_to_lat_tput_csv(stats_dicts, args.output_dir, now_string)
         print(f"Converted {len(stats_dicts)} stats.json files to {args.output_dir}/{ANALYSIS_TYPES[0]}.csv")    
         create_lat_tput_plots(lat_tput_df, args.output_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[1]:
+        lat_tput_df = stats_to_lat_tput_csv(stats_dicts, args.output_dir, now_string)
+        print(f"Converted {len(stats_dicts)} stats.json files to {args.output_dir}/{ANALYSIS_TYPES[0]}.csv")
+        create_throughput_bar_plot(lat_tput_df, args.output_dir, now_string)
