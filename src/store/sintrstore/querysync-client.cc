@@ -1186,7 +1186,7 @@ void ShardClient::HandlePointQueryResult(proto::PointQueryResultReply &queryResu
     PendingQuorumGet *req = &pendingQuery->pendingPointQuery;
 
     const proto::CommittedProof *proof = queryResult.has_proof() ? &queryResult.proof() : nullptr;
-    bool finished = ProcessRead(queryReq.req_id(), req, read_t::POINT, write, queryResult.has_proof(), proof, queryResult);
+    bool finished = ProcessRead(queryResult.req_id(), req, read_t::POINT, write, queryResult.has_proof(), proof, queryResult);
 
     if(finished){
         query_seq_num_mapping.erase(pendingQuery->query_seq_num);
