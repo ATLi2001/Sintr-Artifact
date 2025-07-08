@@ -145,7 +145,7 @@ Server::Server(const transport::Configuration &config, int groupIdx, int idx,
   // mat.release();
 
   //Add real genesis digest   --  Might be needed when we add TableVersions to snapshot and need to sync on them
-  std::string genesis_txn_dig = TransactionDigest(proof->txn(), params.hashDigest);
+  std::string genesis_txn_dig = TransactionDigest(proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps);
   Notice("Create Genesis Txn with digest: %s", BytesToHex(genesis_txn_dig, 16).c_str());
   *proof->mutable_txn()->mutable_txndigest() = genesis_txn_dig;
   committed.insert(std::make_pair(genesis_txn_dig, proof));
@@ -675,7 +675,7 @@ void Server::LoadTableData_SQL(const std::string &table_name, const std::string 
     
     Timestamp genesis_ts(0,0);
     proto::CommittedProof *genesis_proof = committedItr->second;
-    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest); //("");
+    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps); //("");
     table_store->LoadTable(copy_table_statement, genesis_txn_dig, genesis_ts, genesis_proof);
 
     //std::cerr << "Load Table: " << copy_table_statement << std::endl;
@@ -743,7 +743,7 @@ void Server::LoadTableData(const std::string &table_name, const std::string &tab
     
     Timestamp genesis_ts(0,0);
     proto::CommittedProof *genesis_proof = committedItr->second;
-    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest); //("");
+    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps); //("");
 
     auto f = [this, genesis_ts, genesis_proof, genesis_txn_dig, table_name, table_data_path, column_names_and_types, primary_key_col_idx](){
       Debug("Parsing Table on core %d", sched_getcpu());
@@ -859,7 +859,7 @@ void Server::LoadTableRows(const std::string &table_name, const std::vector<std:
     UW_ASSERT(committedItr != committed.end());
     Timestamp genesis_ts(0,0);
     proto::CommittedProof *genesis_proof = committedItr->second; 
-    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest); //("");
+    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps); //("");
     //std::string genesis_tx_dig("");
 
     Debug("Dispatch Table Loading for table: %s. Segment [%d] with %d rows", table_name.c_str(), segment_no, row_segment->size());
@@ -947,7 +947,7 @@ void Server::LoadTableRows_Old(const std::string &table_name, const std::vector<
     proto::CommittedProof *genesis_proof = new proto::CommittedProof(*committedItr->second); //NOTE: Different TX might have different pointer references 
                                                                                             //I.e. there can be multiple genesis copies.
 
-    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest); //("");
+    std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps); //("");
 
 
     TableWrite &table_write = (*genesis_proof->mutable_txn()->mutable_table_writes())[table_name];
@@ -1060,7 +1060,7 @@ void Server::LoadTableRow(const std::string &table_name, const std::vector<std::
   //std::string genesis_tx_dig("");
   Timestamp genesis_ts(0,0);
   proto::CommittedProof *genesis_proof = committedItr->second;
-   std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest); //("");
+   std::string genesis_txn_dig = TransactionDigest(genesis_proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps); //("");
 
   table_store->LoadTable(sql_statement, genesis_txn_dig, genesis_ts, genesis_proof);
 
@@ -1113,6 +1113,7 @@ void Server::HandleRead(const TransportAddress &remote,
     readReply->mutable_write()->set_committed_value(tsVal.second.val);
     if(params.sintr_params.hideTimestamps) {
       readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsVal.first.getID(), tsVal.first.getTimestamp()));
+      tsVal.first.serialize(readReply->mutable_committed_timestamp());
     } else {
       tsVal.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
     }
@@ -1127,6 +1128,7 @@ void Server::HandleRead(const TransportAddress &remote,
       GetPolicy(policyId, ts, tsPolicy);
       if(params.sintr_params.hideTimestamps) {
         readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
       } else {
         tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
       }
@@ -1213,10 +1215,11 @@ void Server::HandleRead(const TransportAddress &remote,
               readReply->mutable_write()->set_prepared_value(preparedValue);
               if(params.sintr_params.hideTimestamps) {
                 readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecent->timestamp().id(), mostRecent->timestamp().timestamp()));
+                *readReply->mutable_prepared_timestamp() = mostRecent->timestamp();
               } else {
                 *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
               }
-              std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest);
+              std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest, params.sintr_params.hideTimestamps);
               if(params.sintr_params.hashEndorsements) {
                 tempDigest = EndorsedTxnDigest(tempDigest, *mostRecent, params.hashDigest);
               }
@@ -1244,12 +1247,13 @@ void Server::HandleRead(const TransportAddress &remote,
                   tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
           if(params.sintr_params.hideTimestamps) {
             readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+            tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
           } else {
             tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
           }
           readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(preparedPolicyId);
           tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-          std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest);
+          std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
           if(params.sintr_params.hashEndorsements) {
             tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
           }
@@ -1258,6 +1262,7 @@ void Server::HandleRead(const TransportAddress &remote,
           // using a committed policy for a prepared write
           if(params.sintr_params.hideTimestamps) {
             readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+            tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
           } else {
             tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
           }
@@ -1295,6 +1300,8 @@ void Server::HandleRead(const TransportAddress &remote,
       if(params.sintr_params.hideTimestamps) {
         readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
         readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        *readReply->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
+        tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
       } else {
         *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
         tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
@@ -1303,7 +1310,7 @@ void Server::HandleRead(const TransportAddress &remote,
               tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
       readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(msg.key());
       tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-      std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest);
+      std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
       if(params.sintr_params.hashEndorsements) {
         tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
       }
@@ -1324,6 +1331,8 @@ void Server::HandleRead(const TransportAddress &remote,
       if(params.sintr_params.hideTimestamps) {
         readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
         readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        tsPolicy.first.serialize(readReply->mutable_committed_timestamp());
+        tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
       } else {
         tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
         tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
@@ -1361,7 +1370,7 @@ void Server::HandlePhase1_atomic(const TransportAddress &remote,
     proto::Phase1 &msg) {
 
   //atomic_testMutex.lock();
-  std::string txnDigest = TransactionDigest(msg.txn(), params.hashDigest); //could parallelize it too hypothetically
+  std::string txnDigest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps); //could parallelize it too hypothetically
   Debug("PHASE1[%lu:%lu][%s] with ts %lu.", msg.txn().client_id(),
       msg.txn().client_seq_num(), BytesToHex(txnDigest, 16).c_str(),
       msg.txn().timestamp().timestamp());
@@ -1506,7 +1515,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
      txn = msg.mutable_txn();
   }
   
-  std::string txnDigest = TransactionDigest(*txn, params.hashDigest); //could parallelize it too hypothetically
+  std::string txnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps); //could parallelize it too hypothetically
   //Notice("Txn:[%d:%d] has digest: %s", txn->client_id(), txn->client_seq_num(), BytesToHex(txnDigest, 16).c_str());
 
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
@@ -1538,6 +1547,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
   if(has_oo){
       auto &ooMsg = oo->second;
       if(!params.signClientProposals) txn = msg.release_txn(); //Only release it here so that we can forward complete P1 message without making any wasteful copies
+      Debug("Addongoing has OO timestamp %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
       AddOngoing(txnDigest, txn);
       if(ooMsg.mode == 1){
         Notice("Handle oo P2");
@@ -1813,12 +1823,13 @@ void Server::HandlePhase2(const TransportAddress &remote, proto::Phase2 &msg) {
       txnDigest = &msg.txn_digest();
     } else {
       txn = &msg.txn();
-      computedTxnDigest = TransactionDigest(msg.txn(), params.hashDigest);
+      computedTxnDigest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps);
       if(params.sintr_params.hashEndorsements) {
         computedTxnDigest = EndorsedTxnDigest(computedTxnDigest, msg.txn(), params.hashDigest);
       }
       txnDigest = &computedTxnDigest;
-      RegisterTxTS(computedTxnDigest, txn);
+      Debug("Validate Proofs no txn digest P2: Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
+      RegisterTxTS(computedTxnDigest, txn, Timestamp(txn->timestamp()));
     }
 
   }
@@ -1945,12 +1956,13 @@ void Server::HandlePhase2(const TransportAddress &remote, proto::Phase2 &msg) {
             if(msg.has_txn()){
               txn = &msg.txn();
               // check that digest and txn match..
-              std::string tempDigest = TransactionDigest(*txn, params.hashDigest);
+              std::string tempDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
               if(params.sintr_params.hashEndorsements) {
                 tempDigest = EndorsedTxnDigest(tempDigest, *txn, params.hashDigest);
               }
                if(*txnDigest != tempDigest) return;
-               RegisterTxTS(*txnDigest, txn);
+               Debug("P2: Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
+               RegisterTxTS(*txnDigest, txn, Timestamp(txn->timestamp()));
             }
             else{
               Debug("PHASE2[%s] message does not contain txn, but have not seen txn_digest previously.", BytesToHex(msg.txn_digest(), 16).c_str());
@@ -2154,13 +2166,13 @@ void Server::HandleWriteback(const TransportAddress &remote,
       if(msg.has_txn()){
         txn = msg.release_txn();
         // check that digest and txn match..
-        std::string tempDigest = TransactionDigest(*txn, params.hashDigest);
+        std::string tempDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
         if(params.sintr_params.hashEndorsements) {
           tempDigest = EndorsedTxnDigest(tempDigest, *txn, params.hashDigest);
         }
          if(*txnDigest != tempDigest) return;
-        
-        RegisterTxTS(*txnDigest, txn);
+        Debug("Writeback 1 Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
+        RegisterTxTS(*txnDigest, txn, Timestamp(txn->timestamp()));
       }
       else{
         //No longer ongoing => was committed/aborted on a concurrent thread
@@ -2207,13 +2219,14 @@ void Server::HandleWriteback(const TransportAddress &remote,
   } else {
     UW_ASSERT(msg.has_txn());
     txn = msg.release_txn();
-    computedTxnDigest = TransactionDigest(*txn, params.hashDigest);
+    computedTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if(params.sintr_params.hashEndorsements) {
       computedTxnDigest = EndorsedTxnDigest(computedTxnDigest, *txn, params.hashDigest);
     }
     // txnDigest shouldn't end up as a dangling pointer bc I think it has the same scope as computedTxnDigest
     txnDigest = &computedTxnDigest;
-    RegisterTxTS(*txnDigest, txn);
+    Debug("Writeback 2 Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
+    RegisterTxTS(*txnDigest, txn, Timestamp(txn->timestamp()));
 
     if(committed.find(*txnDigest) != committed.end() || aborted.find(*txnDigest) != aborted.end()){
       if(params.multiThreading || (params.mainThreadDispatching && !params.dispatchMessageReceive)){
@@ -2686,8 +2699,7 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
 
   Timestamp ts(txn->timestamp());
   if(params.sintr_params.hideTimestamps) {
-    txn->set_hashed_timestamp(TimestampDigest(ts.getID(), ts.getTimestamp()));
-    txn->clear_timestamp();
+    removeTsfromTx(txn);
   }
 
   if (params.validateProofs) {
@@ -2711,6 +2723,9 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
 
   auto [committedItr, first_commit] = committed.insert(std::make_pair(txnDigest, proof));
   Debug("Inserted txn %s into Committed on CPU %d",BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
+
+  UW_ASSERT(TimestampDigest(ts.getID(), ts.getTimestamp()) == proof->mutable_txn()->hashed_timestamp());
+  //Debug("TXN has timestamp: %d:%d and hashed timestamp %s", proof->mutable_txn()->timestamp().id(), proof->mutable_txn()->timestamp().id(), BytesToHex(proof->mutable_txn()->hashed_timestamp(), 16));
   //auto committedItr =committed.emplace(txnDigest, proof);
   
   if(!first_commit) return;// already was inserted
@@ -2824,7 +2839,7 @@ void Server::UpdateCommittedReads(proto::Transaction *txn, const std::string &tx
 void Server::CommitToStore(proto::CommittedProof *proof, proto::Transaction *txn, const std::string &txnDigest, Timestamp &ts, Value &val){
   std::vector<const std::string*> table_and_col_versions; 
 
-  Debug("Commit Tx[%s] Ts[%lu:%lu]", BytesToHex(txnDigest, 16).c_str(), txn->timestamp().timestamp(), txn->timestamp().id());
+  Debug("Commit Tx[%s] Ts[%lu:%lu]", BytesToHex(txnDigest, 16).c_str(), ts.getTimestamp(), ts.getID());
 
 
   UpdateCommittedReads(txn, txnDigest, ts, proof);

@@ -1673,14 +1673,16 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
     KeyManager *keyManager, Verifier *verifier, mainThreadCallback mcb, Transport* transport,
-    bool multithread, bool hashedTS){
+    bool multithread, bool hashedTS, bool isValidatingClient){
       if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
         // Genesis objects have no proofs ==> pass validation by default.
         // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
         //    without needing to write all existing data with transactions
         return mcb((void*) true);
       }
-      if (!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) {
+      if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) ||
+        (hashedTS && !isValidatingClient
+          && proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
         Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
             " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
             proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1741,7 +1743,7 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string *txnDigest,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier, bool hashedTS) {
+    KeyManager *keyManager, Verifier *verifier, bool hashedTS, bool isValidatingClient) {
   if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
     // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
     //    without needing to write all existing data with transactions
@@ -1755,7 +1757,9 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     return false;
   }
 
-  if (!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) {
+  if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp)
+      || (hashedTS && !isValidatingClient &&
+      proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
         " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
         proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1999,6 +2003,8 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
       uint64_t timestampTs = txn.timestamp().timestamp();
       blake3_hasher_update(&hasher, (unsigned char *) &timestampId, sizeof(timestampId));
       blake3_hasher_update(&hasher, (unsigned char *) &timestampTs, sizeof(timestampTs));
+    } else {
+      blake3_hasher_update(&hasher, (unsigned char *) &txn.hashed_timestamp()[0], txn.hashed_timestamp().length());
     }
 
     //Account for Queries now too:
@@ -2469,6 +2475,16 @@ int64_t GetLogGroup(const proto::Transaction &txn, const std::string &txnDigest)
   groupIdx = groupIdx % txn.involved_groups_size();
   UW_ASSERT(groupIdx < txn.involved_groups_size());
   return txn.involved_groups(groupIdx);
+}
+
+void removeTsfromTx(proto::Transaction *txn) {
+  txn->clear_timestamp();
+  for (auto &i : *txn->mutable_read_set()) {
+    i.clear_readtime();
+  }
+  for (auto &i : *txn->mutable_read_predicates()) {
+    i.clear_table_version();
+  }
 }
 
 } // namespace sintrstore

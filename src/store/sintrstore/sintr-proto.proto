@@ -110,6 +110,11 @@ message ReadReply {
     SignedMessage signed_write = 5;
   }
   optional CommittedProof policy_proof = 6;
+  optional TimestampMessage committed_timestamp = 7;
+  optional TimestampMessage prepared_timestamp = 8;
+
+  optional TimestampMessage committed_policy_timestamp = 9;
+  optional TimestampMessage prepared_policy_timestamp = 10;
 }
 
 message DepTs {
@@ -169,7 +174,7 @@ message Transaction {
   repeated ReadMessage read_set = 4;     //TODO: Ideally re-factor this to be a map from key to value --> that way checks on preparedReads (during CC) don't need to loop through Tx. (Alternatively could store ReadTime in preparedReads, but that's also wasteful)
   repeated WriteMessage write_set = 5;   //TODO: Ideally re-factor this to be a map from key to value --> that way reads on preparedWrites don't need to loop through Tx. (Alternatively could store value in preparedWrites, but that's also wasteful)
   repeated Dependency deps = 6;
-  required TimestampMessage timestamp = 7;
+  optional TimestampMessage timestamp = 7;
 
   //query md:
   repeated QueryResultMetaData query_set = 8; //contains QueryReadSets

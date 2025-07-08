@@ -255,7 +255,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   sentBeginValTxnMsg.set_client_id(client_id);
   sentBeginValTxnMsg.set_client_seq_num(client_seq_num);
   *sentBeginValTxnMsg.mutable_txn_state() = protoTxnState;
-  if(!params.sintr_params.hideTimestamps) {
+  if(params.sintr_params.hideTimestamps) {
     sentBeginValTxnMsg.set_hashed_ts(TimestampDigest(client_id, txnStartTime));
   } else {
     sentBeginValTxnMsg.mutable_timestamp()->set_timestamp(txnStartTime);
@@ -484,8 +484,13 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
   proto::ForwardReadResult fwdReadResult;
   fwdReadResult.set_key(key);
   fwdReadResult.set_value(value);
-  fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
-  fwdReadResult.mutable_timestamp()->set_id(ts.getID());
+  if(!params.sintr_params.hideTimestamps) {
+    fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
+    fwdReadResult.mutable_timestamp()->set_id(ts.getID());
+  } else {
+    std::string tsDigest = TimestampDigest(ts.getID(), ts.getTimestamp());
+    fwdReadResult.set_hashed_timestamp(tsDigest);
+  }
   fwdReadResult.set_client_id(client_id);
   fwdReadResult.set_client_seq_num(client_seq_num);
   fwdReadResult.set_table_name(table_name);
@@ -895,6 +900,7 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   std::string hashed_ts = "";
   if(params.sintr_params.hideTimestamps) {
     hashed_ts = beginValTxnMsg.hashed_ts();
+    Debug("hashed TS validation: %s", BytesToHex(hashed_ts, 16).c_str());
   } else {
     ts = beginValTxnMsg.timestamp();
   }
@@ -962,7 +968,7 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
       if (hasDep) {
         UW_ASSERT(write.prepared_value() == curr_value);
         if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(TimestampDigest(write.prepared_timestamp().id(), write.prepared_timestamp().timestamp()) == fwdReadResult.hashed_timestamp());
+          UW_ASSERT(write.hashed_prepared_ts() == fwdReadResult.hashed_timestamp());
         } else {
           UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.prepared_timestamp(), fwdReadResult.timestamp()));
         }
@@ -970,7 +976,7 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
       else {
         UW_ASSERT(write.committed_value() == curr_value);
         if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(TimestampDigest(write.committed_timestamp().id(), write.committed_timestamp().timestamp()) == fwdReadResult.hashed_timestamp());
+          UW_ASSERT(write.hashed_committed_ts() == fwdReadResult.hashed_timestamp());
         } else {
           UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdReadResult.timestamp()));
         }
@@ -1072,7 +1078,7 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
         UW_ASSERT(write.key() == curr_key);
         UW_ASSERT(write.committed_value() == curr_value);
         if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(TimestampDigest(write.prepared_timestamp().id(), write.prepared_timestamp().timestamp()) == fwdReadResult.hashed_timestamp());
+          UW_ASSERT(write.hashed_committed_ts() == fwdReadResult.hashed_timestamp());
         } else {
           UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdReadResult.timestamp()));
         }
@@ -1366,13 +1372,13 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
           return false;
         }
 
-        std::string committedTxnDigest = TransactionDigest(fwdReadResultMsg.proof().txn(), params.hashDigest);
+        std::string committedTxnDigest = TransactionDigest(fwdReadResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
         if(params.sintr_params.hashEndorsements) {
           committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, fwdReadResultMsg.proof().txn(), params.hashDigest);
         }
         if (!ValidateTransactionWrite(fwdReadResultMsg.proof(), &committedTxnDigest,
             write.key(), write.committed_value(), write.has_committed_timestamp() ? write.committed_timestamp() : Timestamp(),
-            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps, true)) {
           Debug(
             "Failed to validate committed value for forwarded read result from client id %lu, seq num %lu",
             curr_client_id,
@@ -1465,7 +1471,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
           return false;
         }
 
-        std::string committedTxnDigest = TransactionDigest(fwdPointQueryResultMsg.proof().txn(), params.hashDigest);
+        std::string committedTxnDigest = TransactionDigest(fwdPointQueryResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
         if(params.sintr_params.hashEndorsements && fwdPointQueryResultMsg.proof().txn().has_txndigest()) {
           committedTxnDigest = fwdPointQueryResultMsg.proof().txn().txndigest();
         } else if(params.sintr_params.hashEndorsements) {
@@ -1476,7 +1482,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
         if (!ValidateTransactionTableWrite(fwdPointQueryResultMsg.proof(), &committedTxnDigest,
             write.has_committed_timestamp() ? write.committed_timestamp() : Timestamp(), write.key(), write.committed_value(),
             fwdPointQueryResult.table_name(), &query_result, sql_interpreter,
-            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps, true)) {
           Debug(
             "Failed to validate committed value for forwarded point query result from client id %lu, seq num %lu",
             curr_client_id,
@@ -1799,6 +1805,7 @@ void Client2Client::ValidationThreadFunction() {
       // only send over digest, not actual contents
       // if hide timestamps is true, then hash timestamps
       std::string digest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
+      Debug("Validation Digest is : %s", BytesToHex(digest, 16).c_str());
       if (params.sintr_params.signFinishValidation) {
         // sign the digest
         SignBytes(

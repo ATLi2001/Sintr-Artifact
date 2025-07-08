@@ -344,7 +344,7 @@ void asyncValidateFBDecision(proto::CommitDecision decision, uint64_t view,
 bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string *txnDigest, const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier, bool hashedTS = false);
+    KeyManager *keyManager, Verifier *verifier, bool hashedTS = false, bool isValidatingClient = false);
 
 /*
 // validate transaction write for when there are policy changes and thus two proofs are needed
@@ -366,7 +366,7 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
     KeyManager *keyManager, Verifier *verifier, mainThreadCallback cb, Transport* transport,
-    bool multithread, bool hashedTS = false);
+    bool multithread, bool hashedTS = false, bool isValidatingClient = false);
 
 // check must validate that proof replies are from all involved shards
 bool ValidateProofCommit1(const proto::CommittedProof &proof,
@@ -413,6 +413,8 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
 std::string EndorsedTxnDigest(const std::string &txnDigest, const proto::Transaction &txn, bool hashDigest);
 
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS);
+
+void removeTsfromTx(proto::Transaction *txn);
 
 // general query id
 std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts);
@@ -800,7 +802,7 @@ public:
   //Local Snapshot operations:
   void InitLocalSnapshot(proto::LocalSnapshot *local_ss, const uint64_t &query_seq_num, const uint64_t &client_id, const uint64_t &replica_id, bool useOptimisticTxId = false);
   void ResetLocalSnapshot(bool useOptimisticTxId = false);
-  void AddToLocalSnapshot(const proto::Transaction &txn, bool hash_param, bool committed_or_prepared);
+  void AddToLocalSnapshot(const proto::Transaction &txn, bool hash_param, bool committed_or_prepared, bool hideTS);
   void AddToLocalSnapshot(const std::string &txnDigest, const proto::Transaction *txn, bool committed_or_prepared = true); //For local snapshot; //TODO: Define something similar for merged? Should merged be a separate class?
     void AddToLocalSnapshot(const std::string &txnDigest, const uint64_t &timestamp, const uint64_t &id, bool committed_or_prepared);
   void SealLocalSnapshot();

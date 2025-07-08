@@ -92,7 +92,7 @@ class PelotonTableStore : public TableStore {
 
         //Apply a set of Table Writes (versioned row creations) to the Table backend
         bool ApplyTableWrite(const std::string &table_name, const TableWrite &table_write, const Timestamp &ts,
-                const std::string &txn_digest, const proto::CommittedProof *commit_proof = nullptr, bool commit_or_prepare = true, bool forceMaterialize = false) override;
+                const std::string &txn_digest, const proto::CommittedProof *commit_proof = nullptr, bool commit_or_prepare = true, bool forceMaterialize = false, bool hideTimestamps = false) override;
 
             ///https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-upsert/ 
         void PurgeTableWrite(const std::string &table_name, const TableWrite &table_write, const Timestamp &ts, const std::string &txn_digest) override; 

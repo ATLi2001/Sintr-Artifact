@@ -953,7 +953,7 @@ void PelotonTableStore::ApplyTableWrites(const proto::Transaction &txn, const Ti
 
 // Apply a set of Table Writes (versioned row creations) to the Table backend
 bool PelotonTableStore::ApplyTableWrite(const std::string &table_name, const TableWrite &table_write, const Timestamp &ts, const std::string &txn_digest,
-                                        const proto::CommittedProof *commit_proof, bool commit_or_prepare, bool forceMaterialize) {
+                                        const proto::CommittedProof *commit_proof, bool commit_or_prepare, bool forceMaterialize, bool hideTimestamps) {
   bool this_shard_has_writes = false;
 
   //return; //FIXME: REMOVE. Currently testing how much isolated impact this has.
@@ -973,7 +973,11 @@ bool PelotonTableStore::ApplyTableWrite(const std::string &table_name, const Tab
   if (commit_or_prepare) { //TODO: Disable this check if validate proofs/sign messages is off.
     UW_ASSERT(commit_proof);
     Debug("Before timestamp asserts for apply table write");
-    UW_ASSERT(ts == Timestamp(commit_proof->txn().timestamp()));
+    if(hideTimestamps) {
+      UW_ASSERT(TimestampDigest(ts.getID(), ts.getTimestamp()) == commit_proof->txn().hashed_timestamp());
+    } else {
+      UW_ASSERT(ts == Timestamp(commit_proof->txn().timestamp()));
+    }
   }
 
   // UW_ASSERT(ts.getTimestamp() >= 0 && ts.getID() >= 0);

@@ -32,7 +32,7 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
     const std::string &key, const std::string &value, const std::string &table_name, sql::QueryResultProtoWrapper *query_result,
     SQLTransformer *sql_interpreter,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier, bool hashedTS)
+    KeyManager *keyManager, Verifier *verifier, bool hashedTS, bool isValidatingClient)
 {
 
 
@@ -86,9 +86,11 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
   UW_ASSERT(query_result->size() == 1); //Point read should have just one row.
 
   //Check that txn in proof matches reported timestamp
-  if (!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) {
+  if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp)
+      || (hashedTS && !isValidatingClient && proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
       proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(), timestamp.getTimestamp(), timestamp.getID());
+    Debug("HASHED TS PROOF: %s VS HASHED TS: %s", BytesToHex(proof.txn().hashed_timestamp(), 16).c_str(), BytesToHex(TimestampDigest(timestamp.getID(), timestamp.getTimestamp()), 16).c_str());
     return false;
   }
 

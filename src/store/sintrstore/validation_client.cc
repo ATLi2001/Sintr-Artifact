@@ -758,6 +758,7 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
     curr_ts = Timestamp(fwdReadResult.timestamp());
   } else {
     hashed_ts = fwdReadResult.hashed_timestamp();
+    Debug("HASHED TS FOR VALIDATION CLIENT forward point query: %s", BytesToHex(hashed_ts, 16).c_str());
   }
   Debug(
     "ProcessForwardPointQueryResult from client id %lu, seq num %lu for key %s", 
@@ -1070,6 +1071,9 @@ void ValidationClient::AddQueryReadset(AllValidationTxnState *allValTxnState,
     else {
       if (params.query_params.mergeActiveAtClient) {
         for (const auto &read : queryMeta.query_read_set().read_set()) {
+          if(params.sintr_params.hideTimestamps) {
+            UW_ASSERT(!read.has_readtime());
+          }
           *txn->add_read_set() = read;
         }
         for (const auto &dep : queryMeta.query_read_set().deps()){

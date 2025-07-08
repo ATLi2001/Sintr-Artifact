@@ -906,7 +906,7 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
                 std::string policyId = policy.endorsement_policy().policy_id();
                 if(params.sintr_params.useOCCForPolicies || policy.has_policy_proof()) {
                     if (params.validateProofs) {
-                        std::string committedPolicyTxnDigest = TransactionDigest(policy.policy_proof().txn(), params.hashDigest);
+                        std::string committedPolicyTxnDigest = TransactionDigest(policy.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
                         if(params.sintr_params.hashEndorsements) {
                             Debug("USING TXN DIGEST IN POLICY PROOF READ REPLY");
                             committedPolicyTxnDigest = EndorsedTxnDigest(committedPolicyTxnDigest, policy.policy_proof().txn(), params.hashDigest);
@@ -915,7 +915,7 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
                         policy.endorsement_policy().policy().SerializeToString(&policyObjectStr);
                         if (!ValidateTransactionWrite(policy.policy_proof(), &committedPolicyTxnDigest,
                             policyId, policyObjectStr, policy.policy_timestamp(),
-                            config, params.signedMessages, keyManager, verifier)) {
+                            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
                             Debug("[group %i] Failed to validate committed policy for query %s.",
                                 group, queryResult.result().query_gen_id().c_str());
                             return;
@@ -1187,7 +1187,7 @@ void ShardClient::HandlePointQueryResult(proto::PointQueryResultReply &queryResu
 
     const proto::CommittedProof *proof = queryResult.has_proof() ? &queryResult.proof() : nullptr;
     bool finished = ProcessRead(queryReq.req_id(), req, read_t::POINT, write, queryResult.has_proof(), proof, queryResult);
-
+    // shouldn't this be queryResult.req_id()? the req_ids are different
     if(finished){
         query_seq_num_mapping.erase(pendingQuery->query_seq_num);
          pendingQueries.erase(itr);
@@ -1210,7 +1210,8 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
     //check whether value and timestamp are valid
     req->numReplies++;
-    if (write->has_committed_value() && write->has_committed_timestamp()) {
+    if (write->has_committed_value() && (write->has_committed_timestamp()
+        || (params.sintr_params.hideTimestamps && write->has_hashed_committed_ts()))) {
         Debug("ReqId %d reads committed write");
         if (params.validateProofs) {
         if (!has_proof) {
@@ -1218,18 +1219,23 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             return false;
         }
 
-        std::string committedTxnDigest = TransactionDigest(proof->txn(), params.hashDigest);
+        std::string committedTxnDigest = TransactionDigest(proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps);
         if(params.sintr_params.hashEndorsements) {
             committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, proof->txn(), params.hashDigest);
         }
 
         bool valid = false; 
         if(read_type == read_t::GET){
-            valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), write->committed_timestamp(), config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps);
+            valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), 
+            params.sintr_params.hideTimestamps ? reply.committed_pq_timestamp() : write->committed_timestamp(),
+            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps);
         } 
         else { //if read type POINT 
-            //std::cerr << "WriteValue: " << write->committed_value() << std::endl;   
-            valid = ValidateTransactionTableWrite(*proof, &committedTxnDigest, write->committed_timestamp(), req->key, write->committed_value(), req->table_name, &query_result);
+            //std::cerr << "WriteValue: " << write->committed_value() << std::endl;
+            Debug("Checking reply pointquery timestamp: %lu : %lu", reply.committed_pq_timestamp().id(), reply.committed_pq_timestamp().timestamp());
+            valid = ValidateTransactionTableWrite(*proof, &committedTxnDigest,
+                params.sintr_params.hideTimestamps ? reply.committed_pq_timestamp() : write->committed_timestamp(),
+                req->key, write->committed_value(), req->table_name, &query_result);
         }
 
         if (!valid) {
@@ -1239,7 +1245,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         }
         }
 
-        Timestamp replyTs(write->committed_timestamp());
+        Timestamp replyTs(params.sintr_params.hideTimestamps ? reply.committed_pq_timestamp() : write->committed_timestamp());
         Debug("[group %i] PointQueryReply for reqId %lu with committed %lu byte value and ts %lu.%lu.", group, reqId, write->committed_value().length(),replyTs.getTimestamp(), replyTs.getID());
 
         if (req->firstCommittedReply || req->maxTs < replyTs) {
@@ -1267,7 +1273,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     return false;
                 }
         
-                std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest);
+                std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
                 if(params.sintr_params.hashEndorsements) {
                     Debug("USING TXN DIGEST IN POLICY PROOF READ REPLY");
                     committedPolicyTxnDigest = EndorsedTxnDigest(committedPolicyTxnDigest, reply.policy_proof().txn(), params.hashDigest);
@@ -1275,7 +1281,8 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                 std::string policyObjectStr;
                 write->committed_policy().policy().SerializeToString(&policyObjectStr);
                 if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
-                    write->committed_policy().policy_id(), policyObjectStr, write->committed_policy_timestamp(),
+                    write->committed_policy().policy_id(), policyObjectStr,
+                    params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
                     config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
                     Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
                     return false;
@@ -1283,7 +1290,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             }
     
             Debug("[group %i] ReadReply for %lu with committed policy id %lu.", group, reply.req_id(), write->committed_policy().policy_id());
-            Timestamp policyTs(write->committed_policy_timestamp());
+            Timestamp policyTs(params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp());
             if (req->firstCommittedReply || req->maxPolicyTs < policyTs) {
                 req->maxPolicyTs = policyTs;
                 req->maxPolicy = write->committed_policy();
@@ -1297,7 +1304,9 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
     }
 
     //TODO: change so client does not accept reads with depth > some t... (fine for now since servers use the same param setting, and we wait for f+1 matching servers)
-    if (params.maxDepDepth > -2 && write->has_prepared_value() && write->has_prepared_timestamp() && write->has_prepared_txn_digest()) {
+    if (params.maxDepDepth > -2 && write->has_prepared_value() &&
+        (write->has_prepared_timestamp() || (params.sintr_params.hideTimestamps && write->has_hashed_prepared_ts()))
+        && write->has_prepared_txn_digest()) {
         // Timestamp preparedTs(write->prepared_timestamp());
         // Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", group, reqId, write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
         // auto preparedItr = req->prepared.find(preparedTs);
@@ -1319,12 +1328,12 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
         //std::cerr << "WriteValue (prepared): " << write->prepared_value() << std::endl;   
 
-        Timestamp preparedTs(std::move(*write->mutable_prepared_timestamp()));
+        Timestamp preparedTs(params.sintr_params.hideTimestamps ? std::move(*reply.mutable_committed_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp()));
         Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", group, reqId, write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
 
         Debug("Read reply has txn_dig %s / %s (hex).", write->prepared_txn_digest().c_str(), BytesToHex(write->prepared_txn_digest(), 16).c_str());
         std::tuple<Timestamp, std::string, std::string> prepVal; // = std::make_tuple();   //tuple (timestamp, txn_digest, value)
-        std::get<0>(prepVal) = std::move(*write->mutable_prepared_timestamp());
+        std::get<0>(prepVal) = params.sintr_params.hideTimestamps ? std::move(*reply.mutable_committed_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp());
         std::get<1>(prepVal) = std::move(*write->mutable_prepared_txn_digest());
         std::get<2>(prepVal) = std::move(*write->mutable_prepared_value());
 
@@ -1343,7 +1352,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
     // also check prepared policy
     if (params.maxDepDepth > -2 && write->has_prepared_policy()) {
-        Timestamp preparedPolicyTs(write->prepared_policy_timestamp());
+        Timestamp preparedPolicyTs(params.sintr_params.hideTimestamps ? reply.prepared_policy_timestamp() : write->prepared_policy_timestamp());
         Debug("[group %i] ReadReply for %lu with prepared policy id %lu and ts %lu.%lu.", 
             group, reply.req_id(), write->prepared_policy().policy_id(), preparedPolicyTs.getTimestamp(), preparedPolicyTs.getID());
         
@@ -1403,7 +1412,11 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     if (params.validateProofs && params.signedMessages && params.verifyDeps) {
                         //FIXME: To succeed in verifyDeps verification: Need to set whole Write... ==> However, that makes no sense. Deprecate verifyDeps.
                         *req->dep.mutable_write()->mutable_prepared_value() = req->maxValue; 
-                        ts.serialize(req->dep.mutable_write()->mutable_prepared_timestamp());
+                        if(params.sintr_params.hideTimestamps) {
+                            req->dep.mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts.getID(), ts.getTimestamp()));
+                        } else {
+                            ts.serialize(req->dep.mutable_write()->mutable_prepared_timestamp());
+                        }
                         *req->dep.mutable_write_sigs() = std::move(sigs);
                     }
                     req->dep.set_involved_group(group);
@@ -1439,6 +1452,9 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         if(first_read){ //for first read
             ReadMessage *read = txn.add_read_set();
             *read->mutable_key() = req->key;
+            if(params.sintr_params.hideTimestamps) {
+                read->set_hashed_readtime(TimestampDigest(req->maxTs.getID(), req->maxTs.getTimestamp()));
+            }
             req->maxTs.serialize(read->mutable_readtime());
             
             Debug("MaxVAl: %s",BytesToHex(req->maxValue, 100).c_str());
