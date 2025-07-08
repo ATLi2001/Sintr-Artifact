@@ -198,7 +198,7 @@ class IndicusCodebase(ExperimentCodebase):
             if 'sintr_val_client_selector_zipf' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_val_client_selector_zipf %f' % config['sintr_protocol_settings']['sintr_val_client_selector_zipf']
 
-        if config['replication_protocol'] == 'pequin':
+        if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ##Sync protocol settings
             if 'query_sync_quorum' in config['replication_protocol_settings']:
                 client_command += " --pequin_query_sync_quorum=%s" % str(config['replication_protocol_settings']['query_sync_quorum']).lower()
@@ -615,7 +615,7 @@ class IndicusCodebase(ExperimentCodebase):
         #if 'rw_or_retwis' in config:
         #    replica_command += ' --rw_or_retwis=%s' % str(config['rw_or_retwis']).lower()
 
-        if config['replication_protocol'] == 'pequin':
+        if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ## Snapshot settings
             if 'snapshot_prepared_k' in config['replication_protocol_settings']:
                 replica_command += " --pequin_snapshot_prepared_k %d" % config['replication_protocol_settings']['snapshot_prepared_k']

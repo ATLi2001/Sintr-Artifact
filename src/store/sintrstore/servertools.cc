@@ -991,10 +991,9 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     proto::ConcurrencyControl::Result result;
     const proto::CommittedProof *committedProof = nullptr;
     const proto::Transaction *abstain_conflict = nullptr;
-    proto::Transaction tempTxn = *txn;
-    // remove the hack added in server.cc to compare txn digests
-    tempTxn.clear_txndigest();
-    std::string oldTxnDigest = TransactionDigest(tempTxn, params.hashDigest, params.sintr_params.hideTimestamps);
+
+    std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
+
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck) {
         if (!EndorsementCheck(oldTxnDigest, txn)) {
