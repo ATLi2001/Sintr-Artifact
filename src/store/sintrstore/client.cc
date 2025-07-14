@@ -977,7 +977,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       if(params.query_params.mergeActiveAtClient){
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
-          if(params.sintr_params.hideTimestamps) {
+          if(params.sintr_params.hideTimestamps && !read.has_hashed_readtime()) {
             std::string hashedTS = TimestampDigest(read.readtime().id(), read.readtime().timestamp());
             read.set_hashed_readtime(hashedTS);
           }
@@ -1394,7 +1394,9 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     std::sort(txn.mutable_involved_groups()->begin(), txn.mutable_involved_groups()->end());
 
     // set expected endorsement digest
-    txn.set_hashed_timestamp(TimestampDigest(txn.timestamp().id(), txn.timestamp().timestamp()));
+    if(sintr.params.hideTimestamps) {
+      txn.set_hashed_timestamp(TimestampDigest(txn.timestamp().id(), txn.timestamp().timestamp()));
+    }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {
       endorseClient->DebugSetExpectedTxnOutput(txn);
