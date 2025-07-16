@@ -173,7 +173,7 @@ Client::~Client()
 void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
       uint32_t timeout, bool retry, const std::string &txnState) {
   
-  // if (exec_time_us.count > 0 && exec_time_us.count % 2000 == 0) {
+  // if (client_id == 0 && exec_time_us.count > 0 && exec_time_us.count % 2000 == 0) {
   //   std::cerr << "Mean execution latency: " << exec_time_us.mean() << std::endl;
   //   std::cerr << "Mean endorsement wait latency: " << endorsement_wait_us.mean() << std::endl;
   //   std::cerr << "Mean commit latency: " << commit_time_us.mean() << std::endl;

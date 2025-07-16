@@ -1503,7 +1503,10 @@ void Server::Inform_P1_GC_Leader(proto::Phase1Reply &reply, proto::Transaction &
 void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
   // dummyTx = msg.txn(); //PURELY TESTING PURPOSES!!: NOTE WARNING
 
-  // UW_ASSERT(msg.endorsements().sig_msgs_size() == 1);
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  // handle_phase1_start_us = start;
 
    proto::Transaction *txn;
   if(params.signClientProposals){
@@ -1771,6 +1774,13 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
             delete cc;
           });
       // Latency_End(&signLat);
+
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = end - handle_phase1_start_us;
+      // phase1_to_reply_us.add(duration);
+      
       return;
     }
   }
@@ -3235,6 +3245,8 @@ bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transac
   //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
   //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
+  //   std::cerr << "Mean phase 1 to reply latency: " << phase1_to_reply_us.mean() << std::endl;
+  //   std::cerr << "Mean query time latency: " << query_time_us.mean() << std::endl;
   // }
 
   PolicyClient policyClient;

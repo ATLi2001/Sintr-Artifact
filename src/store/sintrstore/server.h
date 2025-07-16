@@ -1418,12 +1418,15 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
   uint64_t try_prepare_us;
   uint64_t handle_phase1_cb_us;
+  uint64_t handle_phase1_start_us;
 
   mean_tracker extract_policy_us;
   mean_tracker validate_endorsements_us;
   mean_tracker new_digest_us;
   mean_tracker ccc_us;
   mean_tracker prepare_us;
+  mean_tracker phase1_to_reply_us;
+  mean_tracker query_time_us;
 };
 
 } // namespace sintrstore
