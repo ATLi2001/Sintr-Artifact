@@ -359,6 +359,10 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   mean_tracker send_begin_to_receive_endorse_us;
   mean_tracker fwd_read_to_receive_endorse_us;
   mean_tracker fwd_point_query_to_receive_endorse_us;
+  // track time to first endorse received, time to second, etc.
+  std::vector<mean_tracker> time_to_endorse_n_us;
+  // track time to receive endorsement for each client
+  std::vector<mean_tracker> client_time_to_endorse_us;
 };
 
 } // namespace sintrstore

@@ -140,6 +140,8 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
+
+  client_time_to_endorse_us.resize(clients_config->n);
 }
 
 Client2Client::~Client2Client() {
@@ -247,6 +249,17 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   // }
   // if (send_begin_to_receive_endorse_us.count > 0 && send_begin_to_receive_endorse_us.count % 1000 == 0) {
   //   std::cerr << "Mean send begin to receive endorsement latency: " << send_begin_to_receive_endorse_us.mean() << std::endl;
+  // }
+  // if (time_to_endorse_n_us.size() > 0 && time_to_endorse_n_us[0].count % 2000 == 0) {
+  //   for (size_t i = 0; i < time_to_endorse_n_us.size(); i++) {
+  //     std::cerr << "Mean time to receive endorsement " << i << ": " << time_to_endorse_n_us[i].mean() << std::endl;
+  //   }
+
+  //   for (size_t i = 0; i < client_time_to_endorse_us.size(); i++) {
+  //     if (client_time_to_endorse_us[i].count > 0) {
+  //       std::cerr << "Mean time to receive endorsement from client " << i << ": " << client_time_to_endorse_us[i].mean() << std::endl;
+  //     }
+  //   }
   // }
 
   this->client_seq_num = client_seq_num;
@@ -1238,9 +1251,16 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   // fwd_read_to_receive_endorse_us.add(duration);
   // auto duration = finish - send_fwd_point_query_time_us;
   // fwd_point_query_to_receive_endorse_us.add(duration);
+  // size_t numEndorsementsReceived = endorseClient->GetEndorsements().size();
+  // if (numEndorsementsReceived + 1 > time_to_endorse_n_us.size()) {
+  //   time_to_endorse_n_us.resize(numEndorsementsReceived + 1);
+  // }
+  // time_to_endorse_n_us[numEndorsementsReceived].add(duration);
 
   uint64_t peer_client_id = finishValTxnMsg.client_id();
   uint64_t val_txn_seq_num = finishValTxnMsg.validation_txn_seq_num();
+
+  // client_time_to_endorse_us[peer_client_id].add(duration);
 
   // stale finish validation message
   if (val_txn_seq_num != client_seq_num) {
