@@ -665,6 +665,14 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       }
     }
 
+    if(params.sintr_params.hideTimestamps && TimestampDigest(Timestamp(txn.timestamp())) != txn.hashed_timestamp()) {
+      Debug("txn [%s] hashed timestamp %s is not same as given hashed timestamp %s",
+        BytesToHex(txnDigest,16).c_str(), BytesToHex(txn.hashed_timestamp(), 16).c_str(),
+        BytesToHex(TimestampDigest(Timestamp(txn.timestamp())), 16).c_str());
+      stats.Increment("abstains", 1);
+      return proto::ConcurrencyControl::ABSTAIN;
+    }
+
     // also extract out the policy reads that are done
     std::set<std::pair<std::string, Timestamp>> *implicitPolicyReads = new std::set<std::pair<std::string, Timestamp>>();
     //2) Validate read set conflicts.
@@ -676,6 +684,14 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       if (!IsKeyOwned(read.key())) {
          // TODO: Eventually modify TXs to only contain the read/write set relevant to the shard. In that case can remove this check
         continue;
+      }
+      // check if read timestamp is same as read 
+      if(params.sintr_params.hideTimestamps && TimestampDigest(Timestamp(read.readtime())) != read.hashed_readtime()) {
+        Debug("read key %s hashed timestamp %s is not same as given hashed readtime %s",
+          read.key().c_str(), BytesToHex(read.hashed_readtime(), 16).c_str(),
+          BytesToHex(TimestampDigest(Timestamp(read.readtime())), 16).c_str());
+        stats.Increment("abstains", 1);
+        return proto::ConcurrencyControl::ABSTAIN;
       }
 
       // Check for conflicts against committed writes

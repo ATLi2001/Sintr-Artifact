@@ -60,6 +60,10 @@ message PointQueryResultReply {
   // For prepared writes: waiting for f+1 so no proof needed.
 
   //TODO: To support EagerExec --> Just use existing Query Code stack.
+  optional TimestampMessage committed_pq_timestamp = 8;
+  optional TimestampMessage prepared_pq_timestamp = 9;
+  optional TimestampMessage committed_policy_timestamp = 10;
+  optional TimestampMessage prepared_policy_timestamp = 11;
 }
 //==> moved to sintr-proto.proto
 // message ReadSet { 

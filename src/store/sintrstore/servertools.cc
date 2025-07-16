@@ -664,7 +664,7 @@ void Server::FindTableVersionOld(const std::string &key_name, const Timestamp &t
 
     if(mostRecentPrepared != nullptr){ //Read prepared
       readSetMgr->AddToReadSet(key_name, mostRecentPrepared->timestamp());
-      std::string tempDigest = TransactionDigest(*mostRecentPrepared, params.hashDigest);
+      std::string tempDigest = TransactionDigest(*mostRecentPrepared, params.hashDigest, params.sintr_params.hideTimestamps);
       if(params.sintr_params.hashEndorsements) {
         tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPrepared, params.hashDigest);
       }
@@ -991,7 +991,9 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     proto::ConcurrencyControl::Result result;
     const proto::CommittedProof *committedProof = nullptr;
     const proto::Transaction *abstain_conflict = nullptr;
-    std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest);
+
+    std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
+
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck) {
         if (!EndorsementCheck(oldTxnDigest, txn)) {
@@ -1139,7 +1141,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     }
   }
 
-  void Server::RegisterTxTS(const std::string &txnDigest, const proto::Transaction *txn){
+  void Server::RegisterTxTS(const std::string &txnDigest, const proto::Transaction *txn, const Timestamp &ts){
 
     if(!params.query_params.optimisticTxID){ 
        return;
@@ -1148,16 +1150,16 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     //If using optimisticTxID: Store ts to Tx mapping
 
     ts_to_txMap::accessor t; 
-    Debug("TS_TO_TX insert TX[%s] with TS[%lu:%lu]. MergedTS:[%lu]", BytesToHex(txnDigest, 16).c_str(), txn->timestamp().timestamp(), txn->timestamp().id(),
-                                                                        MergeTimestampId(txn->timestamp().timestamp(), txn->timestamp().id()));
+    Debug("TS_TO_TX insert TX[%s] with TS[%lu:%lu]. MergedTS:[%lu]", BytesToHex(txnDigest, 16).c_str(), ts.getTimestamp(), ts.getID(),
+                                                                        MergeTimestampId(ts.getTimestamp(), ts.getID()));
     
-    bool first = ts_to_tx.insert(t, MergeTimestampId(txn->timestamp().timestamp(), txn->timestamp().id()));
+    bool first = ts_to_tx.insert(t, MergeTimestampId(ts.getTimestamp(), ts.getID()));
     if(!first && !TEST_PREPARE_SYNC && t->second != txnDigest){
       Debug("HERE IS TXN DIGEST IN TXN: %s and whether or not endorsements in txn: %d", BytesToHex(txn->txndigest(), 16).c_str(), txn->has_endorsements());
       Panic("Two different Transactions [%s:%s](old:new) have the same merged Timestamp[%lu] Original TS:[%lu:%lu]. Equivocation", 
               BytesToHex(t->second, 16).c_str(), BytesToHex(txnDigest, 16).c_str(), 
-              MergeTimestampId(txn->timestamp().timestamp(), txn->timestamp().id()), 
-              txn->timestamp().timestamp(), txn->timestamp().id()); 
+              MergeTimestampId(ts.getTimestamp(), ts.getID()), 
+              ts.getTimestamp(), ts.getID()); 
               // Report issuing client (txn->client_id() = txn->timestamp.id()) 
               //TODO: Hard Abort/Clean this TX & forward to other replicas so they can resolve TXs
     } 
@@ -1168,7 +1170,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
 
   void Server::AddOngoing( std::string &txnDigest, proto::Transaction* txn){
 
-      RegisterTxTS(txnDigest, txn);
+      RegisterTxTS(txnDigest, txn, Timestamp(txn->timestamp()));
   
       ongoingMap::accessor o;
       //std::cerr << "ONGOING INSERT (Fallback): " << BytesToHex(txnDigest, 16).c_str() << " On CPU: " << sched_getcpu()<< std::endl;
@@ -1205,6 +1207,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
 
     //Add txn speculative to ongoing BEFORE validation to ensure it exists in ongoing before any P2 or Writeback could arrive; (Follows from the fact that HandleP1, P2, Writeback are called on same thread)
     //If verification fails, remove it again. Keep track of num_concurrent_clients to make sure we don't delete if it is still necessary.
+    Debug("Addongoing process proposal timestamp %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
     AddOngoing(txnDigest, txn);
 
     if(!params.multiThreading || !params.signClientProposals){
@@ -1704,7 +1707,7 @@ void Server::ManageWritebackValidation(proto::Writeback &msg, const std::string 
              stats.Increment("total_transactions_fast_Abort_conflict", 1);
 
             Debug("2: Taking Aborted conflict branch for txn %s WB validation", BytesToHex(*txnDigest, 16).c_str());
-            std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest);
+            std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
             if(params.sintr_params.hashEndorsements) {
               committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
             }
@@ -1777,7 +1780,7 @@ void Server::ManageWritebackValidation(proto::Writeback &msg, const std::string 
             }
 
           } else if (msg.decision() == proto::ABORT && msg.has_conflict()) {
-              std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest);
+              std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
               if(params.sintr_params.hashEndorsements) {
                 committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
               }

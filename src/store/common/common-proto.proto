@@ -9,7 +9,7 @@ message ReadMessage {
     required bytes key = 1;
     optional TimestampMessage readtime = 2;
     optional bool is_table_col_version = 3;  //exclude this key from CC. only for locking and stat-keeping purposes
-    
+    optional bytes hashed_readtime = 4;
 }
 
 message WriteMessage {

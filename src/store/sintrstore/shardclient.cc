@@ -842,7 +842,7 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
       }
 
       std::string committedTxnDigest = TransactionDigest(
-          reply->proof().txn(), params.hashDigest);
+          reply->proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
 
       if(params.sintr_params.hashEndorsements) {
         Debug("USING TXN DIGEST IN READ REPLY CB1");
@@ -862,8 +862,10 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
        }
      };
     asyncValidateTransactionWrite(reply->proof(), &committedTxnDigest, req->key, write->committed_value(),
-    write->committed_timestamp(), config, params.signedMessages, keyManager, verifier, mcb, transport,
-    true);
+    params.sintr_params.hideTimestamps ? reply->committed_timestamp() : write->committed_timestamp(),
+    config, params.signedMessages, keyManager, verifier, mcb, transport,
+    true,
+    params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply->committed_timestamp())) : "");
     return;
   }
 }
@@ -885,7 +887,7 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
 
 
 
-  if (write->has_committed_value() && write->has_committed_timestamp()) {
+  if (write->has_committed_value() && (write->has_committed_timestamp() || reply->has_committed_timestamp())) {
     Timestamp replyTs(write->committed_timestamp());
     Debug("[group %i] ReadReply for %lu with committed %lu byte value and ts"
         " %lu.%lu.", group, reply->req_id(), write->committed_value().length(),
@@ -1051,14 +1053,14 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
 
   // value and timestamp are valid
   req->numReplies++;
-  if (write->has_committed_value() && write->has_committed_timestamp()) {
+  if (write->has_committed_value() && (write->has_committed_timestamp() || reply.has_committed_timestamp())) {
     if (!skip && params.validateProofs) {
       if (!reply.has_proof()) {
         Debug("[group %i] Missing proof for committed write.", group);
         return;
       }
 
-      std::string committedTxnDigest = TransactionDigest(reply.proof().txn(), params.hashDigest);
+      std::string committedTxnDigest = TransactionDigest(reply.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
       // we want to use the txn digest hack in the txn to verify the read reply proof...
       // TODO: maybe find a better way to pass the txn digest
       if(params.sintr_params.hashEndorsements) {
@@ -1066,15 +1068,16 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         Debug("USING TXN DIGEST IN PROOF FOR READ REPLY %s", BytesToHex(committedTxnDigest, 16).c_str());
       }
       if (!ValidateTransactionWrite(reply.proof(), &committedTxnDigest,
-          req->key, write->committed_value(), write->committed_timestamp(),
-          config, params.signedMessages, keyManager, verifier)) {
+          req->key, write->committed_value(), params.sintr_params.hideTimestamps ? reply.committed_timestamp() : write->committed_timestamp(),
+          config, params.signedMessages, keyManager, verifier,
+          params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_timestamp())) : "")) {
         Debug("[group %i] Failed to validate committed value for read %lu.",group, reply.req_id());
         // invalid replies can be treated as if we never received a reply from a crashed replica
         return;
       }
     }
 
-    Timestamp replyTs(write->committed_timestamp());
+    Timestamp replyTs(params.sintr_params.hideTimestamps ? reply.committed_timestamp() : write->committed_timestamp());
     Debug("[group %i] ReadReply for %lu with committed %lu byte value and ts %lu.%lu.", 
         group, reply.req_id(), write->committed_value().length(), replyTs.getTimestamp(), replyTs.getID());
     if (req->firstCommittedReply || req->maxTs < replyTs) {
@@ -1105,7 +1108,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
           return;
         }
 
-        std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest);
+        std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
         if(params.sintr_params.hashEndorsements) {
           Debug("USING TXN DIGEST IN POLICY PROOF READ REPLY");
           committedPolicyTxnDigest = EndorsedTxnDigest(committedPolicyTxnDigest, reply.policy_proof().txn(), params.hashDigest);
@@ -1113,15 +1116,17 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         std::string policyObjectStr;
         write->committed_policy().policy().SerializeToString(&policyObjectStr);
         if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
-            write->committed_policy().policy_id(), policyObjectStr, write->committed_policy_timestamp(),
-            config, params.signedMessages, keyManager, verifier)) {
+            write->committed_policy().policy_id(), policyObjectStr,
+            params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
+            config, params.signedMessages, keyManager, verifier,
+            params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_policy_timestamp())) : "")) {
           Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
           return;
         }
       }
 
       Debug("[group %i] ReadReply for %lu with committed policy id %lu.", group, reply.req_id(), write->committed_policy().policy_id());
-      Timestamp policyTs(write->committed_policy_timestamp());
+      Timestamp policyTs(params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp());
       if (req->firstCommittedReply || req->maxPolicyTs < policyTs) {
         req->maxPolicyTs = policyTs;
         req->maxPolicy = write->committed_policy();
@@ -1138,8 +1143,8 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
   //TODO: change so client does not accept reads with depth > some t... (fine for now since
   // servers dont fail and use the same param setting)
   if (params.maxDepDepth > -2 &&
-      write->has_prepared_value() && write->has_prepared_timestamp() && write->has_prepared_txn_digest()) {
-    Timestamp preparedTs(write->prepared_timestamp());
+      write->has_prepared_value() && (write->has_prepared_timestamp() || reply.has_prepared_timestamp()) && write->has_prepared_txn_digest()) {
+    Timestamp preparedTs(params.sintr_params.hideTimestamps ? reply.prepared_timestamp() : write->prepared_timestamp());
     Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", 
         group, reply.req_id(), write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
     auto preparedItr = req->prepared.find(preparedTs);
@@ -1159,7 +1164,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
 
   // also check prepared policy
   if (params.maxDepDepth > -2 && write->has_prepared_policy()) {
-    Timestamp preparedPolicyTs(write->prepared_policy_timestamp());
+    Timestamp preparedPolicyTs(params.sintr_params.hideTimestamps ? reply.prepared_policy_timestamp() : write->prepared_policy_timestamp());
     Debug("[group %i] ReadReply for %lu with prepared policy id %lu and ts %lu.%lu.", 
         group, reply.req_id(), write->prepared_policy().policy_id(), preparedPolicyTs.getTimestamp(), preparedPolicyTs.getID());
     
@@ -1333,7 +1338,7 @@ void ShardClient::ProcessP1R(proto::Phase1Reply &reply, bool FB_path, PendingFB 
     cc = &reply.cc();
   }
   // TODO: fix Debug statements to use updated txn digest with endorsement
-  Debug("[group %i][replica %lu] PHASE1R[%s] process valid ccr=%d", group, reply.signed_cc().process_id(), BytesToHex(TransactionDigest(pendingPhase1->txn_ , params.hashDigest), 16).c_str() , cc->ccr());
+  Debug("[group %i][replica %lu] PHASE1R[%s] process valid ccr=%d", group, reply.signed_cc().process_id(), BytesToHex(TransactionDigest(pendingPhase1->txn_ , params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str() , cc->ccr());
 
   if (!pendingPhase1->p1Validator.ProcessMessage(*cc, (failureActive && !FB_path) )) {
     if(!(failureActive && !FB_path)) Panic("fail P1 validation. failureActive: %d. FB_path: %d", failureActive, FB_path);
@@ -1373,6 +1378,7 @@ void ShardClient::ProcessP1R(proto::Phase1Reply &reply, bool FB_path, PendingFB 
       break;
     case FAST_COMMIT:
       Debug("P1Validator STATE: FAST_COMMIT");
+      UW_ASSERT(!reply.has_insufficient_endorsements());
       pendingPhase1->decision = proto::COMMIT;
       pendingPhase1->fast = true;
       !FB_path ? Phase1Decision(itr) : Phase1FBDecision(pendingFB);
@@ -1806,7 +1812,7 @@ void ShardClient::Phase1Decision(
 
       //TODO: dont process redundant digests
       if(!TransactionsConflict(pendingPhase1->txn_, *txn, params.sintr_params.policyFunctionName)) continue;
-      std::string txnDigest(TransactionDigest(*txn, params.hashDigest));
+      std::string txnDigest(TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps));
       if(params.sintr_params.hashEndorsements) {
         Debug("USING TXN DIGEST IN TXN FOR FB");
         txnDigest = EndorsedTxnDigest(txnDigest, *txn, params.hashDigest);
@@ -1991,7 +1997,7 @@ void ShardClient::HandlePhase1Relay(proto::RelayP1 &relayP1){
   // }
  
   //std::string txnDigest(TransactionDigest(*txn, params.hashDigest));
-  std::string txnDigest(TransactionDigest(relayP1.p1().txn(), params.hashDigest));
+  std::string txnDigest(TransactionDigest(relayP1.p1().txn(), params.hashDigest, params.sintr_params.hideTimestamps));
   if(params.sintr_params.hashEndorsements) {
     Debug("USING TXN DIGEST IN HANDLE PHASE1 RELAY");
     txnDigest = EndorsedTxnDigest(txnDigest, relayP1.p1().txn(), params.hashDigest);

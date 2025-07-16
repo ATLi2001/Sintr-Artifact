@@ -119,9 +119,9 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // contains necessary information for ValidationClient to validate
   struct ValidationInfo {
     ValidationInfo(uint64_t txn_client_id, uint64_t txn_client_seq_num, Timestamp txn_ts,
-        ValidationTransaction *valTxn, TransportAddress *remote) : 
+        ValidationTransaction *valTxn, TransportAddress *remote, std::string hashed_ts = "") : 
         txn_client_id(txn_client_id), txn_client_seq_num(txn_client_seq_num), txn_ts(txn_ts),
-        valTxn(valTxn), remote(remote) {
+        valTxn(valTxn), remote(remote), hashed_ts(hashed_ts) {
       struct timespec ts_start;
       clock_gettime(CLOCK_MONOTONIC, &ts_start);
       start_time_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
@@ -136,6 +136,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     uint64_t txn_client_seq_num;
     // timestamp chosen for this transaction
     Timestamp txn_ts;
+    // hashed txn timestamp
+    std::string hashed_ts;
     // actual transaction that we can call Validate on
     ValidationTransaction *valTxn;
     // address of initiating client

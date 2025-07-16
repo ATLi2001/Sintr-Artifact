@@ -78,15 +78,27 @@ message Dependency {
 message Write {
   optional bytes key = 1;
   optional bytes committed_value = 2;
-  optional TimestampMessage committed_timestamp = 3;
-  optional EndorsementPolicyMessage committed_policy = 4;
-  optional TimestampMessage committed_policy_timestamp = 5;
-  optional bytes prepared_value = 6;
-  optional TimestampMessage prepared_timestamp = 7;
-  optional EndorsementPolicyMessage prepared_policy = 8;
-  optional TimestampMessage prepared_policy_timestamp = 9;
-  optional bytes prepared_txn_digest = 10;
-  optional bytes prepared_policy_txn_digest = 11;
+  oneof committed_ts_oneof {
+    TimestampMessage committed_timestamp = 3;
+    bytes hashed_committed_ts = 4;
+  }
+  optional EndorsementPolicyMessage committed_policy = 5;
+  oneof committed_policy_ts_oneof {
+    TimestampMessage committed_policy_timestamp = 6;
+    bytes hashed_committed_policy_ts = 7;
+  }
+  optional bytes prepared_value = 8;
+  oneof prepared_ts_oneof {
+    TimestampMessage prepared_timestamp = 9;
+    bytes hashed_prepared_ts = 10;
+  }
+  optional EndorsementPolicyMessage prepared_policy = 11;
+  oneof prepared_policy_ts_oneof {
+    TimestampMessage prepared_policy_timestamp = 12;
+    bytes hashed_prepared_policy_ts = 13;
+  }
+  optional bytes prepared_txn_digest = 14;
+  optional bytes prepared_policy_txn_digest = 15;
 }
 
 message ReadReply {
@@ -98,6 +110,11 @@ message ReadReply {
     SignedMessage signed_write = 5;
   }
   optional CommittedProof policy_proof = 6;
+  optional TimestampMessage committed_timestamp = 7;
+  optional TimestampMessage prepared_timestamp = 8;
+
+  optional TimestampMessage committed_policy_timestamp = 9;
+  optional TimestampMessage prepared_policy_timestamp = 10;
 }
 
 message DepTs {
@@ -110,13 +127,14 @@ message ColValues {
 }
 message ReadPredicate {
   required bytes table_name = 1;
-  required TimestampMessage table_version = 2;
+  optional TimestampMessage table_version = 2;
   optional bytes where_clause = 3; //UNUSED
   repeated bytes col_names = 4; //UNUSED
   repeated TimestampMessage col_versions = 5; //UNUSED
   repeated ColValues instantiations = 6; // the col values for each predicate instantiation. //UNUSED
   //NEW: lazy instantiations (each instance is a full predicate already)
   repeated bytes pred_instances = 7;
+  optional bytes hashed_table_version = 8;
 }
 
 message ReadSet {
@@ -156,7 +174,7 @@ message Transaction {
   repeated ReadMessage read_set = 4;     //TODO: Ideally re-factor this to be a map from key to value --> that way checks on preparedReads (during CC) don't need to loop through Tx. (Alternatively could store ReadTime in preparedReads, but that's also wasteful)
   repeated WriteMessage write_set = 5;   //TODO: Ideally re-factor this to be a map from key to value --> that way reads on preparedWrites don't need to loop through Tx. (Alternatively could store value in preparedWrites, but that's also wasteful)
   repeated Dependency deps = 6;
-  required TimestampMessage timestamp = 7;
+  optional TimestampMessage timestamp = 7;
 
   //query md:
   repeated QueryResultMetaData query_set = 8; //contains QueryReadSets
@@ -179,6 +197,7 @@ message Transaction {
   optional TxnPolicyType policy_type = 14 [default = NONE];
   repeated ReadMessage implicit_policy_reads = 15; // NOT PART OF TX. HACK HERE TO STORE read set for implicit policy reads
   optional SignedMessages endorsements = 16;
+  optional bytes hashed_timestamp = 17;
 }
 
 message Phase1 {
@@ -466,7 +485,10 @@ message BeginValidateTxnMessage {
   required uint64 client_id = 1;
   required uint64 client_seq_num = 2;
   required TxnState txn_state = 3;
-  required TimestampMessage timestamp = 4;
+  oneof validation_ts_oneof {
+    TimestampMessage timestamp = 4;
+    bytes hashed_ts = 5;
+  }
 }
 
 message ForwardReadResult {
@@ -474,11 +496,14 @@ message ForwardReadResult {
   required uint64 client_seq_num = 2;
   required bytes key = 3;
   required bytes value = 4;
-  required TimestampMessage timestamp = 5;
-  optional Dependency dep = 6;
-  optional Dependency policy_dep = 7;
-  optional string table_name = 8;
-  optional bool add_readset = 9;
+  oneof timestamp_oneof { 
+    TimestampMessage timestamp = 5;
+    bytes hashed_timestamp = 6;
+  }
+  optional Dependency dep = 7;
+  optional Dependency policy_dep = 8;
+  optional string table_name = 9;
+  optional bool add_readset = 10;
 }
 
 message ForwardReadResultMessage {

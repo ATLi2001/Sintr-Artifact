@@ -610,7 +610,7 @@ void Server::ForceMaterialization(const proto::ConcurrencyControl::Result &resul
 std::vector<std::string> Server::ApplyTableWrites(const proto::Transaction &txn, const Timestamp &ts,
                 const std::string &txn_digest, const proto::CommittedProof *commit_proof, bool commit_or_prepare, bool forceMaterialize){
 
-    RegisterTxTS(txn_digest, &txn); //Guarantee that translation exists
+    RegisterTxTS(txn_digest, &txn, ts); //Guarantee that translation exists
 
     Debug("Apply all TableWrites for Txn[%s]. TS[%lu:%lu]. ForceMat? %d", BytesToHex(txn_digest, 16).c_str(), ts.getTimestamp(), ts.getID(), forceMaterialize);
 
@@ -620,7 +620,7 @@ std::vector<std::string> Server::ApplyTableWrites(const proto::Transaction &txn,
     //TODO: Parallelize application of each table's writes. Note: This requires multi-threading + callback to ensure synchronous join
         //Not urgent: Realistically most transactions do not touch that many tables...
     for (const auto &[table_name, table_write] : txn.table_writes()){
-        bool this_shard_has_writes = table_store->ApplyTableWrite(table_name, table_write, ts, txn_digest, commit_proof, commit_or_prepare, forceMaterialize); 
+        bool this_shard_has_writes = table_store->ApplyTableWrite(table_name, table_write, ts, txn_digest, commit_proof, commit_or_prepare, forceMaterialize, params.sintr_params.hideTimestamps); 
         if(this_shard_has_writes) locally_relevant_tables.push_back(EncodeTable(table_name));
     }
 

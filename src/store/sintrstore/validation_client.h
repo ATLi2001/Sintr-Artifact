@@ -100,7 +100,8 @@ class ValidationClient : public ::Client {
   // Set the timestamp for the txn
   // timestamp was chosen by initiating client
   // this is expected to be called before the validation transaction begins
-  void SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num, const Timestamp &ts, bool isPolicyTransaction);
+  void SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num, const Timestamp &ts, bool isPolicyTransaction,
+    const std::string &hashed_ts);
 
   // either fill one of the pending validation gets or put into readset for future validation get
   void ProcessForwardReadResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
@@ -145,10 +146,10 @@ class ValidationClient : public ::Client {
   struct PendingValidationQuery {
     // difference between query seq num and client seq num?
     PendingValidationQuery(const Timestamp &ts,
-        const std::string &query_cmd, const query_callback &qcb, bool cache_result) :
+        const std::string &query_cmd, const query_callback &qcb, bool cache_result,
+        const std::string &hashed_ts) :
         vqcb(qcb), cache_result(cache_result), query_cmd(query_cmd), timeout(nullptr) {
-
-      query_gen_id = QueryGenId(query_cmd, ts);
+      query_gen_id = QueryGenId(query_cmd, ts, hashed_ts);
 
       struct timespec ts_start;
       clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -241,7 +242,7 @@ class ValidationClient : public ::Client {
   // if is_get is true, then this is from a get so we should add to readValues
   // otherwise it is from a query, so look at cache_point to decide whether to add to point_read_cache
   void AddReadset(AllValidationTxnState *allValTxnState, const std::string &key, 
-    const std::string &value, const Timestamp &ts, bool is_get = true, bool cache_point = false);
+    const std::string &value, const Timestamp &ts, bool is_get = true, bool cache_point = false, std::string hashedTS = "");
   void AddQueryReadset(AllValidationTxnState *allValTxnState,
     const proto::ForwardQueryResult &fwdQueryResult);
   // add dep to the dependencies of transaction 

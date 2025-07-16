@@ -105,7 +105,7 @@ void SnapshotManager::AddToLocalSnapshot(const std::string &txnDigest, const pro
   AddToLocalSnapshot(txnDigest, txn->timestamp().timestamp(), txn->timestamp().id(), committed_or_prepared);
 }
 
-void SnapshotManager::AddToLocalSnapshot(const proto::Transaction &txn, bool hash_param, bool committed_or_prepared){ //optimistTxId = params.query_params.optimisticTxId && retry_version == 0.
+void SnapshotManager::AddToLocalSnapshot(const proto::Transaction &txn, bool hash_param, bool committed_or_prepared, bool hideTS){ //optimistTxId = params.query_params.optimisticTxId && retry_version == 0.
 
   if(txn.timestamp().timestamp() == 0 && txn.timestamp().id() == 0) return; // don't need to include genesis TX in snapshot...
 
@@ -116,7 +116,7 @@ void SnapshotManager::AddToLocalSnapshot(const proto::Transaction &txn, bool has
   if(!useOptimisticTxId){ //Add txnDigest to snapshot
     //Just add txnDig to RepeatedPtr directly  //TODO: Make one general structure for prepared/committed.
 
-    std::string &&txnDigest(TransactionDigest(txn, hash_param));
+    std::string &&txnDigest(TransactionDigest(txn, hash_param, hideTS));
     if(txn.has_txndigest()) {
       txnDigest = std::move(txn.txndigest());
     }

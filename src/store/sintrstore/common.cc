@@ -1673,14 +1673,15 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
     KeyManager *keyManager, Verifier *verifier, mainThreadCallback mcb, Transport* transport,
-    bool multithread){
+    bool multithread, const std::string &tsDigest){
       if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
         // Genesis objects have no proofs ==> pass validation by default.
         // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
         //    without needing to write all existing data with transactions
         return mcb((void*) true);
       }
-      if (Timestamp(proof.txn().timestamp()) != timestamp) {
+      if ((tsDigest == "" && Timestamp(proof.txn().timestamp()) != timestamp) ||
+        (tsDigest != "" && proof.txn().hashed_timestamp() != tsDigest)) {
         Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
             " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
             proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1741,7 +1742,7 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string *txnDigest,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier) {
+    KeyManager *keyManager, Verifier *verifier, const std::string &tsDigest) {
   if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
     // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
     //    without needing to write all existing data with transactions
@@ -1755,7 +1756,8 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     return false;
   }
 
-  if (Timestamp(proof.txn().timestamp()) != timestamp) {
+  if ((tsDigest == "" && Timestamp(proof.txn().timestamp()) != timestamp)
+      || (tsDigest != "" && proof.txn().hashed_timestamp() != tsDigest)) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
         " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
         proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1943,9 +1945,26 @@ std::string EndorsedTxnDigest(const std::string &txnDigest, const proto::Transac
   }
   return txnDigest;
 }
+
+
+std::string TimestampDigest(const Timestamp &ts) {
+  return TimestampDigest(ts.getID(), ts.getTimestamp());
+}
+
+std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS) {
+  blake3_hasher hasher;
+  blake3_hasher_init(&hasher);
+
+  std::string digest(BLAKE3_OUT_LEN, 0);
+  blake3_hasher_update(&hasher, (unsigned char *) &timestampID, sizeof(timestampID));
+  blake3_hasher_update(&hasher, (unsigned char *) &timestampTS, sizeof(timestampTS));
+  blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
+  return digest;
+}
+
 //should hashing be parallelized?
 //ignores txnDigest field --> this is not part of protocol contents, just a hack for storage.
-std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
+std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS) {
   if (hashDigest) {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
@@ -1961,13 +1980,18 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
       blake3_hasher_update(&hasher, (unsigned char *) &group, sizeof(group));
     }
     for (const auto &read : txn.read_set()) {
-      uint64_t readtimeId = read.readtime().id();
-      uint64_t readtimeTs = read.readtime().timestamp();
       blake3_hasher_update(&hasher, (unsigned char *) &read.key()[0], read.key().length());
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeId,
+      if(hashedTS) {
+        UW_ASSERT(read.has_hashed_readtime());
+        blake3_hasher_update(&hasher, (unsigned char *) &read.hashed_readtime()[0], read.hashed_readtime().length());
+      } else {
+        uint64_t readtimeId = read.readtime().id();
+        uint64_t readtimeTs = read.readtime().timestamp();
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeId,
           sizeof(read.readtime().id()));
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs,
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs,
           sizeof(read.readtime().timestamp()));
+      }
     }
     for (const auto &write : txn.write_set()) {
       blake3_hasher_update(&hasher, (unsigned char *) &write.key()[0], write.key().length());
@@ -1977,10 +2001,14 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
       blake3_hasher_update(&hasher, (unsigned char *) &dep.write().prepared_txn_digest()[0],
           dep.write().prepared_txn_digest().length());
     }
-    uint64_t timestampId = txn.timestamp().id();
-    uint64_t timestampTs = txn.timestamp().timestamp();
-    blake3_hasher_update(&hasher, (unsigned char *) &timestampId, sizeof(timestampId));
-    blake3_hasher_update(&hasher, (unsigned char *) &timestampTs, sizeof(timestampTs));
+    if(!hashedTS) {
+      uint64_t timestampId = txn.timestamp().id();
+      uint64_t timestampTs = txn.timestamp().timestamp();
+      blake3_hasher_update(&hasher, (unsigned char *) &timestampId, sizeof(timestampId));
+      blake3_hasher_update(&hasher, (unsigned char *) &timestampTs, sizeof(timestampTs));
+    } else {
+      blake3_hasher_update(&hasher, (unsigned char *) &txn.hashed_timestamp()[0], txn.hashed_timestamp().length());
+    }
 
     //Account for Queries now too:
     for (const auto &query : txn.query_set()) {
@@ -2005,21 +2033,33 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
           //     blake3_hasher_update(&hasher, (unsigned char *) &timestampTs, sizeof(timestampTs));
           //  }
           for (auto const &read : group_md.query_read_set().read_set()){
-              uint64_t readtimeId = read.readtime().id();
-              uint64_t readtimeTs = read.readtime().timestamp();
               blake3_hasher_update(&hasher, (unsigned char *) &read.key()[0], read.key().length());
-              blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(readtimeId));
-              blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(readtimeTs));
+              if(hashedTS) {
+                UW_ASSERT(read.has_hashed_readtime());
+                blake3_hasher_update(&hasher, (unsigned char *) &read.hashed_readtime()[0], read.hashed_readtime().length());
+              } else {
+                uint64_t readtimeId = read.readtime().id();
+                uint64_t readtimeTs = read.readtime().timestamp();
+                blake3_hasher_update(&hasher, (unsigned char *) &readtimeId,
+                  sizeof(read.readtime().id()));
+                blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs,
+                  sizeof(read.readtime().timestamp()));
+              }
           }
           for (const auto &dep : group_md.query_read_set().deps()) {
               blake3_hasher_update(&hasher, (unsigned char *) &dep.write().prepared_txn_digest()[0], dep.write().prepared_txn_digest().length());
           }
           for(const auto &pred: group_md.query_read_set().read_predicates()){
               blake3_hasher_update(&hasher, (unsigned char *) &pred.table_name()[0], pred.table_name().length()); 
-              uint64_t readtimeId = pred.table_version().id();
-              uint64_t readtimeTs = pred.table_version().timestamp();
-              blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(readtimeId));
-              blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(readtimeTs));
+              if(hashedTS) {
+                UW_ASSERT(pred.has_hashed_table_version());
+                blake3_hasher_update(&hasher, (unsigned char *) &pred.hashed_table_version()[0], pred.hashed_table_version().length());
+              } else {
+                uint64_t readtimeId = pred.table_version().id();
+                uint64_t readtimeTs = pred.table_version().timestamp();
+                blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(readtimeId));
+                blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(readtimeTs));
+              }
               for(auto const &instance: pred.instantiations()){
                 for(auto const &col_value: instance.col_values()){
                   blake3_hasher_update(&hasher, (unsigned char *) &col_value[0], col_value.length());
@@ -2032,10 +2072,15 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
     //Hash read_predicates directly (in case was merged by client already)
     for(const auto &pred: txn.read_predicates()){
       blake3_hasher_update(&hasher, (unsigned char *) &pred.table_name()[0], pred.table_name().length()); 
-      uint64_t readtimeId = pred.table_version().id();
-      uint64_t readtimeTs = pred.table_version().timestamp();
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(readtimeId));
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(readtimeTs));
+      if(hashedTS) {
+        UW_ASSERT(pred.has_hashed_table_version());
+        blake3_hasher_update(&hasher, (unsigned char *) &pred.hashed_table_version()[0], pred.hashed_table_version().length());
+      } else {
+        uint64_t readtimeId = pred.table_version().id();
+        uint64_t readtimeTs = pred.table_version().timestamp();
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(readtimeId));
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(readtimeTs));
+      }
       for(auto const &instance: pred.instantiations()){
         for(auto const &col_value: instance.col_values()){
           blake3_hasher_update(&hasher, (unsigned char *) &col_value[0], col_value.length());
@@ -2083,17 +2128,21 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest) {
   }
 }
 
-std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts) {
+std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts) {
   blake3_hasher hasher;
   blake3_hasher_init(&hasher);
   std::string digest(BLAKE3_OUT_LEN, 0);
   blake3_hasher_update(&hasher, (unsigned char *) &query_cmd[0], query_cmd.length());
-  uint64_t timestampId = query_ts.getID();
-  uint64_t timestampTs = query_ts.getTimestamp();
-  blake3_hasher_update(&hasher, (unsigned char *) &timestampId,
-      sizeof(timestampId));
-  blake3_hasher_update(&hasher, (unsigned char *) &timestampTs,
-      sizeof(timestampTs));
+  if(hashed_ts == "") {
+    uint64_t timestampId = query_ts.getID();
+    uint64_t timestampTs = query_ts.getTimestamp();
+    blake3_hasher_update(&hasher, (unsigned char *) &timestampId,
+        sizeof(timestampId));
+    blake3_hasher_update(&hasher, (unsigned char *) &timestampTs,
+        sizeof(timestampTs));
+  } else {
+    blake3_hasher_update(&hasher, (unsigned char *) &hashed_ts[0], hashed_ts.length());
+  }
 
   blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
 
@@ -2155,17 +2204,21 @@ std::string QueryRetryId(const std::string &queryId, const uint64_t &retry_versi
 }
 
 // TODO:  Could change input directly to google::protobuf::RepeatedPtrField<ReadMessage>
-std::string generateReadSetSingleHash(const proto::ReadSet &query_read_set) { 
+std::string generateReadSetSingleHash(const proto::ReadSet &query_read_set, bool hashedTS) { 
   blake3_hasher hasher;
   blake3_hasher_init(&hasher);
   std::string hash_chain(BLAKE3_OUT_LEN, 0);
   //hash the read_set
   for (auto const &read : query_read_set.read_set()){
-      uint64_t readtimeId = read.readtime().id();
-      uint64_t readtimeTs = read.readtime().timestamp();
       blake3_hasher_update(&hasher, (unsigned char *) &read.key()[0], read.key().length());
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(read.readtime().id()));
-      blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(read.readtime().timestamp()));
+      if(hashedTS) {
+        blake3_hasher_update(&hasher, (unsigned char *) &read.hashed_readtime()[0], read.hashed_readtime().length());
+      } else {
+        uint64_t readtimeId = read.readtime().id();
+        uint64_t readtimeTs = read.readtime().timestamp();
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeId, sizeof(read.readtime().id()));
+        blake3_hasher_update(&hasher, (unsigned char *) &readtimeTs, sizeof(read.readtime().timestamp()));
+      }
   }
 
   //Note: Dependencies do not need to be hashed
@@ -2425,6 +2478,16 @@ int64_t GetLogGroup(const proto::Transaction &txn, const std::string &txnDigest)
   groupIdx = groupIdx % txn.involved_groups_size();
   UW_ASSERT(groupIdx < txn.involved_groups_size());
   return txn.involved_groups(groupIdx);
+}
+
+void removeTsfromTx(proto::Transaction *txn) {
+  txn->clear_timestamp();
+  for (auto &i : *txn->mutable_read_set()) {
+    i.clear_readtime();
+  }
+  for (auto &i : *txn->mutable_read_predicates()) {
+    i.clear_table_version();
+  }
 }
 
 } // namespace sintrstore

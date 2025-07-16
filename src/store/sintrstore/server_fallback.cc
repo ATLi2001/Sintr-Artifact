@@ -337,7 +337,7 @@ void Server::HandlePhase1FB(const TransportAddress &remote, proto::Phase1FB &msg
   }
 
   stats.Increment("total_p1FB_received", 1);
-  std::string txnDigest = TransactionDigest(*txn, params.hashDigest);
+  std::string txnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
   if(params.sintr_params.hashEndorsements) {
     txnDigest = EndorsedTxnDigest(txnDigest, *txn, params.hashDigest);
   }
@@ -471,6 +471,7 @@ void Server::HandlePhase1FB(const TransportAddress &remote, proto::Phase1FB &msg
       if(!params.signClientProposals) txn = msg.release_txn();
       //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //HACK to include txnDigest to lookup signed_tx.
       *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict, FindTableVersion, and to lookup signed_tx)
+      Debug("Addongoing timestamp %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
       AddOngoing(txnDigest, txn);
       if (ExecP1(msg, remote, txnDigest, txn, result, committedProof, abstain_conflict)) { //only send if the result is not Wait
           SetP1(msg.req_id(), p1fb_organizer->p1fbr->mutable_p1r(), txnDigest, result, committedProof, abstain_conflict);
@@ -506,6 +507,7 @@ void Server::ProcessProposalFB(proto::Phase1FB &msg, const TransportAddress &rem
   if(!params.signClientProposals) txn = msg.release_txn();
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //HACK to include txnDigest to lookup signed_tx and have access to txnDigest inside TXN later (used for abstain conflict)
   *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict, and for FindTableVersion)
+  Debug("Process proposal FB Addongoing timestamp %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
   AddOngoing(txnDigest, txn);
 
   //Todo: Improve efficiency if Valid: insert into P1Meta and check conditions again: If now already in P1Meta then use this existing result.

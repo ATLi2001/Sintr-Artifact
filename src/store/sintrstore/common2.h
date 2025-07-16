@@ -45,7 +45,7 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
     const std::string &key, const std::string &value, const std::string &table_name, sql::QueryResultProtoWrapper *query_result,
     SQLTransformer *sql_interpreter,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier);
+    KeyManager *keyManager, Verifier *verifier, bool hashedTS = false, bool isValidatingClient = false);
 
 void AddWriteSetIdx(proto::Transaction &txn);
 

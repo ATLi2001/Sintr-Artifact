@@ -484,6 +484,7 @@ DEFINE_string(sintr_policy_config_path, "", "path to sintr policy configuration 
 DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of including policy in read messages, 0 indicates never");
 DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
+DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
 
 // given an estimated txn policy, how many other clients to contact?
 const std::string sintr_client_validation_args[] = {
@@ -1722,6 +1723,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_parallel_query_sigs_check,
         FLAGS_sintr_blind_write_message,
         FLAGS_sintr_sort_writeset,
+        FLAGS_sintr_hide_timestamps,
         FLAGS_sintr_max_client_sig_check_threads
       );
 

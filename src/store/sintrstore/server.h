@@ -794,7 +794,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       const proto::CommittedProof* &conflict, const proto::Transaction* &abstain_conflict,
       bool fallback_flow = false, bool isGossip = false, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb = nullptr);
 
-  void RegisterTxTS(const std::string &txnDigest, const proto::Transaction *txn);
+  void RegisterTxTS(const std::string &txnDigest, const proto::Transaction *txn, const Timestamp &ts);
   void AddOngoing(std::string &txnDigest, proto::Transaction* txn);
   void RemoveOngoing(std::string &txnDigest);
   void* CheckProposalValidity(::google::protobuf::Message &msg, const proto::Transaction *txn, std::string &txnDigest, bool fallback = false);

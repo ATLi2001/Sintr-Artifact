@@ -314,6 +314,9 @@ void Client::Get(const std::string &key, get_callback gcb,
         Debug("Adding read to read set");
         ReadMessage *read = txn.add_read_set();
         read->set_key(key);
+        if(params.sintr_params.hideTimestamps) {
+          read->set_hashed_readtime(TimestampDigest(ts));
+        }
         ts.serialize(read->mutable_readtime());
       }
       // new policy can only come from server, which must correspond to addReadSet
@@ -814,6 +817,11 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     ReadMessage *read = txn.add_read_set();
     read->set_key(key);
     read_time.serialize(read->mutable_readtime());
+    if(params.sintr_params.hideTimestamps) {
+      read->set_hashed_readtime(TimestampDigest(read_time));
+      Debug("HASHED READTIME: %s", BytesToHex(read->hashed_readtime(), 16).c_str());
+    }
+    Debug("READ TIME FOR POINT QUERY IS: %lu:%lu", read_time.getTimestamp(), read_time.getID());
 
     // new policy can only come from server, which must correspond to addReadSet
     if (policyMsg.IsInitialized()) {
@@ -1398,7 +1406,10 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     std::sort(txn.mutable_involved_groups()->begin(), txn.mutable_involved_groups()->end());
 
     // set expected endorsement digest
-    std::string digest = TransactionDigest(txn, params.hashDigest);
+    if(params.sintr_params.hideTimestamps) {
+      txn.set_hashed_timestamp(TimestampDigest(Timestamp(txn.timestamp())));
+    }
+    std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {
       endorseClient->DebugSetExpectedTxnOutput(txn);
     }
@@ -1483,7 +1494,7 @@ void Client::Phase1(PendingRequest *req) {
   }
 
   Debug("PHASE1 [%lu:%lu] for txn_id %s at TS %lu", client_id, client_seq_num,
-      BytesToHex(TransactionDigest(req->txn, params.hashDigest), 16).c_str(), txn.timestamp().timestamp());
+      BytesToHex(TransactionDigest(req->txn, params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str(), txn.timestamp().timestamp());
 
   UW_ASSERT(txn.involved_groups().size() > 0);
 
@@ -1508,7 +1519,7 @@ void Client::Phase1(PendingRequest *req) {
 
   if (failureActive && (params.injectFailure.type == InjectFailureType::CLIENT_CRASH || params.injectFailure.type == InjectFailureType::CLIENT_SEND_PARTIAL_P1)) {
     Debug("INJECT CRASH FAILURE[%lu:%lu] with decision %d. txnDigest: %s", client_id, req->id, req->decision,
-          BytesToHex(TransactionDigest(req->txn, params.hashDigest), 16).c_str());
+          BytesToHex(TransactionDigest(req->txn, params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str());
     stats.Increment("inject_failure_crash");
     //total_failure_injections++;
     FailureCleanUp(req);
@@ -1926,14 +1937,14 @@ void Client::Writeback(PendingRequest *req) {
   }
 
   //total_writebacks++;
-  Debug("WRITEBACK[%s][%lu:%lu] result %s", BytesToHex(TransactionDigest(req->txn, params.hashDigest), 16).c_str(), client_id, req->id, req->decision ?  "ABORT" : "COMMIT");
+  Debug("WRITEBACK[%s][%lu:%lu] result %s", BytesToHex(TransactionDigest(req->txn, params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str(), client_id, req->id, req->decision ?  "ABORT" : "COMMIT");
   //Notice("WRITEBACK[%s][%lu:%lu] result %s", BytesToHex(TransactionDigest(req->txn, params.hashDigest), 16).c_str(), client_id, req->id, req->decision ?  "ABORT" : "COMMIT");
   req->startedWriteback = true;
 
   if (failureActive && params.injectFailure.type == InjectFailureType::CLIENT_STALL_AFTER_P1) {
     // TODO: modify debug statements to use transaction digest with endorsements
     Debug("INJECT CRASH FAILURE[%lu:%lu] with decision %d. txnDigest: %s", client_id, req->id, req->decision,
-          BytesToHex(TransactionDigest(req->txn, params.hashDigest), 16).c_str());
+          BytesToHex(TransactionDigest(req->txn, params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str());
     stats.Increment("inject_stall_after_p1", 1);
     //stats.Increment("total_stall_after_p1");
     //total_failure_injections++;
@@ -2491,7 +2502,7 @@ bool Client::ValidateWB(proto::Writeback &msg, std::string *txnDigest, proto::Tr
     } 
   }
   else if(msg.has_txn()){
-    std::string temp_digest = TransactionDigest(msg.txn(), params.hashDigest);
+    std::string temp_digest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps);
     if(params.sintr_params.hashEndorsements) {
       temp_digest = EndorsedTxnDigest(temp_digest, msg.txn(), params.hashDigest);
     }
@@ -2525,7 +2536,7 @@ bool Client::ValidateWB(proto::Writeback &msg, std::string *txnDigest, proto::Tr
         }
     } 
     else if (msg.decision() == proto::ABORT && msg.has_conflict()) {
-      std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest);
+      std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
       if(params.sintr_params.hashEndorsements) {
         committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
       }
