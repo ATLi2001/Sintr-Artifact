@@ -960,6 +960,15 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
   //*queryRep->mutable_query_group_meta() = {pendingQuery->}
 
+  // this is needed only in the case of cacheReadSet=false and mergeActiveAtClient=true
+  // in that case, we need to separately maintain and forward queryResMetaData
+  // otherwise, we can just use the queryRep directly
+  proto::QueryResultMetaData queryResMetaData;
+  if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+    queryResMetaData.set_query_id(pendingQuery->queryId);
+    queryResMetaData.set_retry_version(pendingQuery->version);
+  }
+
   if(params.query_params.cacheReadSet){ 
     for(auto &[group, read_set_hash] : pendingQuery->group_result_hashes){
       proto::QueryGroupMeta &queryMD = (*queryRep->mutable_group_meta())[group]; 
@@ -975,6 +984,10 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     for(auto &[group, query_read_set] : pendingQuery->group_read_sets){
       
       if(params.query_params.mergeActiveAtClient){
+        // must copy into queryResMetaData for forwarding
+        proto::QueryGroupMeta &queryMD = (*queryResMetaData.mutable_group_meta())[group]; 
+        *queryMD.mutable_query_read_set() = *query_read_set;
+
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
           ReadMessage* add_read = txn.add_read_set();
@@ -1022,10 +1035,18 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   }
 
   // forward to validating clients
-  c2client->SendForwardQueryResultMessage(
-    pendingQuery->query_gen_id, pendingQuery->result, *queryRep,
-    pendingQuery->group_sigs, true
-  );
+  if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+    c2client->SendForwardQueryResultMessage(
+      pendingQuery->query_gen_id, pendingQuery->result, queryResMetaData,
+      pendingQuery->group_sigs, true
+    );
+  }
+  else {
+    c2client->SendForwardQueryResultMessage(
+      pendingQuery->query_gen_id, pendingQuery->result, *queryRep,
+      pendingQuery->group_sigs, true
+    );
+  }
 
   Debug("Upcall with Query result");
 
