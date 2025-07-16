@@ -585,8 +585,6 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
     const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset) {
   
   proto::ForwardQueryResultMessage *fwdQueryResultMsgToSend = new proto::ForwardQueryResultMessage();
-  fwdQueryResultMsgToSend->set_client_id(client_id);
-  fwdQueryResultMsgToSend->set_client_seq_num(client_seq_num);
   proto::ForwardQueryResult fwdQueryResult;
   fwdQueryResult.set_query_gen_id(query_gen_id);
   fwdQueryResult.set_query_result(query_result);
@@ -1606,6 +1604,17 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &query_sig,
   else {
     // expect full readset
     // compute hash to compare
+    // validated_result query read set is from the signed message so could be unsorted
+    try {
+      std::sort(validated_result.mutable_query_read_set()->mutable_read_set()->begin(), validated_result.mutable_query_read_set()->mutable_read_set()->end(), sortReadSetByKey);
+      //erase duplicates: Technically not necessary.
+      validated_result.mutable_query_read_set()->mutable_read_set()->erase(std::unique(validated_result.mutable_query_read_set()->mutable_read_set()->begin(),
+          validated_result.mutable_query_read_set()->mutable_read_set()->end(), equalReadMsg), validated_result.mutable_query_read_set()->mutable_read_set()->end());  //erases all but last appearance
+      //Note: Only necessary because we use repeated field; Not necessary if we used ordered map
+    }
+    catch(...) {
+      Panic("Read set contains two reads of the same key with different timestamp. Sent by replica %d", validated_result.replica_id());
+    }
     std::string validated_result_hash = generateReadSetSingleHash(validated_result.query_read_set());
     std::string fwd_read_set_hash = generateReadSetSingleHash(query_read_set);
     if (validated_result_hash != fwd_read_set_hash) {

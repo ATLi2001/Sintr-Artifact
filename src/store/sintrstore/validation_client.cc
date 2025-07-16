@@ -532,8 +532,17 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
   for (const auto &read : txn->read_set()) {
     readsInReadset.insert(read.key());
   }
-  if (readsInReadset != a->second->seenReads) {
-    Panic("Transaction readset does not match the reads seen by the validating client.");
+  if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+    // in this case, readsInReadset will potentially include query result reads in addition to seenReads
+    if (!std::includes(readsInReadset.begin(), readsInReadset.end(),
+        a->second->seenReads.begin(), a->second->seenReads.end())) {
+      Panic("Transaction readset does not include all reads seen by the validating client.");
+    }
+  }
+  else {
+    if (readsInReadset != a->second->seenReads) {
+      Panic("Transaction readset does not match the reads seen by the validating client.");
+    }
   }
   if (a->second->queriesAddedToReadset != a->second->seenQueries) {
     Panic("Transaction queries added to readset does not match the queries seen by the validating client.");

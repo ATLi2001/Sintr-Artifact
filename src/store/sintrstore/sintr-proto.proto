@@ -518,15 +518,12 @@ message ForwardQueryResult {
 }
 
 message ForwardQueryResultMessage {
-  required uint64 client_id = 1;
-  required uint64 client_seq_num = 2;
   oneof forward_one_of {
-    ForwardQueryResult fwd_query_result = 3;
-    SignedMessage signed_fwd_query_result = 4;
+    ForwardQueryResult fwd_query_result = 1;
+    SignedMessage signed_fwd_query_result = 2;
   }
   // server signatures on query result and readset per group, should be f+1 exact matches
-  map<uint64, SignedMessages> query_sigs = 5;
-  // tell validating client whether to add to readset
+  map<uint64, SignedMessages> query_sigs = 3;
 }
 
 // blind write message to other clients
