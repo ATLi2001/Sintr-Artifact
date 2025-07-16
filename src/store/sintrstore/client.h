@@ -158,7 +158,7 @@ class Client : public ::Client {
       queryMsg.set_retry_version(0);
       if(client->params.sintr_params.hideTimestamps) {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
-          TimestampDigest(client->txn.timestamp().id(), client->txn.timestamp().timestamp()));
+          TimestampDigest(Timestamp(client->txn.timestamp())));
       } else {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "");
       }

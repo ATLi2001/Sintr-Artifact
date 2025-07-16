@@ -363,7 +363,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
         write->set_committed_value(queryResultBuilder.get_result()->SerializeAsString()); // Note: This "clears" the builder
         if(params.sintr_params.hideTimestamps) {
             Debug("SET hashed committed ts %lu:%lu", tsVal.first.getID(), tsVal.first.getTimestamp());
-            write->set_hashed_committed_ts(TimestampDigest(tsVal.first.getID(), tsVal.first.getTimestamp()));
+            write->set_hashed_committed_ts(TimestampDigest(tsVal.first));
             tsVal.first.serialize(pointQueryReply->mutable_committed_pq_timestamp());
         } else {
             tsVal.first.serialize(write->mutable_committed_timestamp());
@@ -384,7 +384,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
             if(params.sintr_params.hideTimestamps && write->has_committed_timestamp()) {
                 const auto& ts_msg = write->committed_timestamp();
                 *pointQueryReply->mutable_committed_pq_timestamp() = ts_msg;
-                write->set_hashed_committed_ts(TimestampDigest(ts_msg.id(), ts_msg.timestamp())); // clears write->committed_timestamp
+                write->set_hashed_committed_ts(TimestampDigest(Timestamp(ts_msg))); // clears write->committed_timestamp
             }
         }
     }
@@ -392,7 +392,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
     if(write->has_prepared_value() && params.sintr_params.hideTimestamps && write->has_prepared_timestamp()) {
         const auto& ts_msg = write->prepared_timestamp();
         *pointQueryReply->mutable_prepared_pq_timestamp() = ts_msg;
-        write->set_hashed_prepared_ts(TimestampDigest(ts_msg.id(), ts_msg.timestamp()));
+        write->set_hashed_prepared_ts(TimestampDigest(Timestamp(ts_msg)));
     }
 
     if(include_policy && write->has_committed_value()) {
@@ -400,7 +400,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
         std::string policyId = policyIdFunction(query->primary_enc_key(), "");
         GetPolicy(policyId, ts, tsPolicy, false);
         if(params.sintr_params.hideTimestamps) {
-            pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+            pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
             tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
         } else {
             tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
@@ -426,7 +426,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
             Debug("Prepared policy id write with most recent ts %lu.%lu.",
                     tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
             if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+                pointQueryReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
                 tsPolicy.first.serialize(pointQueryReply->mutable_prepared_policy_timestamp());
             } else {
                 tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_prepared_policy_timestamp());
@@ -440,7 +440,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
             *pointQueryReply->mutable_write()->mutable_prepared_policy_txn_digest() = tempDigest;
         } else {
             if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+                pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
                 tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
             } else {
                 tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
@@ -915,6 +915,17 @@ void Server::SendQueryReply(QueryMetaData *query_md){
     proto::QueryResult *result = queryResultReply->mutable_result();
     proto::ReadSet *query_read_set;
 
+    if(params.sintr_params.hideTimestamps) {
+        for(auto &read : *result->mutable_query_read_set()->mutable_read_set()){
+            if(!read.has_hashed_readtime()) {
+                read.set_hashed_readtime(TimestampDigest(Timestamp(read.readtime())));
+            }
+        }
+        for(auto &pred: *result->mutable_query_read_set()->mutable_read_predicates()) {
+            pred.set_hashed_table_version(TimestampDigest(Timestamp(pred.table_version())));
+        }
+    }
+
     //proto::LocalDeps *query_local_deps; //Deprecated --> made deps part of read set
     Debug("QueryResult[%lu:%lu:%lu]: %s", query_md->query_seq_num, query_md->client_id, query_md->retry_version, BytesToHex(result->query_result(), 16).c_str());
     
@@ -933,7 +944,7 @@ void Server::SendQueryReply(QueryMetaData *query_md){
     result->set_replica_id(id);
     if(params.sintr_params.hideTimestamps) {
         result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts,
-            TimestampDigest(query_md->ts.getID(), query_md->ts.getTimestamp())));
+            TimestampDigest(query_md->ts)));
     } else {
         result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts, ""));
     }    

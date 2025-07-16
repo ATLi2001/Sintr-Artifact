@@ -974,7 +974,7 @@ bool PelotonTableStore::ApplyTableWrite(const std::string &table_name, const Tab
     UW_ASSERT(commit_proof);
     Debug("Before timestamp asserts for apply table write");
     if(hideTimestamps) {
-      UW_ASSERT(TimestampDigest(ts.getID(), ts.getTimestamp()) == commit_proof->txn().hashed_timestamp());
+      UW_ASSERT(TimestampDigest(ts) == commit_proof->txn().hashed_timestamp());
     } else {
       UW_ASSERT(ts == Timestamp(commit_proof->txn().timestamp()));
     }

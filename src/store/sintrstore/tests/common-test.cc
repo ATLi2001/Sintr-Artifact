@@ -450,7 +450,7 @@ TEST_P(CommonTest, ValidateTransactionWriteValidFastPath) {
   *proof.mutable_p1_replies() = replies;
 
   EXPECT_TRUE(ValidateTransactionWrite(proof, "key0", "val0", Timestamp(1, 1),
-        config, false, nullptr));
+        config, false, nullptr, ""));
 }
 
 TEST_P(CommonTest, ValidateTransactionWriteInvalidWrongValue) {
@@ -478,7 +478,7 @@ TEST_P(CommonTest, ValidateTransactionWriteInvalidWrongValue) {
   *proof.mutable_p1_replies() = replies;
 
   EXPECT_FALSE(ValidateTransactionWrite(proof, "key0", "val1", Timestamp(1, 1),
-        config, false, nullptr));
+        config, false, nullptr, ""));
 }
 
 TEST_P(CommonTest, ValidateTransactionWriteInvalidMissingWriteSet) {
@@ -506,7 +506,7 @@ TEST_P(CommonTest, ValidateTransactionWriteInvalidMissingWriteSet) {
   *proof.mutable_p1_replies() = replies;
 
   EXPECT_FALSE(ValidateTransactionWrite(proof, "key1", "val1", Timestamp(1, 1),
-        config, false, nullptr));
+        config, false, nullptr, ""));
 }
 
 TEST_P(CommonTest, ValidateTransactionWriteInvalidWrongTimestamp) {
@@ -534,7 +534,7 @@ TEST_P(CommonTest, ValidateTransactionWriteInvalidWrongTimestamp) {
   *proof.mutable_p1_replies() = replies;
 
   EXPECT_FALSE(ValidateTransactionWrite(proof, "key1", "val1", Timestamp(3, 2),
-        config, false, nullptr));
+        config, false, nullptr, ""));
 }
 
 INSTANTIATE_TEST_SUITE_P(CommonTests, CommonTest, ::testing::Values(

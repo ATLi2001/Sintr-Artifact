@@ -915,7 +915,9 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
                         policy.endorsement_policy().policy().SerializeToString(&policyObjectStr);
                         if (!ValidateTransactionWrite(policy.policy_proof(), &committedPolicyTxnDigest,
                             policyId, policyObjectStr, policy.policy_timestamp(),
-                            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+                            config, params.signedMessages, keyManager, verifier,
+                            params.sintr_params.hideTimestamps ?
+                            TimestampDigest(Timestamp(policy.policy_timestamp())) : "")) {
                             Debug("[group %i] Failed to validate committed policy for query %s.",
                                 group, queryResult.result().query_gen_id().c_str());
                             return;
@@ -1228,7 +1230,8 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         if(read_type == read_t::GET){
             valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), 
             params.sintr_params.hideTimestamps ? reply.committed_pq_timestamp() : write->committed_timestamp(),
-            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps);
+            config, params.signedMessages, keyManager, verifier,
+            params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_pq_timestamp())) : "");
         } 
         else { //if read type POINT 
             //std::cerr << "WriteValue: " << write->committed_value() << std::endl;
@@ -1283,7 +1286,8 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                 if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
                     write->committed_policy().policy_id(), policyObjectStr,
                     params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
-                    config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+                    config, params.signedMessages, keyManager, verifier, 
+                    params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_policy_timestamp()))  : "")) {
                     Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
                     return false;
                 }
@@ -1333,7 +1337,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
         Debug("Read reply has txn_dig %s / %s (hex).", write->prepared_txn_digest().c_str(), BytesToHex(write->prepared_txn_digest(), 16).c_str());
         std::tuple<Timestamp, std::string, std::string> prepVal; // = std::make_tuple();   //tuple (timestamp, txn_digest, value)
-        std::get<0>(prepVal) = params.sintr_params.hideTimestamps ? std::move(*reply.mutable_committed_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp());
+        std::get<0>(prepVal) = params.sintr_params.hideTimestamps ? std::move(*reply.mutable_prepared_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp());
         std::get<1>(prepVal) = std::move(*write->mutable_prepared_txn_digest());
         std::get<2>(prepVal) = std::move(*write->mutable_prepared_value());
 
@@ -1413,7 +1417,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                         //FIXME: To succeed in verifyDeps verification: Need to set whole Write... ==> However, that makes no sense. Deprecate verifyDeps.
                         *req->dep.mutable_write()->mutable_prepared_value() = req->maxValue; 
                         if(params.sintr_params.hideTimestamps) {
-                            req->dep.mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts.getID(), ts.getTimestamp()));
+                            req->dep.mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts));
                         } else {
                             ts.serialize(req->dep.mutable_write()->mutable_prepared_timestamp());
                         }
@@ -1453,7 +1457,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             ReadMessage *read = txn.add_read_set();
             *read->mutable_key() = req->key;
             if(params.sintr_params.hideTimestamps) {
-                read->set_hashed_readtime(TimestampDigest(req->maxTs.getID(), req->maxTs.getTimestamp()));
+                read->set_hashed_readtime(TimestampDigest(req->maxTs));
             }
             req->maxTs.serialize(read->mutable_readtime());
             

@@ -864,7 +864,8 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
     asyncValidateTransactionWrite(reply->proof(), &committedTxnDigest, req->key, write->committed_value(),
     params.sintr_params.hideTimestamps ? reply->committed_timestamp() : write->committed_timestamp(),
     config, params.signedMessages, keyManager, verifier, mcb, transport,
-    true, params.sintr_params.hideTimestamps);
+    true,
+    params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply->committed_timestamp())) : "");
     return;
   }
 }
@@ -1068,7 +1069,8 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       }
       if (!ValidateTransactionWrite(reply.proof(), &committedTxnDigest,
           req->key, write->committed_value(), params.sintr_params.hideTimestamps ? reply.committed_timestamp() : write->committed_timestamp(),
-          config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+          config, params.signedMessages, keyManager, verifier,
+          params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_timestamp())) : "")) {
         Debug("[group %i] Failed to validate committed value for read %lu.",group, reply.req_id());
         // invalid replies can be treated as if we never received a reply from a crashed replica
         return;
@@ -1116,7 +1118,8 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
             write->committed_policy().policy_id(), policyObjectStr,
             params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
-            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps)) {
+            config, params.signedMessages, keyManager, verifier,
+            params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_policy_timestamp())) : "")) {
           Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
           return;
         }

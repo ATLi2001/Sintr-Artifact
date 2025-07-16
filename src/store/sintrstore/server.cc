@@ -1112,7 +1112,7 @@ void Server::HandleRead(const TransportAddress &remote,
         tsVal.first.getID());
     readReply->mutable_write()->set_committed_value(tsVal.second.val);
     if(params.sintr_params.hideTimestamps) {
-      readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsVal.first.getID(), tsVal.first.getTimestamp()));
+      readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsVal.first));
       tsVal.first.serialize(readReply->mutable_committed_timestamp());
     } else {
       tsVal.first.serialize(readReply->mutable_write()->mutable_committed_timestamp());
@@ -1127,7 +1127,7 @@ void Server::HandleRead(const TransportAddress &remote,
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       GetPolicy(policyId, ts, tsPolicy);
       if(params.sintr_params.hideTimestamps) {
-        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
         tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
       } else {
         tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
@@ -1166,6 +1166,7 @@ void Server::HandleRead(const TransportAddress &remote,
     if (params.maxDepDepth > -2) {
       Debug("Look for prepared value to READ[%lu:%lu]", msg.timestamp().id(), msg.req_id());
       const proto::Transaction *mostRecent = nullptr;
+      Timestamp mostRecentPreparedTS;
       std::string preparedPolicyId = policyIdFunction(msg.key(), "");
 
       //std::pair<std::shared_mutex,std::map<Timestamp, const proto::Transaction *>> &x = preparedWrites[write.key()];
@@ -1191,9 +1192,10 @@ void Server::HandleRead(const TransportAddress &remote,
           for (const auto &t : itr->second.second) {
             if(t.first > ts) break; //only consider it if it is smaller than TS (Map is ordered, so break should be fine here.)
             if(committed_exists && t.first <= tsVal.first) continue; //only consider it if bigger than committed value. 
-            if (mostRecent == nullptr || t.first > Timestamp(mostRecent->timestamp())) {
+            if (mostRecent == nullptr || t.first > mostRecentPreparedTS) {
               if (t.second->policy_type() == proto::Transaction::NONE) {
                 mostRecent = t.second;
+                mostRecentPreparedTS = t.first;
               }
             }
           }
@@ -1209,15 +1211,15 @@ void Server::HandleRead(const TransportAddress &remote,
             }
 
             Debug("Prepared write with most recent ts %lu.%lu.",
-                mostRecent->timestamp().timestamp(), mostRecent->timestamp().id());
+                mostRecentPreparedTS.getTimestamp(), mostRecentPreparedTS.getID());
             //std::cerr << "Dependency depth: " << (DependencyDepth(mostRecent)) << std::endl;
             if (params.maxDepDepth == -1 || DependencyDepth(mostRecent) <= params.maxDepDepth) {
               readReply->mutable_write()->set_prepared_value(preparedValue);
               if(params.sintr_params.hideTimestamps) {
-                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecent->timestamp().id(), mostRecent->timestamp().timestamp()));
-                *readReply->mutable_prepared_timestamp() = mostRecent->timestamp();
+                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecentPreparedTS));
+                mostRecentPreparedTS.serialize(readReply->mutable_prepared_timestamp());
               } else {
-                *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
+                mostRecentPreparedTS.serialize(readReply->mutable_write()->mutable_prepared_timestamp());
               }
               std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest, params.sintr_params.hideTimestamps);
               if(params.sintr_params.hashEndorsements) {
@@ -1246,7 +1248,7 @@ void Server::HandleRead(const TransportAddress &remote,
           Debug("Prepared policy id write with most recent ts %lu.%lu.",
                   tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
           if(params.sintr_params.hideTimestamps) {
-            readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+            readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
             tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
           } else {
             tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
@@ -1261,7 +1263,7 @@ void Server::HandleRead(const TransportAddress &remote,
         } else {
           // using a committed policy for a prepared write
           if(params.sintr_params.hideTimestamps) {
-            readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+            readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
             tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
           } else {
             tsPolicy.first.serialize(readReply->mutable_write()->mutable_committed_policy_timestamp());
@@ -1298,8 +1300,8 @@ void Server::HandleRead(const TransportAddress &remote,
       UW_ASSERT(preparedPolicyVal != "");
       readReply->mutable_write()->set_prepared_value(preparedPolicyVal);
       if(params.sintr_params.hideTimestamps) {
-        readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
-        readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(tsPolicy.first));
+        readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
         *readReply->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
         tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
       } else {
@@ -1329,8 +1331,8 @@ void Server::HandleRead(const TransportAddress &remote,
       readReply->mutable_write()->set_committed_value(policyVal);
       // using a committed policy for a prepared write
       if(params.sintr_params.hideTimestamps) {
-        readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
-        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first.getID(), tsPolicy.first.getTimestamp()));
+        readReply->mutable_write()->set_hashed_committed_ts(TimestampDigest(tsPolicy.first));
+        readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
         tsPolicy.first.serialize(readReply->mutable_committed_timestamp());
         tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
       } else {
@@ -2479,12 +2481,14 @@ void Server::Prepare(const std::string &txnDigest, const proto::Transaction &txn
 
   Debug("PREPARE[%s] agreed to commit with ts %lu.%lu.",BytesToHex(txnDigest, 16).c_str(), txn.timestamp().timestamp(), txn.timestamp().id());
   
-  Timestamp ts = Timestamp(txn.timestamp());
 
   //const ReadSet &readSet = txn.read_set();
   const WriteSet &writeSet = txn.write_set();
   
   ongoingMap::const_accessor o;
+
+  Timestamp ts = Timestamp(txn.timestamp());
+
   auto ongoingItr = ongoing.find(o, txnDigest);
   if(!ongoingItr){
   //if(ongoingItr == ongoing.end()){
@@ -2698,9 +2702,6 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Timestamp ts(txn->timestamp());
-  if(params.sintr_params.hideTimestamps) {
-    removeTsfromTx(txn);
-  }
 
   if (params.validateProofs) {
     // CAUTION: we no longer own txn pointer (which we allocated during Phase1  and stored in ongoing)
@@ -2723,12 +2724,21 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
 
   auto [committedItr, first_commit] = committed.insert(std::make_pair(txnDigest, proof));
   Debug("Inserted txn %s into Committed on CPU %d",BytesToHex(txnDigest, 16).c_str(), sched_getcpu());
-
-  UW_ASSERT(TimestampDigest(ts.getID(), ts.getTimestamp()) == proof->mutable_txn()->hashed_timestamp());
+  if(params.sintr_params.hideTimestamps) {
+    UW_ASSERT(TimestampDigest(ts) == proof->mutable_txn()->hashed_timestamp());
+  }
   //Debug("TXN has timestamp: %d:%d and hashed timestamp %s", proof->mutable_txn()->timestamp().id(), proof->mutable_txn()->timestamp().id(), BytesToHex(proof->mutable_txn()->hashed_timestamp(), 16));
   //auto committedItr =committed.emplace(txnDigest, proof);
   
   if(!first_commit) return;// already was inserted
+
+  if(params.sintr_params.hideTimestamps) {
+    //acquire lock before modifying txn
+    ongoingMap::accessor o;
+    bool ongoingItr = ongoing.find(o, txnDigest);
+    removeTsfromTx(txn);
+    o.release();
+  }
 
   proto::Transaction* txn_ref = params.validateProofs? proof->mutable_txn() : txn;
 

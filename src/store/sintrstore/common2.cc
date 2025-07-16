@@ -87,10 +87,10 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
 
   //Check that txn in proof matches reported timestamp
   if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp)
-      || (hashedTS && !isValidatingClient && proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
+      || (hashedTS && !isValidatingClient && proof.txn().hashed_timestamp() != TimestampDigest(timestamp))) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
       proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(), timestamp.getTimestamp(), timestamp.getID());
-    Debug("HASHED TS PROOF: %s VS HASHED TS: %s", BytesToHex(proof.txn().hashed_timestamp(), 16).c_str(), BytesToHex(TimestampDigest(timestamp.getID(), timestamp.getTimestamp()), 16).c_str());
+    Debug("HASHED TS PROOF: %s VS HASHED TS: %s", BytesToHex(proof.txn().hashed_timestamp(), 16).c_str(), BytesToHex(TimestampDigest(timestamp), 16).c_str());
     return false;
   }
 

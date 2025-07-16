@@ -315,7 +315,7 @@ void Client::Get(const std::string &key, get_callback gcb,
         ReadMessage *read = txn.add_read_set();
         read->set_key(key);
         if(params.sintr_params.hideTimestamps) {
-          read->set_hashed_readtime(TimestampDigest(ts.getID(), ts.getTimestamp()));
+          read->set_hashed_readtime(TimestampDigest(ts));
         }
         ts.serialize(read->mutable_readtime());
       }
@@ -818,7 +818,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     read->set_key(key);
     read_time.serialize(read->mutable_readtime());
     if(params.sintr_params.hideTimestamps) {
-      read->set_hashed_readtime(TimestampDigest(read_time.getID(), read_time.getTimestamp()));
+      read->set_hashed_readtime(TimestampDigest(read_time));
       Debug("HASHED READTIME: %s", BytesToHex(read->hashed_readtime(), 16).c_str());
     }
     Debug("READ TIME FOR POINT QUERY IS: %lu:%lu", read_time.getTimestamp(), read_time.getID());
@@ -977,10 +977,6 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       if(params.query_params.mergeActiveAtClient){
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
-          if(params.sintr_params.hideTimestamps && !read.has_hashed_readtime()) {
-            std::string hashedTS = TimestampDigest(read.readtime().id(), read.readtime().timestamp());
-            read.set_hashed_readtime(hashedTS);
-          }
           ReadMessage* add_read = txn.add_read_set();
           *add_read = std::move(read);
         }
@@ -998,11 +994,6 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
          for(auto &pred: *query_read_set->mutable_read_predicates()){
             if(!txn.read_predicates().empty() && pred.pred_instances_size() == 1){ //This is just a simple check that sees if there are 2 consecutive preds (that only have 1 instantiation) with the same pred_instance
                 if(pred.pred_instances()[0] == txn.read_predicates()[txn.read_predicates_size()-1].pred_instances()[0]) continue;
-            }
-            if(params.sintr_params.hideTimestamps) {
-              // hide table versions of predicates
-              std::string hashedTS = TimestampDigest(pred.table_version().id(), pred.table_version().timestamp());
-              pred.set_hashed_table_version(hashedTS);
             }
             proto::ReadPredicate *add_pred = txn.add_read_predicates();
             *add_pred = std::move(pred);
@@ -1394,8 +1385,8 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     std::sort(txn.mutable_involved_groups()->begin(), txn.mutable_involved_groups()->end());
 
     // set expected endorsement digest
-    if(sintr.params.hideTimestamps) {
-      txn.set_hashed_timestamp(TimestampDigest(txn.timestamp().id(), txn.timestamp().timestamp()));
+    if(params.sintr_params.hideTimestamps) {
+      txn.set_hashed_timestamp(TimestampDigest(Timestamp(txn.timestamp())));
     }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {

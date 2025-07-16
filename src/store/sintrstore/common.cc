@@ -1673,16 +1673,15 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
     KeyManager *keyManager, Verifier *verifier, mainThreadCallback mcb, Transport* transport,
-    bool multithread, bool hashedTS, bool isValidatingClient){
+    bool multithread, const std::string &tsDigest){
       if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
         // Genesis objects have no proofs ==> pass validation by default.
         // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
         //    without needing to write all existing data with transactions
         return mcb((void*) true);
       }
-      if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp) ||
-        (hashedTS && !isValidatingClient
-          && proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
+      if ((tsDigest == "" && Timestamp(proof.txn().timestamp()) != timestamp) ||
+        (tsDigest != "" && proof.txn().hashed_timestamp() != tsDigest)) {
         Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
             " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
             proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1743,7 +1742,7 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string *txnDigest,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier, bool hashedTS, bool isValidatingClient) {
+    KeyManager *keyManager, Verifier *verifier, const std::string &tsDigest) {
   if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
     // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
     //    without needing to write all existing data with transactions
@@ -1757,9 +1756,8 @@ bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     return false;
   }
 
-  if ((!hashedTS && Timestamp(proof.txn().timestamp()) != timestamp)
-      || (hashedTS && !isValidatingClient &&
-      proof.txn().hashed_timestamp() != TimestampDigest(timestamp.getID(), timestamp.getTimestamp()))) {
+  if ((tsDigest == "" && Timestamp(proof.txn().timestamp()) != timestamp)
+      || (tsDigest != "" && proof.txn().hashed_timestamp() != tsDigest)) {
     Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
         " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
         proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
@@ -1946,6 +1944,11 @@ std::string EndorsedTxnDigest(const std::string &txnDigest, const proto::Transac
     return digest;  
   }
   return txnDigest;
+}
+
+
+std::string TimestampDigest(const Timestamp &ts) {
+  return TimestampDigest(ts.getID(), ts.getTimestamp());
 }
 
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS) {

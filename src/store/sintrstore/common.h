@@ -344,7 +344,7 @@ void asyncValidateFBDecision(proto::CommitDecision decision, uint64_t view,
 bool ValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string *txnDigest, const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
-    KeyManager *keyManager, Verifier *verifier, bool hashedTS = false, bool isValidatingClient = false);
+    KeyManager *keyManager, Verifier *verifier, const std::string &tsDigest);
 
 /*
 // validate transaction write for when there are policy changes and thus two proofs are needed
@@ -366,7 +366,7 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
     const std::string &key, const std::string &val, const Timestamp &timestamp,
     const transport::Configuration *config, bool signedMessages,
     KeyManager *keyManager, Verifier *verifier, mainThreadCallback cb, Transport* transport,
-    bool multithread, bool hashedTS = false, bool isValidatingClient = false);
+    bool multithread, const std::string &tsDigest);
 
 // check must validate that proof replies are from all involved shards
 bool ValidateProofCommit1(const proto::CommittedProof &proof,
@@ -411,6 +411,8 @@ bool operator!=(const proto::Write &pw1, const proto::Write &pw2);
 std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS = false);
 
 std::string EndorsedTxnDigest(const std::string &txnDigest, const proto::Transaction &txn, bool hashDigest);
+
+std::string TimestampDigest(const Timestamp &ts);
 
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS);
 

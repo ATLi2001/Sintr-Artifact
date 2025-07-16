@@ -360,7 +360,7 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
     fwdReadResult.mutable_timestamp()->set_id(ts.getID());
   } else {
-    std::string tsDigest = TimestampDigest(ts.getID(), ts.getTimestamp());
+    std::string tsDigest = TimestampDigest(ts);
     fwdReadResult.set_hashed_timestamp(tsDigest);
   }
   fwdReadResult.set_client_id(client_id);
@@ -488,7 +488,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
     fwdReadResult.mutable_timestamp()->set_id(ts.getID());
   } else {
-    std::string tsDigest = TimestampDigest(ts.getID(), ts.getTimestamp());
+    std::string tsDigest = TimestampDigest(ts);
     fwdReadResult.set_hashed_timestamp(tsDigest);
   }
   fwdReadResult.set_client_id(client_id);
@@ -1378,7 +1378,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
         }
         if (!ValidateTransactionWrite(fwdReadResultMsg.proof(), &committedTxnDigest,
             write.key(), write.committed_value(), write.has_committed_timestamp() ? write.committed_timestamp() : Timestamp(),
-            config, params.signedMessages, keyManager, verifier, params.sintr_params.hideTimestamps, true)) {
+            config, params.signedMessages, keyManager, verifier, write.has_hashed_committed_ts() ? write.hashed_committed_ts() : "")) {
           Debug(
             "Failed to validate committed value for forwarded read result from client id %lu, seq num %lu",
             curr_client_id,
@@ -1657,7 +1657,7 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &query_sig,
       for (auto &read : *query_rs.mutable_read_set()){
         if(!read.has_hashed_readtime()) {
           Debug("setting hashed readtime");
-          read.set_hashed_readtime(TimestampDigest(read.readtime().id(), read.readtime().timestamp()));
+          read.set_hashed_readtime(TimestampDigest(Timestamp(read.readtime())));
         }
       }
       fwd_read_set_hash = generateReadSetSingleHash(query_rs, params.sintr_params.hideTimestamps);
