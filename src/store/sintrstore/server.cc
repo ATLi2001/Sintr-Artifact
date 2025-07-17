@@ -2742,14 +2742,6 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   
   if(!first_commit) return;// already was inserted
 
-  if(params.sintr_params.hideTimestamps) {
-    //acquire lock before modifying txn
-    ongoingMap::accessor o;
-    bool ongoingItr = ongoing.find(o, txnDigest);
-    removeTsfromTx(txn);
-    o.release();
-  }
-
   proto::Transaction* txn_ref = params.validateProofs? proof->mutable_txn() : txn;
 
   CommitToStore(proof, txn_ref, txnDigest, ts, val);

@@ -1464,6 +1464,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             
             Debug("MaxVAl: %s",BytesToHex(req->maxValue, 100).c_str());
             Debug("MaxTS: [%lu:%lu]", req->maxTs.getTimestamp(), req->maxTs.getID());
+            removeTsfromTx(req->maxCommittedProof.mutable_txn());
             req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, req->dep,req->hasDep, true,
                 req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy);
         }
