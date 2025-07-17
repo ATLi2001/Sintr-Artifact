@@ -969,6 +969,9 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
     *read->mutable_key() = req->key;
     req->maxTs.serialize(read->mutable_readtime());
     readValues[req->key] = req->maxValue;
+    if(params.sintr_params.hideTimestamps) {
+      removeTsfromTx(req->maxCommittedProof.mutable_txn());
+    }
     req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->dep,
         req->hasDep && !req->get_from_put, !req->get_from_put,
         req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
@@ -1243,7 +1246,9 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
        ReadMessage *read = txn.add_read_set();
       *read->mutable_key() = req->key;
       req->maxTs.serialize(read->mutable_readtime());
-      
+      if(params.sintr_params.hideTimestamps) {
+        removeTsfromTx(req->maxCommittedProof.mutable_txn());
+      }
       req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->dep,req->hasDep && !req->get_from_put, !req->get_from_put,
         req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
         req->policyDep, req->hasPolicyDep);
