@@ -33,18 +33,18 @@ import shutil
 
 
 ORIGINAL_STATS_DIR = "experiment-results/original"
-RESULTS_DIR = "experiment-results/stats_json"
+PREPROCESS_DIR = "experiment-results/preprocessed"
 OUTPUT_DIR = "experiment-results/analyzed"
-ANALYSIS_TYPES = ["latency_throughput", "throughput_bar"]
+ANALYSIS_TYPES = ["latency_throughput", "sig_nosig_tput_bar", "sig_nosig_lat_bar"]
 
 
-# collect original stats.json files and places them into results_dir under unique names
-def collect_original_stats(original_stats_dir, results_dir):
+# collect original stats.json files and places them into preprocess_dir under unique names
+def preprocess_original_stats(original_stats_dir, preprocess_dir):
     for subdir in os.listdir(original_stats_dir):
         for file in os.listdir(os.path.join(original_stats_dir, subdir)):
             # read in config file
             if file != "stats.json" and file.endswith(".json"):
-                with open(os.path.join(original_stats_dir, subdir, file), 'r') as f:
+                with open(os.path.join(original_stats_dir, subdir, file), "r") as f:
                     config = json.load(f)
 
                     if "analysis_name" in config:
@@ -56,31 +56,31 @@ def collect_original_stats(original_stats_dir, results_dir):
                     num_clients = config["client_total"]
                     # create a unique name for the stats file
                     unique_name = f"{analysis_name}_{num_clients}_{subdir}.json"
-                    # copy the stats.json file to the results_dir with the unique name
+                    # copy the stats.json file to the preprocess_dir with the unique name
                     shutil.copyfile(
                         os.path.join(original_stats_dir, subdir, "stats.json"),
-                        os.path.join(results_dir, unique_name)
+                        os.path.join(preprocess_dir, unique_name)
                     )
 
-# reads all stats.json files in the given directory and returns a dictionary of dictionaries.
-# each dictionary corresponds to a stats.json file.
-# expected name format is <experiment_name>_<num_clients>.json
-def read_stats_files(results_dir):
+# reads all stats.json files in the given directory and returns a dictionary of dictionaries
+# each dictionary corresponds to a stats.json file
+# expected name format is <experiment_name>_<num_clients>_<timestamp>.json
+def read_stats_files(preprocess_dir):
     out = {}
 
-    for file in os.listdir(results_dir):
+    for file in os.listdir(preprocess_dir):
         if file.endswith(".json"):
-            file_path = os.path.join(results_dir, file)
+            file_path = os.path.join(preprocess_dir, file)
             if os.path.isfile(file_path):
-                with open(file_path, 'r') as f:
+                with open(file_path, "r") as f:
                     stats = json.load(f)
                     # trim off .json extension from the filename
                     out[file[:-5]] = stats
     
     return out
 
-# converts a dictionary of stats dictionaries to a latency-throughput CSV file.
-def stats_to_lat_tput_csv(stats_dicts, output_dir, now_string):
+# converts a dictionary of stats dictionaries to a CSV file.
+def stats_to_csv(stats_dicts, output_dir, now_string, save_to_file=True):
     out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
 
     for name, stat_json in stats_dicts.items():
@@ -97,7 +97,8 @@ def stats_to_lat_tput_csv(stats_dicts, output_dir, now_string):
     # sort by experiment name and number of clients
     out_df.sort_values(by=["experiment_name", "num_clients"], inplace=True)
 
-    out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
+    if save_to_file:
+        out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
     return out_df
 
 
@@ -123,7 +124,7 @@ def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysi
     width = 0.25  # the width of the bars
     multiplier = 0
 
-    fig, ax = plt.subplots(layout='constrained')
+    fig, ax = plt.subplots(layout="constrained")
 
     for attribute, measurement in grouped_data.items():
         print(attribute, measurement)
@@ -140,46 +141,63 @@ def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysi
     plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
     plt.close()
 
-def create_throughput_bar_plot(df, output_dir, now_string):
-    # dictionary from base experiment name to list of sig and no-sig throughput
-    sig_no_sig_tput = {"sig": [], "no-sig": []}
+def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
+    if analysis_type == ANALYSIS_TYPES[1]:
+        df_colname = "tput"
+        y_label = "Throughput (txn/s)"
+    elif analysis_type == ANALYSIS_TYPES[2]:
+        df_colname = "latency"
+        y_label = "Latency (ms)"
+    else:
+        raise ValueError(f"Unsupported analysis type: {analysis_type}")
+
+    # dictionary to hold data for sig and no-sig versions
+    sig_no_sig_data = {"sig": [], "no-sig": []}
     experiment_labels = []
     for experiment_name, group in df.groupby(["experiment_name"]):
         client_groups = group.groupby("num_clients")
-        tput = client_groups["tput"].mean()
+        data = client_groups[df_colname].mean()
 
         # sig and no-sig versions have the same base experiment name
         if experiment_name[0].endswith("-nosig"):
             base_experiment_name = experiment_name[0][:-6]
-            sig_no_sig_tput["no-sig"].append(tput.values[0])
+            sig_no_sig_data["no-sig"].append(data.values[0])
         else:
             base_experiment_name = experiment_name[0]
-            sig_no_sig_tput["sig"].append(tput.values[0])
-        
+            sig_no_sig_data["sig"].append(data.values[0])
+
         if base_experiment_name not in experiment_labels:
             experiment_labels.append(base_experiment_name)
-    
-    sig_no_sig_tput["no-sig"].insert(0, 0)  
-    print(sig_no_sig_tput)
+
+    sig_no_sig_data["no-sig"].insert(0, 0)
+    print(sig_no_sig_data)
 
     create_grouped_bar_plot(
-        sig_no_sig_tput,
+        sig_no_sig_data,
         experiment_labels,
-        "Throughput (txn/s)",
+        y_label,
         output_dir,
-        ANALYSIS_TYPES[1],
+        analysis_type,
         now_string
     )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Combine stats.json files to a CSV.")
+    # this script is used to analyze experiment runs
+    # experiment runs produce stats.json files, which should be placed in the original_stats_dir
+    # this step is automated through the collect_results.sh script
+    # first, the original_stats_dir files are preprocessed by collecting them into the preprocess_dir
+    # they are given a unique name indicating the experiment name, number of clients, and timestamp
+    # then, preprocessed stats.json files are read in and the relevant data is extracted into a csv
+    # depending on the analysis type, the corresponding plot is generated as well
+
+    parser = argparse.ArgumentParser(description="Analyze stats.json files.")
     parser.add_argument(
-        "-r", "--results_dir",
-        default=RESULTS_DIR,
+        "-p", "--preprocess_dir",
+        default=PREPROCESS_DIR,
         type=str,
         required=False,
-        help=f"Where to look for stats.json files (default: {RESULTS_DIR})"
+        help=f"Where to look for stats.json files (default: {PREPROCESS_DIR})"
     )
     parser.add_argument(
         "-o", "--output_dir",
@@ -203,18 +221,48 @@ if __name__ == "__main__":
         required=False,
         help=f"Type of analysis to perform (default: {ANALYSIS_TYPES[0]})"
     )
-
+    parser.add_argument(
+        "-c", "--csv",
+        type=str,
+        required=False,
+        help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through preprocessed_dir."
+    )
+    parser.add_argument(
+        "--skip_preprocess",
+        action="store_true",
+        help="If set, only generate csv and plots from current preprocessed files; skips preprocessing from original_stats_dir."
+    )
+    parser.add_argument(
+        "--save_csv",
+        action="store_true",
+        help="If set, saves the generated CSV file to disk."
+    )
+    parser.add_argument(
+        "--no_save_csv",
+        dest="save_csv",
+        action="store_false",
+        help="If set, does not save the generated CSV file to disk."
+    )
+    parser.set_defaults(save_csv=True)
     args = parser.parse_args()
 
-    now_string = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
+    now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
 
-    collect_original_stats(args.original_stats_dir, args.results_dir)
-    stats_dicts = read_stats_files(args.results_dir)
+    if args.csv:
+        df = pd.read_csv(args.csv)
+    else:
+        if not args.skip_preprocess:
+            preprocess_original_stats(args.original_stats_dir, args.preprocess_dir)
+
+        stats_dicts = read_stats_files(args.preprocess_dir)
+        if len(stats_dicts) == 0:
+            print(f"No stats.json files found in {args.preprocess_dir}.")
+            exit(1)
+        df = stats_to_csv(stats_dicts, args.output_dir, now_string, save_to_file=args.save_csv)
+
     if args.analysis_type == ANALYSIS_TYPES[0]:
-        lat_tput_df = stats_to_lat_tput_csv(stats_dicts, args.output_dir, now_string)
-        print(f"Converted {len(stats_dicts)} stats.json files to {args.output_dir}/{ANALYSIS_TYPES[0]}.csv")    
-        create_lat_tput_plots(lat_tput_df, args.output_dir, now_string)
-    elif args.analysis_type == ANALYSIS_TYPES[1]:
-        lat_tput_df = stats_to_lat_tput_csv(stats_dicts, args.output_dir, now_string)
-        print(f"Converted {len(stats_dicts)} stats.json files to {args.output_dir}/{ANALYSIS_TYPES[0]}.csv")
-        create_throughput_bar_plot(lat_tput_df, args.output_dir, now_string)
+        create_lat_tput_plots(df, args.output_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[1] or args.analysis_type == ANALYSIS_TYPES[2]:
+        create_sig_no_sig_bar_plot(df, args.output_dir, args.analysis_type, now_string)
