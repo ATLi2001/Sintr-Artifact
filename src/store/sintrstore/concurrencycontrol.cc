@@ -527,7 +527,13 @@ proto::ConcurrencyControl::Result Server::DoOCCCheck(
     const proto::Transaction* &abstain_conflict,
     bool fallback_flow, bool isGossip, std::function<proto::ConcurrencyControl::Result(void)> **delay_prepare_cb) {
 
-  UW_ASSERT(!params.sintr_params.parallelEndorsementCheck || fallback_flow || delay_prepare_cb != nullptr);
+  // sanity check - if delay_prepare_cb is nullptr, then effects will be visible immediately
+  // this would be incorrect for phase 1 parallel endorsement check
+  if (delay_prepare_cb == nullptr) {
+    UW_ASSERT(!params.sintr_params.parallelEndorsementCheck
+      || params.sintr_params.serverSkipEndorsementCheck
+      || fallback_flow);
+  }
 
   if(txn.timestamp().timestamp() <= 10000) Panic("Trying to store TX TS [%lu:%lu]", txn.timestamp().timestamp(), txn.timestamp().id());
   proto::ConcurrencyControl::Result result;
@@ -1069,7 +1075,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       delete implicitPolicyReads;
     });
 
-    if (!params.sintr_params.parallelEndorsementCheck) {
+    if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
       (*call_prepare)();
       delete call_prepare;
     }
@@ -1098,7 +1104,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
   );
   
   // if fallback, then there is no parallel endorsement check so call right away
-  if (!params.sintr_params.parallelEndorsementCheck || fallback_flow) {
+  if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck || fallback_flow) {
     proto::ConcurrencyControl::Result res = (*call_dependencies_check)();
     delete call_dependencies_check;
     return res;

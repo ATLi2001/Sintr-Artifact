@@ -611,6 +611,8 @@ class IndicusCodebase(ExperimentCodebase):
                 replica_command += ' --sintr_hash_endorsements=%s' % str(config['sintr_protocol_settings']['sintr_hash_endorsements']).lower()
             if 'sintr_hide_timestamps' in config['sintr_protocol_settings']:
                 replica_command += ' --sintr_hide_timestamps=%s' % str(config['sintr_protocol_settings']['sintr_hide_timestamps']).lower()
+            if 'sintr_server_skip_endorsement_check' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_server_skip_endorsement_check=%s' % str(config['sintr_protocol_settings']['sintr_server_skip_endorsement_check']).lower()
 
         #if 'rw_or_retwis' in config:
         #    replica_command += ' --rw_or_retwis=%s' % str(config['rw_or_retwis']).lower()

@@ -995,12 +995,14 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
 
     if(!params.parallel_CCC || !params.mainThreadDispatching){
-      if (!params.sintr_params.parallelEndorsementCheck) {
-        if (!EndorsementCheck(oldTxnDigest, txn)) {
-          Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
-          result = proto::ConcurrencyControl::ABSTAIN;
-          HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
-          return (void*) true;
+      if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
+        if (!params.sintr_params.serverSkipEndorsementCheck) {
+          if (!EndorsementCheck(oldTxnDigest, txn)) {
+            Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
+            result = proto::ConcurrencyControl::ABSTAIN;
+            HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
+            return (void*) true;
+          }
         }
 
         result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
@@ -1073,11 +1075,13 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           o.release();
         proto::ConcurrencyControl::Result *result;
         bool endorsementCheckFail = false;
-        if (!params.sintr_params.parallelEndorsementCheck) {
-          if (!EndorsementCheck(oldTxnDigest, txn)) {
-            Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
-            result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
-            endorsementCheckFail = true;
+        if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
+          if (!params.sintr_params.serverSkipEndorsementCheck) {
+            if (!EndorsementCheck(oldTxnDigest, txn)) {
+              Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
+              result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
+              endorsementCheckFail = true;
+            }
           }
           if(!endorsementCheckFail){
             Debug("starting occ check for txn: %s", BytesToHex(txnDigest, 16).c_str());
