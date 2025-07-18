@@ -18,6 +18,10 @@
       "client_threads_per_process"
     ]
   ],
+
+  "_analysis_name is just for convenience of naming in later analysis": 0,
+  "analysis_name": "sintr-rw-sql-U-policy",
+
   "replication_protocol": ["sintr"],
   "client_protocol_mode": ["sintr"],
   "num_shards": [1],
@@ -85,7 +89,7 @@
       "merkle_branch_factor": 2,
 
       "signature_type": 4,
-      "sig_batch": 2,
+      "sig_batch": 1,
       "sig_batch_timeout": 2,
       "key_path": "/usr/local/etc/indicus-keys/donna",
       "shared_mem_batch": false,
@@ -139,7 +143,7 @@
       "force_read_from_snapshot": false,
 
       "query_read_prepared": true,
-      "query_cache_read_set": false,
+      "query_cache_read_set": true,
       "query_merge_active_at_client": true,
 
       "query_optimistic_txid": true,
@@ -165,7 +169,7 @@
     "sintr_debug_endorse_check": false,
     "sintr_client_check_evidence": true,
     "sintr_policy_function_name": "basic_id",
-    "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-grouped.config",
+    "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy.config",
     "sintr_read_include_policy": 0,
     "sintr_client_validation": "client-validation-exact",
     "sintr_check_policy_leak": true,
@@ -181,7 +185,9 @@
     "sintr_sort_writeset": true,
     "sintr_profile_one_client_load": false,
     "sintr_val_client_selector": "ring",
-    "sintr_val_client_selector_zipf": 1.1
+    "sintr_val_client_selector_zipf": 1.1,
+    "sintr_hide_timestamps": true,
+    "sintr_server_skip_endorsement_check": false
   },
 
   "experiment_name": "sintr",
@@ -191,13 +197,13 @@
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
 
   "client_total": [[8]],
-  "client_processes_per_client_node": [[8]],
+  "client_processes_per_client_node": [[4]],
   "client_threads_per_process": [[1]],
 
   "client_nodes_per_server": 1,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
   "pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
-  "pin_client_processes": [0, 1, 2, 3, 4, 5, 6, 7],
+  "pin_client_processes": [0, 2, 4, 6],
   "client_debug_output": false,
   "_client_debug_output": "store/sintrstore/*",
   "server_debug_output": false,

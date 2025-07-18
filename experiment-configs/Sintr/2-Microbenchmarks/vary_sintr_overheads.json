@@ -1,0 +1,55 @@
+{
+  "policy1R": {
+    "analysis_name": "sintr-rw-sql-U-policy1R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring"
+    }
+  },
+  "policy2R": {
+    "analysis_name": "sintr-rw-sql-U-policy2R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring"
+    }
+  },
+  "_note: cumulatively turn off sintr protocol overheads": 0,
+  "policy2R-1": {
+    "analysis_name": "sintr-rw-sql-U-policy2R-1",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_server_skip_endorsement_check": true
+    }
+  },
+  "policy2R-2": {
+    "analysis_name": "sintr-rw-sql-U-policy2R-2",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_sign_finish_validation": false
+    }
+  },
+  "policy2R-3": {
+    "analysis_name": "sintr-rw-sql-U-policy2R-3",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_sign_finish_validation": false,
+      "sintr_sign_fwd_read_results": false
+    }
+  },
+  "policy2R-4": {
+    "analysis_name": "sintr-rw-sql-U-policy2R-4",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_sign_finish_validation": false,
+      "sintr_sign_fwd_read_results": false,
+      "sintr_client_check_evidence": false
+    }
+  }
+}
