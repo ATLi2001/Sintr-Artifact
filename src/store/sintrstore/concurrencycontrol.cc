@@ -1078,26 +1078,30 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     }
   }
 
-  auto call_dependencies_check = [this, txnDigest, &txn, &remote, reqId, fallback_flow, isGossip]() {
-    //7) Check whether all outstanding dependencies have committed
-      // If not, wait.
-    bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
+  std::function<proto::ConcurrencyControl::Result(void)> *call_dependencies_check = new std::function(
+    [this, txnDigest, &txn, &remote, reqId, fallback_flow, isGossip]() {
+      //7) Check whether all outstanding dependencies have committed
+        // If not, wait.
+      bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
 
-    if (!allFinished) {
-      stats.Increment("cc_waits", 1);
-      return proto::ConcurrencyControl::WAIT;
-    } else {
-      //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
-      Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
-      return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
-      //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
-      //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+      if (!allFinished) {
+        stats.Increment("cc_waits", 1);
+        return proto::ConcurrencyControl::WAIT;
+      } else {
+        //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
+        Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
+        return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
+        //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
+        //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+      }
     }
-  };
+  );
   
   // if fallback, then there is no parallel endorsement check so call right away
   if (!params.sintr_params.parallelEndorsementCheck || fallback_flow) {
-    return call_dependencies_check();
+    proto::ConcurrencyControl::Result res = (*call_dependencies_check)();
+    delete call_dependencies_check;
+    return res;
   }
   else {
     UW_ASSERT(delay_prepare_cb != nullptr);
@@ -1109,7 +1113,9 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
           (*call_prepare)();
           delete call_prepare;
         }
-        return call_dependencies_check();
+        proto::ConcurrencyControl::Result res = (*call_dependencies_check)();
+        delete call_dependencies_check;
+        return res;
       }
     );
   }

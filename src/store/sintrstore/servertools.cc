@@ -1012,23 +1012,18 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
       }
       else {
         auto remote_ptr = remote.clone();
-        auto callback = [this, reqId, committedProof, txnDigest, txn, remote_ptr, 
-            abstain_conflict, isGossip, forceMaterialize]
-            (proto::ConcurrencyControl::Result result, bool failEndorsementCheck) mutable {
+        auto callback = [this, reqId, txnDigest, txn, remote_ptr, isGossip, forceMaterialize](
+          proto::ConcurrencyControl::Result result, const proto::CommittedProof *committedProof,
+          const proto::Transaction *abstain_conflict, bool failEndorsementCheck
+        ) mutable {
+          if (result == proto::ConcurrencyControl::ABORT) {
+            UW_ASSERT(committedProof != nullptr);
+          }
           HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
-        };
-        // this callback is safe to call before CC finishes
-        // does not use committedProof or abstain_conflict so CC cannot cause thread safety issues
-        // technically txn could be unsafe because CC does modify it, but callback should not?
-        auto fail_endorsement_cb = [this, reqId, remote_ptr, txnDigest, txn, isGossip, forceMaterialize]() mutable {
-          const proto::CommittedProof *committedProof = nullptr;
-          const proto::Transaction *abstain_conflict = nullptr;
-          HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
         };
         AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
           txn->endorsements().sig_msgs_size(),
           std::move(callback),
-          std::move(fail_endorsement_cb),
           remote_ptr
         );
         
@@ -1043,7 +1038,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         
         // if the endorsement checks are done, this will trigger HandlePhase1CB
         // otherwise, HandlePhase1CB will be called when all endorsements checks finish
-        bool done = asyncValidatePrepare->SetCCResult(result, delay_prepare_cb);
+        bool done = asyncValidatePrepare->SetCCResult(result, committedProof, abstain_conflict, delay_prepare_cb);
         Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
 
         if (done) {
@@ -1097,20 +1092,15 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           return (void*) true;
         }
         else {
-          auto callback = [this, reqId, committedProof, txnDigest, txn, remote_ptr, 
-              abstain_conflict, isGossip, forceMaterialize]
-              (proto::ConcurrencyControl::Result result, bool failEndorsementCheck) mutable {
+          auto callback = [this, reqId, txnDigest, txn, remote_ptr, isGossip, forceMaterialize](
+            proto::ConcurrencyControl::Result result, const proto::CommittedProof *committedProof,
+            const proto::Transaction *abstain_conflict, bool failEndorsementCheck
+          ) mutable {
             HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
-          };
-          auto fail_endorsement_cb = [this, reqId, remote_ptr, txnDigest, txn, isGossip, forceMaterialize]() mutable {
-            const proto::CommittedProof *committedProof = nullptr;
-            const proto::Transaction *abstain_conflict = nullptr;
-            HandlePhase1CB(reqId, proto::ConcurrencyControl::ABSTAIN, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, true);
           };
           AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
             txn->endorsements().sig_msgs_size(),
             std::move(callback),
-            std::move(fail_endorsement_cb),
             remote_ptr
           );
           // launch async validate endorsements
@@ -1125,7 +1115,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
           
           // if the endorsement checks are done, this will trigger HandlePhase1CB
           // otherwise, HandlePhase1CB will be called when all endorsements checks finish
-          bool done = asyncValidatePrepare->SetCCResult(*result, delay_prepare_cb);
+          bool done = asyncValidatePrepare->SetCCResult(*result, committedProof, abstain_conflict, delay_prepare_cb);
           Debug("SetCCResult for txn: %s, async done: %d", BytesToHex(txnDigest, 16).c_str(), done);
 
           if (done) {

@@ -955,12 +955,12 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
   struct AsyncValidatePrepare {
     AsyncValidatePrepare(uint32_t total_validations,
-        std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb,
-        std::function<void(void)> phase1_fail_endorsement_cb,
+        std::function<void(proto::ConcurrencyControl::Result, const proto::CommittedProof *,
+          const proto::Transaction *, bool)> phase1_cb,
         TransportAddress *remote) : 
         done(false), total_validations(total_validations), completed_validations(0), 
-        phase1_cb(phase1_cb), phase1_fail_endorsement_cb(phase1_fail_endorsement_cb),
-        delay_prepare_cb(nullptr), ccDone(false), remote(remote), cbDone(false) {
+        phase1_cb(phase1_cb), delay_prepare_cb(nullptr), ccDone(false),
+        committedProof(nullptr), abstain_conflict(nullptr), remote(remote), cbDone(false) {
       policyClient = new PolicyClient();
     }
     ~AsyncValidatePrepare() {
@@ -995,10 +995,10 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
             if (delay_prepare_cb != nullptr) {
               result = (*delay_prepare_cb)();
             }
-            phase1_cb(result, false);
+            phase1_cb(result, committedProof, abstain_conflict, false);
           }
           else {
-            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, nullptr, nullptr, true);
           }
           cbDone = true;
         }
@@ -1007,7 +1007,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       else if (completed_validations == total_validations) {
         // if endorsements don't satisfy policy, call phase1_cb early
         if (!policyClient->IsSatisfied(endorsers)) {
-          phase1_fail_endorsement_cb();
+          phase1_cb(proto::ConcurrencyControl::ABSTAIN, nullptr, nullptr, true);
           cbDone = true;
         }
       }
@@ -1017,10 +1017,13 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
     // set the cc result and call the phase1_cb if all validations are done
     // return bool indicating if done (cc and all validations finished)
-    bool SetCCResult(proto::ConcurrencyControl::Result result, std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb) {
+    bool SetCCResult(proto::ConcurrencyControl::Result result, const proto::CommittedProof *committedProof,
+        const proto::Transaction *abstain_conflict, std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb) {
       std::lock_guard<std::mutex> lock(validation_state_mutex);
       ccDone = true;
       this->result = result;
+      this->committedProof = committedProof;
+      this->abstain_conflict = abstain_conflict;
       this->delay_prepare_cb = delay_prepare_cb;
 
       // if endorsements are also done, then overall done
@@ -1035,17 +1038,17 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
             if (delay_prepare_cb != nullptr) {
               this->result = (*delay_prepare_cb)();
             }
-            phase1_cb(this->result, false);
+            phase1_cb(this->result, this->committedProof, this->abstain_conflict, false);
           }
           else {
-            phase1_cb(proto::ConcurrencyControl::ABSTAIN, true);
+            phase1_cb(proto::ConcurrencyControl::ABSTAIN, nullptr, nullptr, true);
           }
           cbDone = true;
         }
       }
       // if cc result is ABSTAIN or ABORT, call the phase1_cb without having to wait for all validations
       else if (result == proto::ConcurrencyControl::ABSTAIN || result == proto::ConcurrencyControl::ABORT) {
-        phase1_cb(result, false);
+        phase1_cb(result, this->committedProof, this->abstain_conflict, false);
         cbDone = true;
       }
 
@@ -1062,18 +1065,17 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     uint32_t completed_validations;
 
     // phase1_cb is std::bind of HandlePhase1CB with everything except 
-    // a result and a boolean indicating failEndorsementCheck
-    std::function<void(proto::ConcurrencyControl::Result, bool)> phase1_cb;
-    // phase1_fail_endorsement_cb is std::bind of HandlePhase1CB
-    // this is safe to call even if cc is not done 
-    // does not have pointers that cc can modify
-    std::function<void(void)> phase1_fail_endorsement_cb;
+    // a result, committedProof, abstain conflict, and failEndorsementCheck
+    std::function<void(proto::ConcurrencyControl::Result, const proto::CommittedProof *,
+      const proto::Transaction *, bool)> phase1_cb;
     // delay_prepare_cb will make the prepare effects visible
     std::function<proto::ConcurrencyControl::Result(void)> *delay_prepare_cb;
     TransportAddress *remote;
 
     bool ccDone;
     proto::ConcurrencyControl::Result result;
+    const proto::CommittedProof *committedProof;
+    const proto::Transaction *abstain_conflict;
 
     // callback done
     bool cbDone;
