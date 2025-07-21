@@ -172,7 +172,7 @@ class IndicusCodebase(ExperimentCodebase):
             if 'sintr_client_validation' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_client_validation %s' % config['sintr_protocol_settings']['sintr_client_validation']
             if 'sintr_client_pin_cores' in config['sintr_protocol_settings']:
-                client_command += ' --sintr_client_pin_cores=%s' % str(config['sintr_protocol_settings']['sintr_client_check_evidence']).lower()
+                client_command += ' --sintr_client_pin_cores=%s' % str(config['sintr_protocol_settings']['sintr_client_pin_cores']).lower()
             if 'sintr_c2c_send_thread' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_c2c_send_thread=%s' % str(config['sintr_protocol_settings']['sintr_c2c_send_thread']).lower()
             if 'sintr_c2c_receive_thread' in config['sintr_protocol_settings']:

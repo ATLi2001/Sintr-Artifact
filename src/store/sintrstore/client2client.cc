@@ -674,9 +674,6 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
     if (i == client_id) {
       continue;
     }
-    Debug("Sending to client %lu from client %lu seq num %lu query gen id %s", i, client_id,
-      client_seq_num,
-      BytesToHex(query_gen_id, 16).c_str());
     transport->SendMessageToReplica(this, i, *fwdQueryResultMsgToSend);
   }
 }
