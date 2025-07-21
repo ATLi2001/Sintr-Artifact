@@ -33,19 +33,21 @@ import shutil
 
 
 ORIGINAL_STATS_DIR = "experiment-results/original"
-PREPROCESS_DIR = "experiment-results/preprocessed"
 OUTPUT_DIR = "experiment-results/analyzed"
 ANALYSIS_TYPES = ["latency_throughput", "sig_nosig_tput_bar", "sig_nosig_lat_bar"]
 
 
-# collect original stats.json files and places them into preprocess_dir under unique names
-def preprocess_original_stats(original_stats_dir, preprocess_dir):
+# reads all stats.json files in the given directory and returns a dictionary of dictionaries
+# each dictionary corresponds to a stats.json file
+def read_original_stats(original_stats_dir):
+    out = {}
+
     for subdir in os.listdir(original_stats_dir):
         for file in os.listdir(os.path.join(original_stats_dir, subdir)):
             # read in config file
             if file != "stats.json" and file.endswith(".json"):
-                with open(os.path.join(original_stats_dir, subdir, file), "r") as f:
-                    config = json.load(f)
+                with open(os.path.join(original_stats_dir, subdir, file), "r") as config_file:
+                    config = json.load(config_file)
 
                     if "analysis_name" in config:
                         analysis_name = config["analysis_name"]
@@ -55,28 +57,11 @@ def preprocess_original_stats(original_stats_dir, preprocess_dir):
                         analysis_name = f"{protocol}-{benchmark}"
                     num_clients = config["client_total"]
                     # create a unique name for the stats file
-                    unique_name = f"{analysis_name}_{num_clients}_{subdir}.json"
-                    # copy the stats.json file to the preprocess_dir with the unique name
-                    shutil.copyfile(
-                        os.path.join(original_stats_dir, subdir, "stats.json"),
-                        os.path.join(preprocess_dir, unique_name)
-                    )
+                    unique_name = f"{analysis_name}_{num_clients}_{subdir}"
 
-# reads all stats.json files in the given directory and returns a dictionary of dictionaries
-# each dictionary corresponds to a stats.json file
-# expected name format is <experiment_name>_<num_clients>_<timestamp>.json
-def read_stats_files(preprocess_dir):
-    out = {}
-
-    for file in os.listdir(preprocess_dir):
-        if file.endswith(".json"):
-            file_path = os.path.join(preprocess_dir, file)
-            if os.path.isfile(file_path):
-                with open(file_path, "r") as f:
-                    stats = json.load(f)
-                    # trim off .json extension from the filename
-                    out[file[:-5]] = stats
-    
+                    with open(os.path.join(original_stats_dir, subdir, "stats.json"), "r") as stats_file:
+                        stats = json.load(stats_file)
+                        out[unique_name] = stats
     return out
 
 # converts a dictionary of stats dictionaries to a CSV file.
@@ -186,19 +171,11 @@ if __name__ == "__main__":
     # this script is used to analyze experiment runs
     # experiment runs produce stats.json files, which should be placed in the original_stats_dir
     # this step is automated through the collect_results.sh script
-    # first, the original_stats_dir files are preprocessed by collecting them into the preprocess_dir
-    # they are given a unique name indicating the experiment name, number of clients, and timestamp
-    # then, preprocessed stats.json files are read in and the relevant data is extracted into a csv
+    # first, the original_stats_dir has subfolders, each of which has configs and stats.json files
+    # these files are read in and the relevant data is extracted into a csv
     # depending on the analysis type, the corresponding plot is generated as well
 
     parser = argparse.ArgumentParser(description="Analyze stats.json files.")
-    parser.add_argument(
-        "-p", "--preprocess_dir",
-        default=PREPROCESS_DIR,
-        type=str,
-        required=False,
-        help=f"Where to look for stats.json files (default: {PREPROCESS_DIR})"
-    )
     parser.add_argument(
         "-o", "--output_dir",
         default=OUTPUT_DIR,
@@ -225,12 +202,7 @@ if __name__ == "__main__":
         "-c", "--csv",
         type=str,
         required=False,
-        help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through preprocessed_dir."
-    )
-    parser.add_argument(
-        "--skip_preprocess",
-        action="store_true",
-        help="If set, only generate csv and plots from current preprocessed files; skips preprocessing from original_stats_dir."
+        help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
     parser.add_argument(
         "--save_csv",
@@ -253,12 +225,9 @@ if __name__ == "__main__":
     if args.csv:
         df = pd.read_csv(args.csv)
     else:
-        if not args.skip_preprocess:
-            preprocess_original_stats(args.original_stats_dir, args.preprocess_dir)
-
-        stats_dicts = read_stats_files(args.preprocess_dir)
+        stats_dicts = read_original_stats(args.original_stats_dir)
         if len(stats_dicts) == 0:
-            print(f"No stats.json files found in {args.preprocess_dir}.")
+            print(f"No stats.json files found in {args.original_stats_dir}.")
             exit(1)
         df = stats_to_csv(stats_dicts, args.output_dir, now_string, save_to_file=args.save_csv)
 
