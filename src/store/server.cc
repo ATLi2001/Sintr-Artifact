@@ -482,6 +482,7 @@ DEFINE_bool(sintr_use_occ_for_policies, false, "Use OCC instead of MVTSO for pol
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
 DEFINE_bool(sintr_server_skip_endorsement_check, false, "server skip endorsement check completely");
+DEFINE_bool(sintr_policy_CCC, true, "perform CCC for policies");
 
 /**
  * Experiment settings.
@@ -850,7 +851,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_use_occ_for_policies,
         FLAGS_sintr_hash_endorsements, false, false, true,
         FLAGS_sintr_hide_timestamps, 1,
-        FLAGS_sintr_server_skip_endorsement_check
+        FLAGS_sintr_server_skip_endorsement_check,
+        FLAGS_sintr_policy_CCC
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

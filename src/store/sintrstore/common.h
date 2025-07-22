@@ -879,6 +879,7 @@ typedef struct SintrParameters {
   const bool hideTimestamps; // do not send timestamp information to validation clients if true
   const uint32_t maxClientSigCheckThreads; // maximum number of parallel client signature check threads
   const bool serverSkipEndorsementCheck; // server skips endorsement check completely
+  const bool policyCCC; // perform CCC on policies
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -886,7 +887,7 @@ typedef struct SintrParameters {
     bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
-    bool serverSkipEndorsementCheck) :
+    bool serverSkipEndorsementCheck, bool policyCCC) :
     maxValThreads(maxValThreads), 
     signFwdReadResults(signFwdReadResults), 
     signFinishValidation(signFinishValidation),
@@ -909,7 +910,8 @@ typedef struct SintrParameters {
     sortWriteset(sortWriteset),
     hideTimestamps(hideTimestamps) ,
     maxClientSigCheckThreads(maxClientSigCheckThreads),
-    serverSkipEndorsementCheck(serverSkipEndorsementCheck) {
+    serverSkipEndorsementCheck(serverSkipEndorsementCheck),
+    policyCCC(policyCCC) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message

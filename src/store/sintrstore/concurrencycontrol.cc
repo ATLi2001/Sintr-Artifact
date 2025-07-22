@@ -812,10 +812,12 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
         if (!IsKeyOwned(write.key())) { //Only do OCC check for keys in this group.
           continue;
         }
-        // hack to change txn to mutable
-        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
-        if(tempResult != proto::ConcurrencyControl::COMMIT) {
-          return tempResult;
+        if (params.sintr_params.policyCCC) {
+          // hack to change txn to mutable
+          proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
+          if(tempResult != proto::ConcurrencyControl::COMMIT) {
+            return tempResult;
+          }
         }
       } else {
         // add implicit policy read for gov txn writeset

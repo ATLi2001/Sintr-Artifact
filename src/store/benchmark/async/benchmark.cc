@@ -1725,7 +1725,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_sort_writeset,
         FLAGS_sintr_hide_timestamps,
         FLAGS_sintr_max_client_sig_check_threads,
-        false
+        false, true
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
