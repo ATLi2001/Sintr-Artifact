@@ -79,6 +79,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
       void *meta_data) override;
 
   virtual bool SendPing(size_t replica, const PingMessage &ping);
+  virtual bool MySendPing(size_t replica, const PingMessage &ping, bool initiator = true);
 
   // start up the sintr validation for current transaction
   // sends BeginValidateTxnMessage to peers
@@ -242,6 +243,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void HandleForwardQueryResultMessage(const proto::ForwardQueryResultMessage &fwdQueryResultMsg);
   void HandleBlindWriteMessage(const proto::BlindWriteMessage &blindWriteMsg);
   void HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg);
+  void HandlePingMessage(const PingMessage &ping);
 
   // check if fwdReadResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdReadResultMsg
@@ -345,10 +347,12 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   proto::FinishValidateTxnMessage finishValTxnMsg;
   PingMessage ping;
 
+  uint64_t ping_begin_time_us;
   uint64_t send_begin_time_us;
   uint64_t send_fwd_read_time_us;
   uint64_t send_fwd_point_query_time_us;
 
+  mean_tracker ping_rtt_us;
   mean_tracker create_hmac_us;
   mean_tracker verify_hmac_us;
   mean_tracker check_committed_prepared_us;

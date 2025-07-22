@@ -89,7 +89,12 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
 
   // each process gets 2 cpus, one for main client thread and one for all validation, send, receive, sig check threads 
   int num_cpus = std::thread::hardware_concurrency();
-  int main_client_cpu = client_id * 2 % num_cpus;
+  size_t cpus_per_client = 2;
+  // if we give more sig check threads, up to 4 cpus per client
+  if (params.sintr_params.maxClientSigCheckThreads > 0) {
+    cpus_per_client = 4;
+  }
+  int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
 
   Debug("Starting %lu validation threads", params.sintr_params.maxValThreads);
   for (size_t i = 0; i < params.sintr_params.maxValThreads; i++) {
@@ -97,8 +102,8 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     if (params.sintr_params.clientPinCores) {
       // set cpu affinity
       cpu_set_t cpuset;
-      CPU_ZERO(&cpuset);      
-      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      CPU_ZERO(&cpuset);
+      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -110,8 +115,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      // try to pin to core following validation threads
-      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -122,8 +126,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      // try to pin to core following validation threads
-      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cReceiveThread->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -135,8 +138,8 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     if (params.sintr_params.clientPinCores) {
       // set cpu affinity
       cpu_set_t cpuset;
-      CPU_ZERO(&cpuset);      
-      CPU_SET(main_client_cpu + 1 % num_cpus, &cpuset);
+      CPU_ZERO(&cpuset);
+      CPU_SET((main_client_cpu + (2 + i) % cpus_per_client) % num_cpus, &cpuset);
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -182,7 +185,7 @@ void Client2Client::ReceiveMessage(const TransportAddress &remote,
   if (type == ping.GetTypeName()) {
     Debug("ping received");
     ping.ParseFromString(data);
-    HandlePingResponse(ping);
+    HandlePingMessage(ping);
   }
   else if (type == beginValTxnMsg.GetTypeName()) {
     ManageDispatchBeginValidateTxnMessage(remote, data);
@@ -213,6 +216,41 @@ bool Client2Client::SendPing(size_t replica, const PingMessage &ping) {
     transport->SendMessageToReplica(this, group, replica, ping);
   }
   return true;
+}
+
+bool Client2Client::MySendPing(size_t replica, const PingMessage &ping, bool initiator) {  
+  if (replica != client_id) {
+    if (initiator) {
+      if (ping_rtt_us.count > 0 && ping_rtt_us.count % 400 == 0) {
+        std::cerr << "Mean ping rtt: " << ping_rtt_us.mean() << std::endl;
+      }
+      Debug("Initiating ping to client %lu", replica);
+      struct timespec ts_start;
+      clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      ping_begin_time_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    }
+    else {
+      Debug("Replying to ping from client %lu", replica);
+    }
+    transport->SendMessageToReplica(this, group, replica, ping);
+  }
+  return true;
+}
+
+void Client2Client::HandlePingMessage(const PingMessage &ping) {
+  // someone else's ping
+  if (ping.salt() != client_id) {
+    MySendPing(ping.salt(), ping, false);
+  }
+  else {
+    // our own ping
+    Debug("Received own ping");
+    struct timespec ts_end;
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    auto duration = end - ping_begin_time_us;
+    ping_rtt_us.add(duration);
+  }
 }
 
 void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
@@ -284,6 +322,14 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
 
   // for tracking purposes, must have self in beginValSent
   beginValSent.insert(client_id);
+
+  // ping to test RTT
+  // if (client_seq_num % 20 == 0) {
+  //   ping.set_salt(client_id);
+  //   uint64_t target = (client_id + 1) % clients_config->n;
+  //   MySendPing(target, ping);
+  // }
+  // return;
 
   // send to all clients so no need to bother with estimated policy
   if(params.sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::ALL) {
