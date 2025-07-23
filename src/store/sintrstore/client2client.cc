@@ -103,7 +103,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      CPU_SET((main_client_cpu + (1 + i) % cpus_per_client) % num_cpus, &cpuset);
       pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -232,7 +232,7 @@ bool Client2Client::MySendPing(size_t replica, const PingMessage &ping, bool ini
     else {
       Debug("Replying to ping from client %lu", replica);
     }
-    transport->SendMessageToReplica(this, group, replica, ping);
+    transport->SendMessageToReplica(this, replica, ping);
   }
   return true;
 }
@@ -248,8 +248,16 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
     struct timespec ts_end;
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-    auto duration = end - ping_begin_time_us;
-    ping_rtt_us.add(duration);
+    // auto duration = end - send_begin_time_us;
+
+    // if (num_pings >= time_to_begin_ack_n_us.size()) {
+    //   time_to_begin_ack_n_us.resize(num_pings + 1);
+    // }
+    // time_to_begin_ack_n_us[num_pings].add(duration);
+    // num_pings++;
+
+    // auto duration = end - ping_begin_time_us;
+    // ping_rtt_us.add(duration);
   }
 }
 
@@ -300,6 +308,12 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   //   }
   // }
 
+  // if (time_to_begin_ack_n_us.size() > 0 && time_to_begin_ack_n_us[0].count % 2000 == 0) {
+  //   for (size_t i = 0; i < time_to_begin_ack_n_us.size(); i++) {
+  //     std::cerr << "Mean time to receive begin ack " << i << ": " << time_to_begin_ack_n_us[i].mean() << std::endl;
+  //   }
+  // }
+
   this->client_seq_num = client_seq_num;
 
   sentBeginValTxnMsg.Clear();
@@ -323,6 +337,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   // for tracking purposes, must have self in beginValSent
   beginValSent.insert(client_id);
 
+  // num_pings = 0;
   // ping to test RTT
   // if (client_seq_num % 20 == 0) {
   //   ping.set_salt(client_id);
@@ -968,6 +983,9 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   ValidationInfo *valInfo = new ValidationInfo(curr_client_id, curr_client_seq_num, ts, std::move(valTxn), std::move(remoteCopy), hashed_ts);
   valInfo->isPolicyTransaction = (txnState.txn_name().find("policy") != std::string::npos);
   validationQueue.push(valInfo);
+
+  // ping.set_salt(curr_client_id);
+  // MySendPing(curr_client_id, ping, false);
 }
 
 void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResultMessage &fwdReadResultMsg) {
