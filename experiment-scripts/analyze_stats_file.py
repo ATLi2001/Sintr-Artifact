@@ -29,12 +29,17 @@ import json
 import os
 import argparse
 import time
-import shutil
 
 
 ORIGINAL_STATS_DIR = "experiment-results/original"
 OUTPUT_DIR = "experiment-results/analyzed"
-ANALYSIS_TYPES = ["latency_throughput", "sig_nosig_tput_bar", "sig_nosig_lat_bar"]
+ANALYSIS_TYPES = [
+    "latency_throughput",
+    "sig_nosig_tput_bar",
+    "sig_nosig_lat_bar",
+    "overheads_lat_cum_bar",
+    "overheads_lat_grouped_bar",
+]
 
 
 # reads all stats.json files in the given directory and returns a dictionary of dictionaries
@@ -104,24 +109,28 @@ def create_lat_tput_plots(df, output_dir, now_string):
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
-def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string):
-    x = np.arange(len(x_labels))  # the label locations
+def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
+    # spacing if too many bars per group
+    bars_per_group = len(grouped_data)
+    x = np.arange(len(x_labels)) * (bars_per_group // 4 + 1)  # the label locations
     width = 0.25  # the width of the bars
     multiplier = 0
 
     fig, ax = plt.subplots(layout="constrained")
 
     for attribute, measurement in grouped_data.items():
-        print(attribute, measurement)
         offset = width * multiplier
-        rects = ax.bar(x + offset, measurement, width, label=attribute)
-        ax.bar_label(rects, padding=3)
+        if grouped_yerr:
+            rects = ax.bar(x + offset, measurement, width, label=attribute, yerr=grouped_yerr[attribute], capsize=5)
+        else:
+            rects = ax.bar(x + offset, measurement, width, label=attribute)
+        ax.bar_label(rects, label_type="center", fmt="%.2f")
         multiplier += 1
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel(y_label)
     ax.set_xticks(x + width, x_labels)
-    ax.legend()
+    fig.legend(loc="outside lower center", ncol=2)
 
     plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
     plt.close()
@@ -164,6 +173,102 @@ def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
         output_dir,
         analysis_type,
         now_string
+    )
+
+# grouped_data is a dictionary where keys are attributes and values are lists of measurements
+# x_labels is a list of labels for the x-axis
+# grouped_data values should be the same length as x_labels
+def create_cumulative_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string):
+    x = np.arange(len(x_labels))
+    fig, ax = plt.subplots(layout="constrained")
+
+    bottom = np.zeros(len(x_labels))
+    for attribute, measurement in grouped_data.items():
+        measurement = np.array(measurement)
+        rects = ax.bar(x, measurement, label=attribute, bottom=bottom)
+        if np.all(measurement > 0.05):
+            ax.bar_label(rects, label_type="center", fmt="%.4f")
+        bottom += measurement
+
+    ax.set_ylabel(y_label)
+    ax.set_xticks(x, x_labels)
+    fig.legend(loc="outside lower center", ncol=2)
+
+    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
+    plt.close()
+
+def create_overheads_lat_cum_bar_plot(df, output_dir, now_string):
+    # for making cumulative bar plot
+    stacked_data = {}
+    x_labels = ["policy1R-2R", "policy2R-3R"]
+    label_dict = {
+        0: "Baseline",
+        1: "Other",
+        2: "Check Query Result Evidence",
+        3: "HMAC",
+        4: "Client Sign/Check Endorsement",
+        5: "Server Endorsement Check",
+        6: "Hide TS, Hash Endorsement",
+    }
+
+    suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
+    for suffixes in suffix_search:
+        curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
+        mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
+        mean_latency.sort_values(inplace=True)
+        diff_latency = mean_latency.diff()
+
+        stacked_data.setdefault(label_dict[0], []).append(mean_latency.iloc[0])
+        i = 1
+        for latency in diff_latency.values[1:]:
+            stacked_data.setdefault(label_dict[i], []).append(latency)
+            i += 1
+
+    create_cumulative_bar_plot(
+        stacked_data,
+        x_labels,
+        "Latency (ms)",
+        output_dir,
+        ANALYSIS_TYPES[3],
+        now_string
+    )
+
+def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
+    # for making grouped bar plot
+    grouped_data = {}
+    grouped_err = {}
+    x_labels = ["policy1R-2R", "policy2R-3R"]
+    label_dict = {
+        0: "Baseline Policy",
+        1: "Policy+1 Stripped Down",
+        2: "Check Query Result Evidence",
+        3: "HMAC",
+        4: "Client Sign/Check Endorsement",
+        5: "Server Endorsement Check",
+        6: "Hide TS, Hash Endorsement",
+    }
+
+    suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
+    for suffixes in suffix_search:
+        curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
+        mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
+        err_latency = curr_df.groupby("experiment_name")["latency"].std()
+        mean_latency.sort_values(inplace=True)
+
+        i = 0
+        for latency in mean_latency.values:
+            grouped_data.setdefault(label_dict[i], []).append(latency)
+            grouped_err.setdefault(label_dict[i], []).append(err_latency.loc[mean_latency.index[i]])
+            i += 1
+
+    create_grouped_bar_plot(
+        grouped_data,
+        x_labels,
+        "Latency (ms)",
+        output_dir,
+        ANALYSIS_TYPES[4],
+        now_string,
+        grouped_yerr=grouped_err
     )
 
 
@@ -235,3 +340,7 @@ if __name__ == "__main__":
         create_lat_tput_plots(df, args.output_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[1] or args.analysis_type == ANALYSIS_TYPES[2]:
         create_sig_no_sig_bar_plot(df, args.output_dir, args.analysis_type, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[3]:
+        create_overheads_lat_cum_bar_plot(df, args.output_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[4]:
+        create_overheads_lat_grouped_bar_plot(df, args.output_dir, now_string)
