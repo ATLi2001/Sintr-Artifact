@@ -6,6 +6,25 @@
       "sintr_val_client_selector": "ring"
     }
   },
+  "policy1R-1": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-1",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false
+    }
+  },
+  "policy1R-2": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-2",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false,
+      "sintr_server_skip_endorsement_check": true
+    }
+  },
   "policy2R": {
     "analysis_name": "sintr-rw-sql-U-policy2R",
     "sintr_protocol_settings": {
