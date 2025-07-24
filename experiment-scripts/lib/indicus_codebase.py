@@ -197,6 +197,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_val_client_selector %s' % config['sintr_protocol_settings']['sintr_val_client_selector']
             if 'sintr_val_client_selector_zipf' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_val_client_selector_zipf %f' % config['sintr_protocol_settings']['sintr_val_client_selector_zipf']
+            if 'sintr_optimistic_receive_endorsement' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_optimistic_receive_endorsement=%s' % str(config['sintr_protocol_settings']['sintr_optimistic_receive_endorsement']).lower()
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ##Sync protocol settings

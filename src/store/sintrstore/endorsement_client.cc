@@ -53,6 +53,11 @@ const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() co
   return endorsements;
 }
 
+const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
+  std::shared_lock lock(mutex);
+  return blacklistedClients;
+}
+
 void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDigest) {
   std::unique_lock lock(mutex);
   this->expectedTxnDigest = expectedTxnDigest;
@@ -72,6 +77,18 @@ void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDiges
         BytesToHex(it.second.first, 16).c_str(),
         BytesToHex(expectedTxnDigest, 16).c_str()
       );
+      blacklistedClients.insert(it.first);
+    }
+  }
+  for (auto const &it : pendingDigests) {
+    if (expectedTxnDigest != it.second) {
+      Debug(
+        "No match on pending digest from client id %lu, txn digest %s; expected txn digest %s",
+        it.first,
+        BytesToHex(it.second, 16).c_str(),
+        BytesToHex(expectedTxnDigest, 16).c_str()
+      );
+      blacklistedClients.insert(it.first);
     }
   }
 
@@ -316,6 +333,7 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
           BytesToHex(valTxnDigest, 16).c_str(),
           BytesToHex(expectedTxnDigest, 16).c_str()
         );
+        blacklistedClients.insert(peer_client_id);
       }
     }
     else {
@@ -323,6 +341,39 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
       pendingEndorsements[peer_client_id] = std::make_pair(valTxnDigest, signedValTxnDigest);
       Debug("No expectedTxnDigest yet");
     }
+  }
+}
+
+void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest) {
+  std::unique_lock lock(mutex);
+  // if new peer
+  if (client_ids_received.find(peer_client_id) == client_ids_received.end()) {
+    Debug("Adding optimistic validation from peer client %lu", peer_client_id);
+    client_ids_received.insert(peer_client_id);
+    endorsements.push_back(signedValTxnDigest);
+  }
+  else {
+    Debug("Client %lu already has endorsement from peer client %lu", client_id, peer_client_id);
+  }
+}
+
+void EndorsementClient::CheckValidation(const uint64_t peer_client_id, const std::string &valTxnDigest) {
+  std::unique_lock lock(mutex);
+  if (expectedTxnDigest.length() > 0) {
+    if (valTxnDigest != expectedTxnDigest) {
+      Debug(
+        "Validation digest %s does not match expected digest %s for peer client %lu",
+        BytesToHex(valTxnDigest, 16).c_str(),
+        BytesToHex(expectedTxnDigest, 16).c_str(),
+        peer_client_id
+      );
+      // add to blacklist
+      blacklistedClients.insert(peer_client_id);
+    }
+  }
+  else {
+    pendingDigests[peer_client_id] = valTxnDigest;
+    Debug("No expectedTxnDigest yet");
   }
 }
 
@@ -342,6 +393,8 @@ void EndorsementClient::Reset() {
   client_ids_received.clear();
   endorsements.clear();
   pendingEndorsements.clear();
+  pendingTxns.clear();
+  pendingDigests.clear();
 }
 
 bool EndorsementClient::GetPolicyFromCache(const std::string &policyId, const Policy *&policy) const {

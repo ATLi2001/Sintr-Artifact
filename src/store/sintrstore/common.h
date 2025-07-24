@@ -880,6 +880,7 @@ typedef struct SintrParameters {
   const uint32_t maxClientSigCheckThreads; // maximum number of parallel client signature check threads
   const bool serverSkipEndorsementCheck; // server skips endorsement check completely
   const bool policyCCC; // perform CCC on policies
+  const bool optimisticReceiveEndorsement; // receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -887,9 +888,9 @@ typedef struct SintrParameters {
     bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
-    bool serverSkipEndorsementCheck, bool policyCCC) :
-    maxValThreads(maxValThreads), 
-    signFwdReadResults(signFwdReadResults), 
+    bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement) :
+    maxValThreads(maxValThreads),
+    signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
     debugEndorseCheck(debugEndorseCheck),
     clientCheckEvidence(clientCheckEvidence),
@@ -911,7 +912,8 @@ typedef struct SintrParameters {
     hideTimestamps(hideTimestamps) ,
     maxClientSigCheckThreads(maxClientSigCheckThreads),
     serverSkipEndorsementCheck(serverSkipEndorsementCheck),
-    policyCCC(policyCCC) {
+    policyCCC(policyCCC),
+    optimisticReceiveEndorsement(optimisticReceiveEndorsement) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message
@@ -922,6 +924,13 @@ typedef struct SintrParameters {
         if (parallelEndorsementCheck || parallelQuerySigsCheck) {
             if (maxClientSigCheckThreads == 0) {
                 Warning("Parallel endorsement check or query signature check is enabled, but maxClientSigCheckThreads is set to 0.");
+            }
+        }
+
+        if (optimisticReceiveEndorsement) {
+            // only makes sense if parallel endorsement check is on and actual signatures to validate
+            if (!parallelEndorsementCheck || !signFinishValidation) {
+                Warning("Optimistic receive endorsement is enabled, but parallel endorsement check or signFinishValidation is not.");
             }
         }
     }

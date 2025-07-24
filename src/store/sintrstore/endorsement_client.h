@@ -46,6 +46,7 @@ class EndorsementClient {
   ~EndorsementClient();
 
   const std::vector<proto::SignedMessage> &GetEndorsements() const;
+  const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
   void SetExpectedTxnOutput(const std::string &expectedTxnDigest);
   void DebugSetExpectedTxnOutput(const proto::Transaction &expectedTxn);
@@ -59,6 +60,11 @@ class EndorsementClient {
   // this can be called from a different thread than the rest of the functions
   void AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest, 
     const proto::SignedMessage &signedValTxnDigest);
+  // in optimistic case do not check if endorsement is correct, just add it
+  void AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest);
+  // check if the validation is correct, do not add it as an endorsement
+  // this is used in optimistic case where endorsement is already added and we need to later check if correct
+  void CheckValidation(const uint64_t peer_client_id, const std::string &valTxnDigest);
   // check if the policy is satisfied by actual endorsements collected so far
   bool IsSatisfied() const;
   void Reset();
@@ -98,10 +104,14 @@ class EndorsementClient {
   // also maintain pending endorsements if endorsement comes back before expectedValTxnDigest is set
   // map from client id to (digest, signed message)
   std::map<uint64_t, std::pair<std::string, proto::SignedMessage>> pendingEndorsements;
+  // for the optimistic case we don't actually need the endorsement, just the digest
+  std::map<uint64_t, std::string> pendingDigests;
   // debug pending transactions
   std::vector<proto::Transaction> pendingTxns;
   // for concurrent access to client_ids_received and endorsements
   mutable std::shared_mutex mutex;
+  // blacklist of clients that have sent an incorrect endorsement
+  std::set<uint64_t> blacklistedClients;
 };
 
 } // namespace sintrstore

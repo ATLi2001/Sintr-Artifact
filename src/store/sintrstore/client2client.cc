@@ -942,6 +942,16 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
     if (params.sintr_params.parallelEndorsementCheck) {
       // fully parallelize the endorsement check so that each one can be handled by a worker thread
       parallelSigCheckQueue.push(executor);
+
+      if (params.sintr_params.optimisticReceiveEndorsement) {
+        if (params.sintr_params.signFinishValidation) {
+          UW_ASSERT(finishValTxnMsg->has_signed_validation_txn_digest());
+          endorseClient->AddValidationOptimistic(
+            finishValTxnMsg->client_id(),
+            finishValTxnMsg->signed_validation_txn_digest()
+          );
+        }
+      }
     }
     else {
       // only moves the function to be off the main client thread, but still sequential on client2client message thread
@@ -1376,7 +1386,13 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     endorseClient->DebugCheck(finishValTxnMsg.val_txn());
   }
 
-  endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg);
+  if (!params.sintr_params.optimisticReceiveEndorsement) {
+    endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg);
+  }
+  // in optimistic case, endorsement is added outside so just check
+  else {
+    endorseClient->CheckValidation(peer_client_id, valTxnDigest);
+  }
 }
 
 bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdReadResult, 
@@ -1753,16 +1769,22 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &query_sig,
 }
 
 void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients) {
+  const std::set<uint64_t> &blacklistedClients = endorseClient->GetBlacklistedClients();
+  
   int offset = 1;
   size_t order_index = 0;
   for (const auto &i : policySatSet) {
     if (i == client_id) {
       continue;
     }
+    // i < 0 means can choose any client
     else if (i < 0) {
       if (valClientSelector != nullptr) {
         for (; order_index < valClientOrder.size(); order_index++) {
           uint64_t target = valClientOrder[order_index];
+          if (blacklistedClients.find(target) != blacklistedClients.end()) {
+            continue;
+          }
           if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
             clients.insert(target);
             break;
@@ -1776,6 +1798,9 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
       else {
         for (; offset < clients_config->n; offset++) {
           uint64_t target = (client_id + offset) % clients_config->n;
+          if (blacklistedClients.find(target) != blacklistedClients.end()) {
+            continue;
+          }
           if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
             clients.insert(target);
             break;
@@ -1787,7 +1812,12 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
         }
       }
     }
+    // otherwise i is a specific client to contact
     else {
+      if (blacklistedClients.find(i) != blacklistedClients.end()) {
+        Panic("Client %lu is blacklisted but is in policySatSet", i);
+      }
+
       if (beginValSent.find(i) == beginValSent.end()) {
         clients.insert(i);
       }
