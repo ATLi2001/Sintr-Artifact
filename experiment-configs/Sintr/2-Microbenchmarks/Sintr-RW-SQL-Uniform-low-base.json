@@ -188,7 +188,8 @@
     "sintr_val_client_selector": "ring",
     "sintr_val_client_selector_zipf": 1.1,
     "sintr_hide_timestamps": true,
-    "sintr_server_skip_endorsement_check": false
+    "sintr_server_skip_endorsement_check": false,
+    "sintr_optimistic_receive_endorsement": true
   },
 
   "experiment_name": "sintr",
