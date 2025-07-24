@@ -178,6 +178,36 @@ def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
 # grouped_data is a dictionary where keys are attributes and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
+def create_subtractive_cumulative_bar_plot(top_baseline, bottom_baseline, grouped_data, x_labels, y_label, output_dir, analysis_type, now_string):
+    x = np.arange(len(x_labels))
+    fig, ax = plt.subplots(layout="constrained")
+
+    # base width of bar
+    width = 0.25
+
+    # first, plot the top baseline
+    rects = ax.bar(x, top_baseline, label="Top Baseline", width=width, align="edge")
+    ax.bar_label(rects, fmt="%.4f")
+    
+    bottom = top_baseline
+    for attribute, measurement in reversed(grouped_data.items()):
+        measurement = np.array(measurement) * -1  # invert the measurement for subtractive plot
+        rects = ax.bar(x, measurement, label=attribute, bottom=bottom, width=width, align="edge")
+        if np.all(np.abs(measurement) > 0.05):
+            ax.bar_label(rects, labels=np.round(np.abs(measurement), 4), label_type="center", fmt="%.4f")
+        bottom += measurement
+
+    # then, plot the bottom baseline
+    bottom_rects = ax.bar(x + width, bottom_baseline, label="Bottom Baseline", width=width, align="edge")
+    ax.bar_label(bottom_rects, label_type="center", fmt="%.4f")
+
+    ax.set_ylabel(y_label)
+    ax.set_xticks(x + width, x_labels)
+    fig.legend(loc="outside lower center", ncol=2)
+
+    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
+    plt.close()
+
 def create_cumulative_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string):
     x = np.arange(len(x_labels))
     fig, ax = plt.subplots(layout="constrained")
@@ -201,30 +231,63 @@ def create_overheads_lat_cum_bar_plot(df, output_dir, now_string):
     # for making cumulative bar plot
     stacked_data = {}
     x_labels = ["policy1R-2R", "policy2R-3R"]
+    # label_dict = {
+    #     0: "Baseline",
+    #     1: "Other",
+    #     2: "Check Query Result Evidence",
+    #     3: "HMAC",
+    #     4: "Client Sign/Check Endorsement",
+    #     5: "Server Endorsement Check",
+    #     6: "Hide TS, Hash Endorsement",
+    # }
     label_dict = {
-        0: "Baseline",
-        1: "Other",
-        2: "Check Query Result Evidence",
-        3: "HMAC",
-        4: "Client Sign/Check Endorsement",
-        5: "Server Endorsement Check",
-        6: "Hide TS, Hash Endorsement",
+        0: "- Check Query Result Evidence",
+        1: "- HMAC",
+        2: "- Client Sign/Check Endorsement",
+        3: "- Server Endorsement Check",
+        4: "- Hide TS, Hash Endorsement",
     }
 
     suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
-    for suffixes in suffix_search:
+    # for suffixes in suffix_search:
+    #     curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
+    #     mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
+    #     mean_latency.sort_values(inplace=True)
+    #     diff_latency = mean_latency.diff()
+
+    #     stacked_data.setdefault(label_dict[0], []).append(mean_latency.iloc[0])
+    #     i = 1
+    #     for latency in diff_latency.values[1:]:
+    #         stacked_data.setdefault(label_dict[i], []).append(latency)
+    #         i += 1
+
+    top_baseline = [0, 0]
+    bottom_baseline = [0, 0]
+    for i, suffixes in enumerate(suffix_search):
         curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
         mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
         mean_latency.sort_values(inplace=True)
         diff_latency = mean_latency.diff()
+        top_baseline[i] = mean_latency.iloc[-1]
+        bottom_baseline[i] = mean_latency.iloc[0]
 
-        stacked_data.setdefault(label_dict[0], []).append(mean_latency.iloc[0])
-        i = 1
-        for latency in diff_latency.values[1:]:
-            stacked_data.setdefault(label_dict[i], []).append(latency)
-            i += 1
+        j = 0
+        for latency in diff_latency.values[2:]:
+            stacked_data.setdefault(label_dict[j], []).append(latency)
+            j += 1
 
-    create_cumulative_bar_plot(
+    # create_cumulative_bar_plot(
+    #     stacked_data,
+    #     x_labels,
+    #     "Latency (ms)",
+    #     output_dir,
+    #     ANALYSIS_TYPES[3],
+    #     now_string
+    # )
+
+    create_subtractive_cumulative_bar_plot(
+        top_baseline,
+        bottom_baseline,
         stacked_data,
         x_labels,
         "Latency (ms)",
@@ -239,13 +302,13 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
     grouped_err = {}
     x_labels = ["policy1R-2R", "policy2R-3R"]
     label_dict = {
-        0: "Baseline Policy",
-        1: "Policy+1 Stripped Down",
-        2: "Check Query Result Evidence",
-        3: "HMAC",
-        4: "Client Sign/Check Endorsement",
-        5: "Server Endorsement Check",
-        6: "Hide TS, Hash Endorsement",
+        0: "Policy+1",
+        1: "- Hide TS, Hash Endorsement",
+        2: "- Server Endorsement Check",
+        3: "- Client Sign/Check Endorsement",
+        4: "- HMAC",
+        5: "- Check Query Result Evidence",
+        6: "Baseline Policy",
     }
 
     suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
@@ -253,7 +316,7 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
         curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
         mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
         err_latency = curr_df.groupby("experiment_name")["latency"].std()
-        mean_latency.sort_values(inplace=True)
+        mean_latency.sort_values(inplace=True, ascending=False)
 
         i = 0
         for latency in mean_latency.values:
