@@ -426,6 +426,7 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
     const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep) {
 
+  SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardReadResultMessage *fwdReadResultMsgToSend = new proto::ForwardReadResultMessage();
   proto::ForwardReadResult fwdReadResult;
   fwdReadResult.set_key(key);
@@ -483,12 +484,19 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     }
   }
 
+  // copy into sentFwdResultState
+  sentFwdResultState->fwdReadResult = fwdReadResult;
+
   if (params.sintr_params.signFwdReadResults) {
     
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(fwdReadResult, *fwdReadResultMsgToSend->mutable_signed_fwd_read_result());
+    CreateHMACedMessage(
+      fwdReadResult,
+      *fwdReadResultMsgToSend->mutable_signed_fwd_read_result(),
+      beginValSent
+    );
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -500,7 +508,8 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
-  sentFwdResults.insert(fwdReadResultMsgToSend);
+  sentFwdResultState->fwdReadResultMsg = fwdReadResultMsgToSend;
+  sentFwdResults.insert(sentFwdResultState);
 
   Debug(
     "ForwardReadResult: client id %lu, seq num %lu, key %s, value %s",
@@ -554,6 +563,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     const std::string &serializedWrite, const std::string &serializedWriteTypeName,
     const proto::Dependency &dep, bool hasDep, bool addReadset) {
   
+  SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardPointQueryResultMessage *fwdPointQueryResultMsgToSend = new proto::ForwardPointQueryResultMessage();
   proto::ForwardReadResult fwdReadResult;
   fwdReadResult.set_key(key);
@@ -606,11 +616,18 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     }
   }
 
+  // copy into sentFwdResultState
+  sentFwdResultState->fwdReadResult = fwdReadResult;
+
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(fwdReadResult, *fwdPointQueryResultMsgToSend->mutable_signed_fwd_read_result());
+    CreateHMACedMessage(
+      fwdReadResult,
+      *fwdPointQueryResultMsgToSend->mutable_signed_fwd_read_result(),
+      beginValSent
+    );
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -622,7 +639,8 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
-  sentFwdResults.insert(fwdPointQueryResultMsgToSend);
+  sentFwdResultState->fwdPointQueryResultMsg = fwdPointQueryResultMsgToSend;
+  sentFwdResults.insert(sentFwdResultState);
 
   Debug(
     "ForwardPointQueryResult: client id %lu, seq num %lu, key %s, result %s",
@@ -672,6 +690,7 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
     const proto::QueryResultMetaData &query_res_meta,
     const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset) {
   
+  SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardQueryResultMessage *fwdQueryResultMsgToSend = new proto::ForwardQueryResultMessage();
   proto::ForwardQueryResult fwdQueryResult;
   fwdQueryResult.set_query_gen_id(query_gen_id);
@@ -693,12 +712,19 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
       }
     }
   }
+
+  // copy into sentFwdResultState
+  sentFwdResultState->fwdQueryResult = fwdQueryResult;
   
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(fwdQueryResult, *fwdQueryResultMsgToSend->mutable_signed_fwd_query_result());
+    CreateHMACedMessage(
+      fwdQueryResult,
+      *fwdQueryResultMsgToSend->mutable_signed_fwd_query_result(),
+      beginValSent
+    );
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -721,7 +747,8 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
-  sentFwdResults.insert(fwdQueryResultMsgToSend);
+  sentFwdResultState->fwdQueryResultMsg = fwdQueryResultMsgToSend;
+  sentFwdResults.insert(sentFwdResultState);
 
   Debug(
     "ForwardQueryResult: client id %lu, seq num %lu, query gen id %s add readset %d",
@@ -754,16 +781,24 @@ void Client2Client::SendBlindWriteMessage() {
 }
 
 void Client2Client::SendBlindWriteMessageHelper() {
+  SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::BlindWriteMessage *blindWriteMsgToSend = new proto::BlindWriteMessage();
   proto::BlindWrite blindWrite;
   blindWrite.set_client_id(client_id);
   blindWrite.set_client_seq_num(client_seq_num);
 
+  // copy into sentFwdResultState
+  sentFwdResultState->blindWrite = blindWrite;
+
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    CreateHMACedMessage(blindWrite, *blindWriteMsgToSend->mutable_signed_blind_write());
+    CreateHMACedMessage(
+      blindWrite,
+      *blindWriteMsgToSend->mutable_signed_blind_write(),
+      beginValSent
+    );
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -775,7 +810,8 @@ void Client2Client::SendBlindWriteMessageHelper() {
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
-  sentFwdResults.insert(blindWriteMsgToSend);
+  sentFwdResultState->blindWriteMsg = blindWriteMsgToSend;
+  sentFwdResults.insert(sentFwdResultState);
 
   Debug(
     "SendBlindWrite: client id %lu, seq num %lu",
@@ -825,10 +861,55 @@ void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
       // should be first time sending to this client
       UW_ASSERT(ret.second);
       transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
-      for (const auto &fwdReadResultMsg : sentFwdResults) {
-        Debug("Sending to client %lu from client %lu seq num %lu in handle policy update", i, client_id,
-          client_seq_num); 
-        transport->SendMessageToReplica(this, i, *fwdReadResultMsg);
+      for (const auto &sentFwdResultState : sentFwdResults) {
+        Debug(
+          "Sending to client %lu from client %lu seq num %lu in handle policy update",
+          i,
+          client_id,
+          client_seq_num
+        );
+
+        if (sentFwdResultState->fwdReadResultMsg != nullptr) {
+          // need to HMAC again since previous one did not include this client
+          if (params.sintr_params.signFwdReadResults && !sentFwdResultState->reHMACed) {
+            CreateHMACedMessage(
+              sentFwdResultState->fwdReadResult,
+              *sentFwdResultState->fwdReadResultMsg->mutable_signed_fwd_read_result()
+            );
+          }
+          transport->SendMessageToReplica(this, i, *sentFwdResultState->fwdReadResultMsg);
+        }
+        else if (sentFwdResultState->fwdPointQueryResultMsg != nullptr) {
+          if (params.sintr_params.signFwdReadResults && !sentFwdResultState->reHMACed) {
+            CreateHMACedMessage(
+              sentFwdResultState->fwdReadResult,
+              *sentFwdResultState->fwdPointQueryResultMsg->mutable_signed_fwd_read_result()
+            );
+          }
+          transport->SendMessageToReplica(this, i, *sentFwdResultState->fwdPointQueryResultMsg);
+        }
+        else if (sentFwdResultState->fwdQueryResultMsg != nullptr) {
+          if (params.sintr_params.signFwdReadResults && !sentFwdResultState->reHMACed) {
+            CreateHMACedMessage(
+              sentFwdResultState->fwdQueryResult,
+              *sentFwdResultState->fwdQueryResultMsg->mutable_signed_fwd_query_result()
+            );
+          }
+          transport->SendMessageToReplica(this, i, *sentFwdResultState->fwdQueryResultMsg);
+        }
+        else if (sentFwdResultState->blindWriteMsg != nullptr) {
+          if (params.sintr_params.signFwdReadResults && !sentFwdResultState->reHMACed) {
+            CreateHMACedMessage(
+              sentFwdResultState->blindWrite,
+              *sentFwdResultState->blindWriteMsg->mutable_signed_blind_write()
+            );
+          }
+          transport->SendMessageToReplica(this, i, *sentFwdResultState->blindWriteMsg);
+        }
+        else {
+          Panic("No non-nullptr message to send");
+        }
+        sentFwdResultState->reHMACed = true;
       }
     }
   }
@@ -927,6 +1008,28 @@ void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remo
 void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
   if (!params.sintr_params.c2cReceiveThread && !params.sintr_params.parallelEndorsementCheck) {
     finishValTxnMsg.ParseFromString(data);
+
+    if (params.sintr_params.optimisticReceiveEndorsement) {
+      if (params.sintr_params.signFinishValidation) {
+        UW_ASSERT(finishValTxnMsg.has_signed_validation_txn_digest());
+        endorseClient->AddValidationOptimistic(
+          finishValTxnMsg.client_id(),
+          finishValTxnMsg.signed_validation_txn_digest()
+        );
+      }
+      else {
+        // dummy signed message
+        proto::SignedMessage signedMsg;
+        signedMsg.set_process_id(finishValTxnMsg.client_id());
+        signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
+        signedMsg.set_signature("");
+        endorseClient->AddValidationOptimistic(
+          finishValTxnMsg.client_id(),
+          signedMsg
+        );
+      }
+    }
+
     HandleFinishValidateTxnMessage(finishValTxnMsg);
   }
   else {
@@ -938,18 +1041,29 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
       return (void*) true;
     };
 
+    if (params.sintr_params.optimisticReceiveEndorsement) {
+      if (params.sintr_params.signFinishValidation) {
+        UW_ASSERT(finishValTxnMsg->has_signed_validation_txn_digest());
+        endorseClient->AddValidationOptimistic(
+          finishValTxnMsg->client_id(),
+          finishValTxnMsg->signed_validation_txn_digest()
+        );
+      }
+      else {
+        // dummy signed message
+        proto::SignedMessage signedMsg;
+        signedMsg.set_process_id(finishValTxnMsg->client_id());
+        signedMsg.set_data(finishValTxnMsg->validation_txn_digest());
+        signedMsg.set_signature("");
+        endorseClient->AddValidationOptimistic(
+          finishValTxnMsg->client_id(),
+          signedMsg
+        );
+      }
+    }
+
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
     if (params.sintr_params.parallelEndorsementCheck) {
-      if (params.sintr_params.optimisticReceiveEndorsement) {
-        if (params.sintr_params.signFinishValidation) {
-          UW_ASSERT(finishValTxnMsg->has_signed_validation_txn_digest());
-          endorseClient->AddValidationOptimistic(
-            finishValTxnMsg->client_id(),
-            finishValTxnMsg->signed_validation_txn_digest()
-          );
-        }
-      }
-
       // fully parallelize the endorsement check so that each one can be handled by a worker thread
       parallelSigCheckQueue.push(executor);
     }
@@ -1972,11 +2086,24 @@ bool Client2Client::ValidateHMACedMessage(const proto::SignedMessage &signedMess
 }
 
 void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage) {
+  std::set<uint64_t> dst_client_ids;
+  for (uint64_t i = 0; i < clients_config->n; i++) {
+    dst_client_ids.insert(i);
+  }
+  CreateHMACedMessage(msg, signedMessage, dst_client_ids);
+}
+
+void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage,
+    const std::set<uint64_t> &dst_client_ids) {
   std::string msgData = msg.SerializeAsString();
   signedMessage.set_data(msgData);
   signedMessage.set_process_id(client_id);
   proto::HMACs hmacs;
-  for (uint64_t i = 0; i < clients_config->n; i++) {
+  for (uint64_t i : dst_client_ids) {
+    if (i == client_id) {
+      // no need to sign for self
+      continue;
+    }
     (*hmacs.mutable_hmacs())[i] = crypto::HMAC(msgData, sessionKeys[i]);
   }
   signedMessage.set_signature(hmacs.SerializeAsString());

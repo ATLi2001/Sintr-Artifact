@@ -210,6 +210,40 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     bool called_val_client = false;
   };
 
+  struct SentFwdResultState {
+    SentFwdResultState() : fwdReadResultMsg(nullptr), fwdPointQueryResultMsg(nullptr), fwdQueryResultMsg(nullptr),
+      blindWriteMsg(nullptr) {}
+    ~SentFwdResultState() {
+      if (fwdReadResultMsg != nullptr) {
+        delete fwdReadResultMsg;
+      }
+      if (fwdPointQueryResultMsg != nullptr) {
+        delete fwdPointQueryResultMsg;
+      }
+      if (fwdQueryResultMsg != nullptr) {
+        delete fwdQueryResultMsg;
+      }
+      if (blindWriteMsg != nullptr) {
+        delete blindWriteMsg;
+      }
+    }
+
+    // exactly one of these will be non-nullptr
+    proto::ForwardReadResultMessage *fwdReadResultMsg;
+    proto::ForwardPointQueryResultMessage *fwdPointQueryResultMsg;
+    proto::ForwardQueryResultMessage *fwdQueryResultMsg;
+    proto::BlindWriteMessage *blindWriteMsg;
+
+    proto::ForwardReadResult fwdReadResult;
+    proto::ForwardQueryResult fwdQueryResult;
+    proto::BlindWrite blindWrite;
+    // because on initial send, we only hmac for the clients we send to
+    // on sending to other clients, we need to re-hmac
+    // after re-hmac for all clients, we set this to true
+    bool reHMACed = false;
+  };
+  
+
   void SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
     uint64_t txnStartTime, PolicyClient *policyClient);
   
@@ -271,7 +305,11 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   bool ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data);
   // create an hmac from msg and place into signature
+  // creates hmac for every client
   void CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage);
+  // creates hmac for only dst_client_ids
+  void CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage,
+    const std::set<uint64_t> &dst_client_ids);
 
   const uint64_t client_id; // Unique ID for this client.
   Transport *transport; // Transport layer.
@@ -306,7 +344,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // track most recently sent begin validation message
   proto::BeginValidateTxnMessage sentBeginValTxnMsg;
   // track all sent forward read/query results for current transaction
-  LazyBuffer<::google::protobuf::Message> sentFwdResults;
+  LazyBuffer<SentFwdResultState> sentFwdResults;
   mutable std::shared_mutex sentFwdResultsMutex;
   // endorsement client can inform client of received validations
   EndorsementClient *endorseClient;
