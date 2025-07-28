@@ -52,6 +52,8 @@
       "sintr_server_skip_endorsement_check": true
     }
   },
+  "_note: when sign finish validation is false, optimistic is no longer needed": 0,
+  "_note: in not optimistic case, for policy weight 2 client parallel is also not needed": 0,
   "policy2R-3": {
     "analysis_name": "sintr-rw-sql-U-policy2R-3",
     "sintr_protocol_settings": {
@@ -60,7 +62,9 @@
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
-      "sintr_sign_finish_validation": false
+      "sintr_sign_finish_validation": false,
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_optimistic_receive_endorsement": false
     }
   },
   "policy2R-4": {
@@ -72,6 +76,8 @@
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
       "sintr_sign_finish_validation": false,
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_optimistic_receive_endorsement": false,
       "sintr_sign_fwd_read_results": false
     }
   },
@@ -84,17 +90,17 @@
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
       "sintr_sign_finish_validation": false,
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_optimistic_receive_endorsement": false,
       "sintr_sign_fwd_read_results": false,
       "sintr_client_check_evidence": false
     }
   },
-  "_note: for weight 3 policy, better to have client parallel endorsement check": 0,
   "policy3R": {
     "analysis_name": "sintr-rw-sql-U-policy3R",
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
-      "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true
+      "sintr_val_client_selector": "ring"
     }
   },
   "policy3R-1": {
@@ -102,7 +108,6 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true,
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false
     }
@@ -112,7 +117,6 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true,
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true
@@ -123,11 +127,11 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true,
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
-      "sintr_sign_finish_validation": false
+      "sintr_sign_finish_validation": false,
+      "sintr_optimistic_receive_endorsement": false
     }
   },
   "policy3R-4": {
@@ -135,11 +139,11 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true,
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
       "sintr_sign_finish_validation": false,
+      "sintr_optimistic_receive_endorsement": false,
       "sintr_sign_fwd_read_results": false
     }
   },
@@ -148,11 +152,11 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_parallel_endorsement_check": true,
       "sintr_hide_timestamps": false,
       "sintr_hash_endorsements": false,
       "sintr_server_skip_endorsement_check": true,
       "sintr_sign_finish_validation": false,
+      "sintr_optimistic_receive_endorsement": false,
       "sintr_sign_fwd_read_results": false,
       "sintr_client_check_evidence": false
     }
