@@ -373,11 +373,11 @@ void SQLTransformer::TransformInsert(size_t pos, std::string_view &write_stateme
         target_group = (*part)(table_name, row_update->column_values(), num_shards, -1, txnGroups) % num_groups;
 
         auto edit_txn_state_cb = [this, write, table_name, row_update](){
-            *txn->add_write_set() = std::move(*write);
-
             TableWrite &table_write = (*txn->mutable_table_writes())[table_name];
             table_write.set_changed_table(true); //Add Table Version.
             write->mutable_rowupdates()->set_row_idx(table_write.rows().size()); //set row_idx for proof reference
+
+            *txn->add_write_set() = std::move(*write);
 
             row_update->set_write_set_idx(txn->write_set_size()-1);
             *table_write.add_rows() = std::move(*row_update);
@@ -869,12 +869,12 @@ void SQLTransformer::TransformDelete(size_t pos, std::string_view &write_stateme
         auto edit_txn_state_cb = [this, write, table_name, row_update](){
             TableWrite &table_write = (*txn->mutable_table_writes())[table_name];
             table_write.set_changed_table(true); //Add Table Version.
-
-            *txn->add_write_set() = std::move(*write);
             write->mutable_rowupdates()->set_row_idx(table_write.rows().size()); //set row_idx for proof reference
 
-            *table_write.add_rows() = std::move(*row_update);
+            *txn->add_write_set() = std::move(*write);
+
             row_update->set_write_set_idx(txn->write_set_size()-1);
+            *table_write.add_rows() = std::move(*row_update);
         };
 
         if (delayed_blind_write_cb != nullptr) {

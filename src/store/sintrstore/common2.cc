@@ -167,4 +167,14 @@ void AddWriteSetIdx(proto::Transaction &txn){
   }
 }
 
+void AddRowUpdatesIdx(proto::Transaction &txn) {
+  // correct the txn write set row update idx according to the position of the row_updates in the TableWrite *after* sorting.
+  for (auto &[table, table_write]: *txn.mutable_table_writes()) {
+    for (int i = 0; i < table_write.rows_size(); ++i) {
+      auto &row_update = table_write.rows()[i];
+      txn.mutable_write_set(row_update.write_set_idx())->mutable_rowupdates()->set_row_idx(i);
+    }
+  }
+}
+
 } // namespace sintrstore

@@ -2007,6 +2007,7 @@ void Client2Client::ValidationThreadFunction() {
           for (auto &[table, table_write]: *txn->mutable_table_writes()) {
             std::sort(table_write.mutable_rows()->begin(), table_write.mutable_rows()->end(), sortRowUpdates);
           }
+          AddRowUpdatesIdx(*txn);
         }
       }
       else if (params.sintr_params.sortWriteset && params.query_params.sql_mode && !valInfo->isPolicyTransaction) {
@@ -2017,6 +2018,7 @@ void Client2Client::ValidationThreadFunction() {
         for (auto &[table, table_write]: *txn->mutable_table_writes()) {
           std::sort(table_write.mutable_rows()->begin(), table_write.mutable_rows()->end(), sortRowUpdates);
         }
+        AddRowUpdatesIdx(*txn);
       }
 
       std::sort(txn->mutable_involved_groups()->begin(), txn->mutable_involved_groups()->end());

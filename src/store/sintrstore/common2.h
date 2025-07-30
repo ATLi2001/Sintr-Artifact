@@ -49,6 +49,8 @@ bool ValidateTransactionTableWrite(const proto::CommittedProof &proof, const std
 
 void AddWriteSetIdx(proto::Transaction &txn);
 
+void AddRowUpdatesIdx(proto::Transaction &txn);
+
 } // namespace sintrstore
 
 #endif /* SINTR_COMMON2_H */

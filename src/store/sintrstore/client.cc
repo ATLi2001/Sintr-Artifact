@@ -1366,6 +1366,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
           for (auto &[table, table_write]: *txn.mutable_table_writes()) {
             std::sort(table_write.mutable_rows()->begin(), table_write.mutable_rows()->end(), sortRowUpdates);
           }
+          AddRowUpdatesIdx(txn);
         }
         //Note: Use stable_sort to guarantee order respects duplicates; Altnernatively: Can try to delete from write sets to save redundant size.
 
@@ -1397,6 +1398,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       for (auto &[table, table_write]: *txn.mutable_table_writes()) {
         std::sort(table_write.mutable_rows()->begin(), table_write.mutable_rows()->end(), sortRowUpdates);
       }
+      AddRowUpdatesIdx(txn);
     }
 
     //TEST: Set TS only at the end.
