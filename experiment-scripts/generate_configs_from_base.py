@@ -39,6 +39,21 @@ def create_config_from_base(base_config_json, changes_dict):
             # if trying to replace some elements of a nested dictionary
             if isinstance(new_config[key], dict) and isinstance(value, dict):
                 new_config[key] = create_config_from_base(new_config[key], value)
+            # if trying to replace some elements of a list of dictionaries
+            elif (
+                isinstance(new_config[key], list)
+                and isinstance(value, list)
+                and all(isinstance(item, dict) for item in new_config[key])
+                and all(isinstance(item, dict) for item in value)
+            ):
+                if len(new_config[key]) != len(value):
+                    print(f"Warning: Length mismatch for key '{key}'. Base has {len(new_config[key])} items, but changes have {len(value)}. Skipping.")
+                    continue
+                for i, item in enumerate(new_config[key]):
+                    if isinstance(item, dict) and isinstance(value[i], dict):
+                        new_config[key][i] = create_config_from_base(item, value[i])
+                    else:
+                        new_config[key][i] = value[i]
             else:
                 new_config[key] = value
         else:

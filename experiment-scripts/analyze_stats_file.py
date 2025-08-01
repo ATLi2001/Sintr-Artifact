@@ -32,7 +32,8 @@ import time
 
 
 ORIGINAL_STATS_DIR = "experiment-results/original"
-OUTPUT_DIR = "experiment-results/analyzed"
+OUTPUT_CSV_DIR = "experiment-results/analyzed/csv"
+OUTPUT_PLOT_DIR = "experiment-results/analyzed/plots"
 ANALYSIS_TYPES = [
     "latency_throughput",
     "sig_nosig_tput_bar",
@@ -70,10 +71,13 @@ def read_original_stats(original_stats_dir):
     return out
 
 # converts a dictionary of stats dictionaries to a CSV file.
-def stats_to_csv(stats_dicts, output_dir, now_string, save_to_file=True):
+def stats_to_csv(stats_dicts, output_dir, now_string):
     out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
 
     for name, stat_json in stats_dicts.items():
+        if "run_stats" not in stat_json or "combined" not in stat_json["run_stats"]:
+            print(f"Skipping {name} as it does not contain run_stats or combined data.")
+            continue
         experiment_name, num_clients, timestamp = name.split("_")
         num_clients = int(num_clients)
         out_df.loc[len(out_df)] = [
@@ -87,8 +91,8 @@ def stats_to_csv(stats_dicts, output_dir, now_string, save_to_file=True):
     # sort by experiment name and number of clients
     out_df.sort_values(by=["experiment_name", "num_clients"], inplace=True)
 
-    if save_to_file:
-        out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
+    out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
+
     return out_df
 
 
@@ -248,7 +252,7 @@ def create_overheads_lat_cum_bar_plot(df, output_dir, now_string):
         4: "- Hide TS, Hash Endorsement",
     }
 
-    suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
+    suffix_search = [["policy1R-2", "policy2R"], ["policy2R-5", "policy3R"]]
     # for suffixes in suffix_search:
     #     curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
     #     mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
@@ -300,18 +304,29 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
     # for making grouped bar plot
     grouped_data = {}
     grouped_err = {}
-    x_labels = ["policy1R-2R", "policy2R-3R"]
+    # x_labels = ["policy1R-2R", "policy2R-3R"]
+    # label_dict = {
+    #     0: "Policy+1",
+    #     1: "- Hide TS, Hash Endorsement",
+    #     2: "- Server Endorsement Check",
+    #     3: "- Client Sign/Check Endorsement",
+    #     4: "- HMAC",
+    #     5: "- Check Query Result Evidence",
+    #     6: "Baseline Policy",
+    # }
+
+    x_labels = ["pesto-policy1R"]
     label_dict = {
-        0: "Policy+1",
+        0: "Policy 1R",
         1: "- Hide TS, Hash Endorsement",
         2: "- Server Endorsement Check",
-        3: "- Client Sign/Check Endorsement",
-        4: "- HMAC",
-        5: "- Check Query Result Evidence",
-        6: "Baseline Policy",
+        3: "- Server Policy CCC",
+        4: "- Sort Writeset",
+        5: "Pesto",
     }
 
-    suffix_search = [["policy1R", "policy2R"], ["policy2R-5", "policy3R"]]
+    # suffix_search = [["policy1R-2", "policy2R"], ["policy2R-5", "policy3R"]]
+    suffix_search = [["pesto", "policy1R"]]
     for suffixes in suffix_search:
         curr_df = df.loc[df["experiment_name"].str.contains("|".join(suffixes))]
         mean_latency = curr_df.groupby("experiment_name")["latency"].mean()
@@ -345,11 +360,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Analyze stats.json files.")
     parser.add_argument(
-        "-o", "--output_dir",
-        default=OUTPUT_DIR,
+        "-o", "--output_csv_dir",
+        default=OUTPUT_CSV_DIR,
         type=str,
         required=False,
-        help=f"Where to write the output files (default: {OUTPUT_DIR})"
+        help=f"Where to write the output csv (default: {OUTPUT_CSV_DIR})"
+    )
+    parser.add_argument(
+        "-p", "--output_plot_dir",
+        default=OUTPUT_PLOT_DIR,
+        type=str,
+        required=False,
+        help=f"Where to write the output plots (default: {OUTPUT_PLOT_DIR})"
     )
     parser.add_argument(
         "-s", "--original_stats_dir",
@@ -372,23 +394,13 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
-    parser.add_argument(
-        "--save_csv",
-        action="store_true",
-        help="If set, saves the generated CSV file to disk."
-    )
-    parser.add_argument(
-        "--no_save_csv",
-        dest="save_csv",
-        action="store_false",
-        help="If set, does not save the generated CSV file to disk."
-    )
-    parser.set_defaults(save_csv=True)
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    if not os.path.exists(args.output_csv_dir):
+        os.makedirs(args.output_csv_dir)
+    if not os.path.exists(args.output_plot_dir):
+        os.makedirs(args.output_plot_dir)
 
     if args.csv:
         df = pd.read_csv(args.csv)
@@ -397,13 +409,13 @@ if __name__ == "__main__":
         if len(stats_dicts) == 0:
             print(f"No stats.json files found in {args.original_stats_dir}.")
             exit(1)
-        df = stats_to_csv(stats_dicts, args.output_dir, now_string, save_to_file=args.save_csv)
+        df = stats_to_csv(stats_dicts, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
-        create_lat_tput_plots(df, args.output_dir, now_string)
+        create_lat_tput_plots(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[1] or args.analysis_type == ANALYSIS_TYPES[2]:
-        create_sig_no_sig_bar_plot(df, args.output_dir, args.analysis_type, now_string)
+        create_sig_no_sig_bar_plot(df, args.output_plot_dir, args.analysis_type, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[3]:
-        create_overheads_lat_cum_bar_plot(df, args.output_dir, now_string)
+        create_overheads_lat_cum_bar_plot(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[4]:
-        create_overheads_lat_grouped_bar_plot(df, args.output_dir, now_string)
+        create_overheads_lat_grouped_bar_plot(df, args.output_plot_dir, now_string)

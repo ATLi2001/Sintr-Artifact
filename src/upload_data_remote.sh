@@ -26,9 +26,10 @@ BENCHMARK_NAME="tpcc"
 NUM_SHARDS=1
 PG_MODE=0
 CLIENTS_PER_SERVER=1
+VERIFY_SSH_ONLY=0
 
 
-while getopts u:e:b:s:f:c:p:n: option; do
+while getopts u:e:b:s:f:c:p:n:v: option; do
 case "${option}" in
 u) USER=${OPTARG};;
 e) EXP_NAME=${OPTARG};;
@@ -38,6 +39,7 @@ f) FIRST_TIME_CONNECTION=${OPTARG};;
 c) CLUSTER_NAME=${OPTARG};;
 p) PG_MODE=${OPTARG};;
 n) CLIENTS_PER_SERVER=${OPTARG};;
+v) VERIFY_SSH_ONLY=${OPTARG};;
 esac;
 done
 
@@ -74,13 +76,24 @@ if [ $FIRST_TIME_CONNECTION = 1 ]; then
 	do
 	   echo "connecting to host: $host"
 	   ssh ${USER}@$host.${EXP_NAME}.${PROJECT_NAME}-pg0.${CLUSTER_NAME}.cloudlab.us "echo"
+	   if [ $? -ne 0 ]; then
+	      echo "Failed to connect to $host."
+	   fi
 	done
 
 	for host in "${arr_servers[@]}"
 	do
 	   echo "connecting to host: $host"
 	   ssh ${USER}@$host.${EXP_NAME}.${PROJECT_NAME}-pg0.${CLUSTER_NAME}.cloudlab.us "echo"
+	   if [ $? -ne 0 ]; then
+	      echo "Failed to connect to $host."
+	   fi
 	done
+fi
+
+if [ $VERIFY_SSH_ONLY = 1 ]; then
+	echo "SSH connection verification only. Exiting."
+	exit 0
 fi
 
 #Upload schemas to clients //TODO: make sure generator has been run locally so this file exists.
