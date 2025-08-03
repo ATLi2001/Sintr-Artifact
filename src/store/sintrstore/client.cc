@@ -217,7 +217,6 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     protoTxnState.ParseFromString(txnState);
     
     // begin sintr validation
-    endorseClient->Reset();
     endorseClient->SetClientSeqNum(client_seq_num);
     // using policy client with default policy set to weight 0 policy
     // TODO: Default should be either ACL or Weight Policy depending on parameter
@@ -1413,9 +1412,9 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {
-      endorseClient->DebugSetExpectedTxnOutput(txn);
+      endorseClient->DebugSetExpectedTxn(txn);
     }
-    endorseClient->SetExpectedTxnOutput(digest);
+    endorseClient->SetExpectedTxnDigest(digest);
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;

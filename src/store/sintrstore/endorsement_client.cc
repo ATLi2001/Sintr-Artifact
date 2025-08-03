@@ -34,11 +34,8 @@
 namespace sintrstore {
 
 EndorsementClient::EndorsementClient(uint64_t client_id, KeyManager *keyManager, policy_id_function policyIdFunction) : 
-    client_id(client_id), keyManager(keyManager), policyIdFunction(policyIdFunction) {
-  policyClient = new PolicyClient();
-}
+    client_id(client_id), keyManager(keyManager), policyIdFunction(policyIdFunction) {}
 EndorsementClient::~EndorsementClient() {
-  delete policyClient;
   for (const auto &idPolicy : policyCache) {
     delete idPolicy.second;
   }
@@ -46,29 +43,41 @@ EndorsementClient::~EndorsementClient() {
 
 void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   this->client_seq_num = client_seq_num;
+  endorsementCheckStatesMap::accessor a;
+  const bool isNewKey = endorsementCheckStates.insert(a, client_seq_num);
+  if (!isNewKey) {
+    Panic("SetClientSeqNum called with existing client seq num %lu", client_seq_num);
+  }
+  a->second = new EndorsementCheckState();
 }
 
 const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() const {
-  std::shared_lock lock(mutex);
-  return endorsements;
+  endorsementCheckStatesMap::const_accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  return a->second->endorsements;
 }
 
 const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
-  std::shared_lock lock(mutex);
   return blacklistedClients;
 }
 
-void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDigest) {
-  std::unique_lock lock(mutex);
-  this->expectedTxnDigest = expectedTxnDigest;
+void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest) {
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+
+  a->second->expectedTxnDigest = expectedTxnDigest;
   // add self as an endorsement
-  client_ids_received.insert(client_id);
-  
+  a->second->client_ids_received.insert(client_id);
+
   // now also check pendingEndorsements
-  for (auto const &it : pendingEndorsements) {
+  for (auto const &it : a->second->pendingEndorsements) {
     if (expectedTxnDigest == it.second.first) {
-      client_ids_received.insert(it.first);
-      endorsements.push_back(it.second.second);
+      a->second->client_ids_received.insert(it.first);
+      a->second->endorsements.push_back(it.second.second);
     }
     else {
       Debug(
@@ -79,8 +88,9 @@ void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDiges
       );
       blacklistedClients.insert(it.first);
     }
+    a->second->numCheckValidations++;
   }
-  for (auto const &it : pendingDigests) {
+  for (auto const &it : a->second->pendingDigests) {
     if (expectedTxnDigest != it.second) {
       Debug(
         "No match on pending digest from client id %lu, txn digest %s; expected txn digest %s",
@@ -90,35 +100,51 @@ void EndorsementClient::SetExpectedTxnOutput(const std::string &expectedTxnDiges
       );
       blacklistedClients.insert(it.first);
     }
+    a->second->numCheckValidations++;
   }
 
-  pendingEndorsements.clear();
+  a->second->pendingEndorsements.clear();
+  a->second->pendingDigests.clear();
+
+  if (a->second->Done()) {
+    // if we have checked enough validations, we can destruct the endorsement check state
+    endorsementCheckStates.erase(a);
+  }
 }
 
-void EndorsementClient::DebugSetExpectedTxnOutput(const proto::Transaction &expectedTxn) {
-  std::unique_lock lock(mutex);
-  this->expectedTxn = expectedTxn;
-  lock.release();
-  mutex.unlock();
+void EndorsementClient::DebugSetExpectedTxn(const proto::Transaction &expectedTxn) {
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  a->second->expectedTxn = expectedTxn;
 
   Debug(
-    "DebugSetExpectedTxnOutput for EndorsementClient client id %lu, seq num %lu",
+    "DebugSetExpectedTxn for EndorsementClient client id %lu, seq num %lu",
     expectedTxn.client_id(),
     expectedTxn.client_seq_num()
   );
 
-  for (auto const &txn : pendingTxns) {
-    DebugCheck(txn);
+  for (auto const &txn : a->second->pendingTxns) {
+    DebugCheck(expectedTxn, txn);
   }
-  pendingTxns.clear();
+  a->second->pendingTxns.clear();
 }
 
 void EndorsementClient::DebugCheck(const proto::Transaction &txn) {
-  std::unique_lock lock(mutex);
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  const proto::Transaction &expectedTxn = a->second->expectedTxn;
   if (!expectedTxn.IsInitialized()) {
-    pendingTxns.push_back(txn);
+    a->second->pendingTxns.push_back(txn);
     return;
   }
+  DebugCheck(expectedTxn, txn);
+}
+
+void EndorsementClient::DebugCheck(const proto::Transaction &expectedTxn, const proto::Transaction &txn) {
   Debug(
     "DebugCheck for EndorsementClient client id %lu, seq num %lu",
     expectedTxn.client_id(),
@@ -308,23 +334,36 @@ void EndorsementClient::DebugCheck(const proto::Transaction &txn) {
 
 void EndorsementClient::UpdateRequirement(const Policy *policy) {
   UW_ASSERT(policy != nullptr);
-  policyClient->AddPolicy(policy);
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  a->second->policyClient->AddPolicy(policy);
 }
 
 std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const {
-  return policyClient->DifferenceToSatisfied(potentialEndorsements);
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this could happen if transaction completes while this was scheduled off critical path
+    // and the update requirement did not end up affecting the policy
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    return {};
+  }
+  return a->second->policyClient->DifferenceToSatisfied(potentialEndorsements);
 }
 
 void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest,
     const proto::SignedMessage &signedValTxnDigest) {
-  std::unique_lock lock(mutex);
+  endorsementCheckStatesMap::accessor a;
+  std::set<uint64_t> &client_ids_received = a->second->client_ids_received;
+  const std::string &expectedTxnDigest = a->second->expectedTxnDigest;
   // if new peer
   if (client_ids_received.find(peer_client_id) == client_ids_received.end()) {
     if (expectedTxnDigest.length() > 0) {
       // must match expected digest
       if (valTxnDigest == expectedTxnDigest) {
         client_ids_received.insert(peer_client_id);
-        endorsements.push_back(signedValTxnDigest);
+        a->second->endorsements.push_back(signedValTxnDigest);
       }
       else {
         Debug(
@@ -335,30 +374,41 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
         );
         blacklistedClients.insert(peer_client_id);
       }
+      a->second->numCheckValidations++;
     }
     else {
       // possible for expected digest to be uninitialized, in which case record a pending endorsement
-      pendingEndorsements[peer_client_id] = std::make_pair(valTxnDigest, signedValTxnDigest);
+      a->second->pendingEndorsements[peer_client_id] = std::make_pair(valTxnDigest, signedValTxnDigest);
       Debug("No expectedTxnDigest yet");
     }
+  }
+  if (a->second->Done()) {
+    endorsementCheckStates.erase(a);
   }
 }
 
 void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest) {
-  std::unique_lock lock(mutex);
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
   // if new peer
-  if (client_ids_received.find(peer_client_id) == client_ids_received.end()) {
-    Debug("Adding optimistic validation from peer client %lu", peer_client_id);
-    client_ids_received.insert(peer_client_id);
-    endorsements.push_back(signedValTxnDigest);
+  if (a->second->client_ids_received.find(peer_client_id) == a->second->client_ids_received.end()) {
+    Debug("Adding optimistic validation from peer client %lu, seq num %lu", peer_client_id, client_seq_num);
+    a->second->client_ids_received.insert(peer_client_id);
+    a->second->endorsements.push_back(signedValTxnDigest);
   }
   else {
     Debug("Client %lu already has endorsement from peer client %lu", client_id, peer_client_id);
   }
 }
 
-void EndorsementClient::CheckValidation(const uint64_t peer_client_id, const std::string &valTxnDigest) {
-  std::unique_lock lock(mutex);
+void EndorsementClient::CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest) {
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  const std::string &expectedTxnDigest = a->second->expectedTxnDigest;
   if (expectedTxnDigest.length() > 0) {
     if (valTxnDigest != expectedTxnDigest) {
       Debug(
@@ -370,31 +420,31 @@ void EndorsementClient::CheckValidation(const uint64_t peer_client_id, const std
       // add to blacklist
       blacklistedClients.insert(peer_client_id);
     }
+    a->second->numCheckValidations++;
   }
   else {
-    pendingDigests[peer_client_id] = valTxnDigest;
-    Debug("No expectedTxnDigest yet");
+    a->second->pendingDigests[peer_client_id] = valTxnDigest;
+    Debug("No expectedTxnDigest yet for client seq num %lu", client_seq_num);
+  }
+  if (a->second->Done()) {
+    endorsementCheckStates.erase(a);
   }
 }
 
 bool EndorsementClient::IsSatisfied() const {
-  std::shared_lock lock(mutex);
-  bool satisfied = policyClient->IsSatisfied(client_ids_received);
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  bool satisfied = a->second->policyClient->IsSatisfied(a->second->client_ids_received);
   if (!satisfied) {
     // Debug("policy not satisfied, received %lu endorsements", client_ids_received.size());
   }
+  else {
+    // -1 for self
+    a->second->numChecksBeforeDestruct = a->second->client_ids_received.size() - 1;
+  }
   return satisfied;
-}
-
-void EndorsementClient::Reset() {
-  expectedTxnDigest.clear();
-  expectedTxn.Clear();
-  policyClient->Reset();
-  client_ids_received.clear();
-  endorsements.clear();
-  pendingEndorsements.clear();
-  pendingTxns.clear();
-  pendingDigests.clear();
 }
 
 bool EndorsementClient::GetPolicyFromCache(const std::string &policyId, const Policy *&policy) const {

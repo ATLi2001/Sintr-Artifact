@@ -1505,7 +1505,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
   // in optimistic case, endorsement is added outside so just check
   else {
-    endorseClient->CheckValidation(peer_client_id, valTxnDigest);
+    endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnDigest);
   }
 }
 

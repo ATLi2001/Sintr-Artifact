@@ -37,6 +37,8 @@
 #include <map>
 #include <shared_mutex>
 
+#include "tbb/concurrent_hash_map.h"
+
 namespace sintrstore {
 
 // this class keeps state for an ongoing transaction endorsement
@@ -48,8 +50,8 @@ class EndorsementClient {
   const std::vector<proto::SignedMessage> &GetEndorsements() const;
   const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
-  void SetExpectedTxnOutput(const std::string &expectedTxnDigest);
-  void DebugSetExpectedTxnOutput(const proto::Transaction &expectedTxn);
+  void SetExpectedTxnDigest(const std::string &expectedTxnDigest);
+  void DebugSetExpectedTxn(const proto::Transaction &expectedTxn);
   void DebugCheck(const proto::Transaction &txn);
   // update current policy by merging with passed in policy
   void UpdateRequirement(const Policy *policy);
@@ -64,10 +66,9 @@ class EndorsementClient {
   void AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest);
   // check if the validation is correct, do not add it as an endorsement
   // this is used in optimistic case where endorsement is already added and we need to later check if correct
-  void CheckValidation(const uint64_t peer_client_id, const std::string &valTxnDigest);
+  void CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest);
   // check if the policy is satisfied by actual endorsements collected so far
   bool IsSatisfied() const;
-  void Reset();
 
   // return true if policy exists for key, false otherwise
   // given a reference to a policy pointer, update it with the policy in the cache
@@ -79,6 +80,8 @@ class EndorsementClient {
   void InitializePolicyCache(const std::map<std::string, Policy *> &policies);
 
  private:
+  void DebugCheck(const proto::Transaction &expectedTxn, const proto::Transaction &txn);
+
   // this client information
   const uint64_t client_id;
   KeyManager *keyManager;
@@ -89,27 +92,46 @@ class EndorsementClient {
   // client side cache of policy store
   std::map<std::string, Policy *> policyCache;
   
-  // transaction specific
+  // current sequence number for transaction that is ongoing
   uint64_t client_seq_num;
-  // expected validation transaction digest
-  std::string expectedTxnDigest;
-  // debug by checking entire validation txn
-  proto::Transaction expectedTxn;
-  // policy client tracks the policy which must be satisfied
-  PolicyClient *policyClient;
-  // which peer clients have endorsed
-  std::set<uint64_t> client_ids_received;
-  // confirmed endorsement signatures to send to server
-  std::vector<proto::SignedMessage> endorsements;
-  // also maintain pending endorsements if endorsement comes back before expectedValTxnDigest is set
-  // map from client id to (digest, signed message)
-  std::map<uint64_t, std::pair<std::string, proto::SignedMessage>> pendingEndorsements;
-  // for the optimistic case we don't actually need the endorsement, just the digest
-  std::map<uint64_t, std::string> pendingDigests;
-  // debug pending transactions
-  std::vector<proto::Transaction> pendingTxns;
-  // for concurrent access to client_ids_received and endorsements
-  mutable std::shared_mutex mutex;
+  
+  // in the optimistic case, the endorsement check state may need to stay alive even after current transaction commits
+  // this is because the checking of the validity of the endorsement is off the critical path
+  // so next transaction may start before that check completes
+  struct EndorsementCheckState {
+    EndorsementCheckState() : policyClient(new PolicyClient()) {}
+    ~EndorsementCheckState() {
+      delete policyClient;
+    }
+    // ready to destruct
+    bool Done() const {
+      return numChecksBeforeDestruct >= 0 && numCheckValidations >= numChecksBeforeDestruct;
+    }
+    // expected validation transaction digest
+    std::string expectedTxnDigest;
+    // debug by checking entire validation txn
+    proto::Transaction expectedTxn;
+    // policy client tracks the policy which must be satisfied
+    PolicyClient *policyClient;
+    // which peer clients have endorsed
+    std::set<uint64_t> client_ids_received;
+    // confirmed endorsement signatures to send to server
+    std::vector<proto::SignedMessage> endorsements;
+    // also maintain pending endorsements if endorsement comes back before expectedValTxnDigest is set
+    // map from client id to (digest, signed message)
+    std::map<uint64_t, std::pair<std::string, proto::SignedMessage>> pendingEndorsements;
+    // for the optimistic case we don't actually need the endorsement, just the digest
+    std::map<uint64_t, std::string> pendingDigests;
+    // debug pending transactions
+    std::vector<proto::Transaction> pendingTxns;
+    // number of pendingDigests we should expect to check before garbage collection
+    int numChecksBeforeDestruct = -1;
+    // number of validations that have been checked for this endorsement check state
+    int numCheckValidations = 0;
+  };
+  typedef tbb::concurrent_hash_map<uint64_t, EndorsementCheckState *> endorsementCheckStatesMap;
+  endorsementCheckStatesMap endorsementCheckStates;
+
   // blacklist of clients that have sent an incorrect endorsement
   std::set<uint64_t> blacklistedClients;
 };
