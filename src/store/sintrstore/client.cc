@@ -1418,7 +1418,8 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;
-    req->txn = txn; //Is this a copy or just reference?
+    // copy moved into Phase1()
+    // req->txn = txn; //Is this a copy or just reference?
     req->ccb = ccb;
     req->ctcb = ctcb;
     req->callbackInvoked = false;
@@ -1474,7 +1475,12 @@ void Client::Phase1(PendingRequest *req) {
 
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
-  const std::vector<proto::SignedMessage> &endorsements = endorseClient->GetEndorsements();
+
+  // use Release so we have ownership and can avoid copying
+  // const std::vector<proto::SignedMessage> &endorsements = endorseClient->GetEndorsements();
+  std::vector<proto::SignedMessage> *endorsements = endorseClient->ReleaseEndorsements();
+  endorseClient->SetEndorsementsUsed();
+  
   if(PROFILING_LAT){
     struct timespec ts_start;
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -1483,13 +1489,6 @@ void Client::Phase1(PendingRequest *req) {
     endorsement_wait_us.add(duration);
     // Warning("  Transaction waiting for endorsements latency in us [%d]", duration);
   }
-  
-  proto::SignedMessages protoEndorsements;
-  for (auto &endorsement : endorsements) {
-    *protoEndorsements.add_sig_msgs() = endorsement;
-  }
-
-  endorseClient->SetEndorsementsUsed();
 
   // TODO: implement compartor for endorsements to use for sorting
   /*
@@ -1498,12 +1497,16 @@ void Client::Phase1(PendingRequest *req) {
   }
   */
 
-  if (protoEndorsements.sig_msgs_size() > 0) {
-    // add endorsement to txn
-    *(req->txn.mutable_endorsements()) = protoEndorsements;
-    // this does not modify transaction itself, so need to modify below
-    *txn.mutable_endorsements() = protoEndorsements;
+  if (endorsements->size() > 0) {
+    for (auto &endorsement : *endorsements) {
+      *txn.mutable_endorsements()->add_sig_msgs() = std::move(endorsement);
+    }
   }
+  delete endorsements;
+
+  // copy into req
+  req->txn = txn;
+
   if(params.sintr_params.hashEndorsements) {
     req->txnDigest = EndorsedTxnDigest(req->txnDigest, txn, params.hashDigest);
   }

@@ -48,6 +48,8 @@ class EndorsementClient {
   ~EndorsementClient();
 
   const std::vector<proto::SignedMessage> &GetEndorsements() const;
+  // release transfers ownership of endorsements to caller
+  std::vector<proto::SignedMessage> *ReleaseEndorsements();
   const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
   void SetEndorsementsUsed();
@@ -100,9 +102,12 @@ class EndorsementClient {
   // this is because the checking of the validity of the endorsement is off the critical path
   // so next transaction may start before that check completes
   struct EndorsementCheckState {
-    EndorsementCheckState() : policyClient(new PolicyClient()) {}
+    EndorsementCheckState() : policyClient(new PolicyClient()), endorsements(new std::vector<proto::SignedMessage>()) {}
     ~EndorsementCheckState() {
       delete policyClient;
+      if (endorsements != nullptr) {
+        delete endorsements;
+      }
     }
     // ready to destruct
     bool Done() const {
@@ -117,7 +122,7 @@ class EndorsementClient {
     // which peer clients have endorsed
     std::set<uint64_t> client_ids_received;
     // confirmed endorsement signatures to send to server
-    std::vector<proto::SignedMessage> endorsements;
+    std::vector<proto::SignedMessage> *endorsements;
     // also maintain pending endorsements if endorsement comes back before expectedValTxnDigest is set
     // map from client id to (digest, signed message)
     std::map<uint64_t, std::pair<std::string, proto::SignedMessage>> pendingEndorsements;

@@ -48,7 +48,19 @@ const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() co
     // so the endorsement check state should always exist
     Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
-  return a->second->endorsements;
+  return *a->second->endorsements;
+}
+
+std::vector<proto::SignedMessage> *EndorsementClient::ReleaseEndorsements() {
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from the client main thread before the txn is sent to the server
+    // so the endorsement check state should always exist
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  std::vector<proto::SignedMessage> *endorsements = a->second->endorsements;
+  a->second->endorsements = nullptr;
+  return endorsements;
 }
 
 const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
@@ -95,7 +107,7 @@ void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDiges
   for (auto const &it : a->second->pendingEndorsements) {
     if (expectedTxnDigest == it.second.first) {
       a->second->client_ids_received.insert(it.first);
-      a->second->endorsements.push_back(it.second.second);
+      a->second->endorsements->push_back(it.second.second);
     }
     else {
       Debug(
@@ -391,7 +403,7 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
       // must match expected digest
       if (valTxnDigest == expectedTxnDigest) {
         client_ids_received.insert(peer_client_id);
-        a->second->endorsements.push_back(signedValTxnDigest);
+        a->second->endorsements->push_back(signedValTxnDigest);
       }
       else {
         Debug(
@@ -427,7 +439,7 @@ void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, c
   if (a->second->client_ids_received.find(peer_client_id) == a->second->client_ids_received.end()) {
     Debug("Adding optimistic validation from peer client %lu, seq num %lu", peer_client_id, client_seq_num);
     a->second->client_ids_received.insert(peer_client_id);
-    a->second->endorsements.push_back(signedValTxnDigest);
+    a->second->endorsements->push_back(signedValTxnDigest);
   }
   else {
     Debug("Client %lu already has endorsement from peer client %lu", client_id, peer_client_id);
