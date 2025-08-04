@@ -1425,6 +1425,15 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     req->txnDigest = digest;
    
     req->timeout = timeout; //20000UL; //timeout;
+
+    req->waitingForEndorsementsTimeout = new Timeout(transport, 5000, [this, req]() {
+      if (!req->waitingForEndorsements) {
+        return;
+      }
+
+      Panic("Waiting for endorsements timed out for client %d seq num %d", client_id, client_seq_num);
+    });
+
     stats.IncrementList("txn_groups", txn.involved_groups().size());
 
     Debug("TRY COMMIT[%s] for client %d seq num %d", BytesToHex(req->txnDigest, 16).c_str(), client_id, client_seq_num);
@@ -1448,6 +1457,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       phase1_ready_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
     }
 
+    req->waitingForEndorsementsTimeout->Reset();
     Phase1(req);
   });
 }
@@ -1460,6 +1470,8 @@ void Client::Phase1(PendingRequest *req) {
     });
     return;
   }
+  req->waitingForEndorsements = false;
+
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
   const std::vector<proto::SignedMessage> &endorsements = endorseClient->GetEndorsements();
@@ -1476,6 +1488,8 @@ void Client::Phase1(PendingRequest *req) {
   for (auto &endorsement : endorsements) {
     *protoEndorsements.add_sig_msgs() = endorsement;
   }
+
+  endorseClient->SetEndorsementsUsed();
 
   // TODO: implement compartor for endorsements to use for sorting
   /*

@@ -41,6 +41,20 @@ EndorsementClient::~EndorsementClient() {
   }
 }
 
+const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() const {
+  endorsementCheckStatesMap::const_accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from the client main thread before the txn is sent to the server
+    // so the endorsement check state should always exist
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+  }
+  return a->second->endorsements;
+}
+
+const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
+  return blacklistedClients;
+}
+
 void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   this->client_seq_num = client_seq_num;
   endorsementCheckStatesMap::accessor a;
@@ -51,21 +65,25 @@ void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   a->second = new EndorsementCheckState();
 }
 
-const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() const {
-  endorsementCheckStatesMap::const_accessor a;
+void EndorsementClient::SetEndorsementsUsed() {
+  endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from client main thread Commit() before the txn is sent to the server
+    // so the endorsement check state should always exist
     Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
-  return a->second->endorsements;
-}
-
-const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
-  return blacklistedClients;
+  a->second->endorsementsUsed = true;
+  if (a->second->Done()) {
+    Debug("Removing endorsement check state for client seq num %lu", client_seq_num);
+    endorsementCheckStates.erase(a);
+  }
 }
 
 void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest) {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from client main thread Commit() before the txn is sent to the server
+    // so the endorsement check state should always exist
     Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
 
@@ -115,7 +133,7 @@ void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDiges
 void EndorsementClient::DebugSetExpectedTxn(const proto::Transaction &expectedTxn) {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
-    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
   a->second->expectedTxn = expectedTxn;
 
@@ -135,6 +153,7 @@ void EndorsementClient::DebugCheck(const proto::Transaction &txn) {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
     Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    return;
   }
   const proto::Transaction &expectedTxn = a->second->expectedTxn;
   if (!expectedTxn.IsInitialized()) {
@@ -336,6 +355,8 @@ void EndorsementClient::UpdateRequirement(const Policy *policy) {
   UW_ASSERT(policy != nullptr);
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from client main thread before the txn is sent to the server
+    // so the endorsement check state should always exist
     Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
   a->second->policyClient->AddPolicy(policy);
@@ -355,6 +376,13 @@ std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_
 void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest,
     const proto::SignedMessage &signedValTxnDigest) {
   endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called in the non-optimistic case but could be from a signature check thread
+    // it is possible that while the signature check is happening, the client has moved on to the next txn
+    // and enough overall checks have been completed, so the endorsement check state has been removed
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    return;
+  }
   std::set<uint64_t> &client_ids_received = a->second->client_ids_received;
   const std::string &expectedTxnDigest = a->second->expectedTxnDigest;
   // if new peer
@@ -390,7 +418,10 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
 void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest) {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
-    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    // this is called in the optimistic case but on the main thread
+    // and before this is called the seq num is checked to be stale
+    // so here the endorsement check state should always exist
+    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
   // if new peer
   if (a->second->client_ids_received.find(peer_client_id) == a->second->client_ids_received.end()) {
@@ -406,7 +437,11 @@ void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, c
 void EndorsementClient::CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest) {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // CheckValidation() is called in the optimistic case on a signature check thread
+    // it is possible that while the signature check is happening, the client has moved on to the next txn
+    // and enough overall checks have been completed, so the endorsement check state has been removed
     Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    return;
   }
   const std::string &expectedTxnDigest = a->second->expectedTxnDigest;
   if (expectedTxnDigest.length() > 0) {
@@ -431,9 +466,11 @@ void EndorsementClient::CheckValidation(const uint64_t peer_client_id, uint64_t 
   }
 }
 
-bool EndorsementClient::IsSatisfied() const {
+bool EndorsementClient::IsSatisfied() {
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, client_seq_num)) {
+    // this is called from the client main thread before the txn is sent to the server
+    // so the endorsement check state should always exist
     Panic("No endorsement check state found for client seq num %lu", client_seq_num);
   }
   bool satisfied = a->second->policyClient->IsSatisfied(a->second->client_ids_received);

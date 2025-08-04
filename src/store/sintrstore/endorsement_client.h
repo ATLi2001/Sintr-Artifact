@@ -50,6 +50,7 @@ class EndorsementClient {
   const std::vector<proto::SignedMessage> &GetEndorsements() const;
   const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
+  void SetEndorsementsUsed();
   void SetExpectedTxnDigest(const std::string &expectedTxnDigest);
   void DebugSetExpectedTxn(const proto::Transaction &expectedTxn);
   void DebugCheck(const proto::Transaction &txn);
@@ -68,7 +69,7 @@ class EndorsementClient {
   // this is used in optimistic case where endorsement is already added and we need to later check if correct
   void CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest);
   // check if the policy is satisfied by actual endorsements collected so far
-  bool IsSatisfied() const;
+  bool IsSatisfied();
 
   // return true if policy exists for key, false otherwise
   // given a reference to a policy pointer, update it with the policy in the cache
@@ -105,7 +106,7 @@ class EndorsementClient {
     }
     // ready to destruct
     bool Done() const {
-      return numChecksBeforeDestruct >= 0 && numCheckValidations >= numChecksBeforeDestruct;
+      return numChecksBeforeDestruct >= 0 && numCheckValidations >= numChecksBeforeDestruct && endorsementsUsed;
     }
     // expected validation transaction digest
     std::string expectedTxnDigest;
@@ -124,10 +125,20 @@ class EndorsementClient {
     std::map<uint64_t, std::string> pendingDigests;
     // debug pending transactions
     std::vector<proto::Transaction> pendingTxns;
+
+    // deletion of an endorsement check state should happen only after:
+    // 1. endorsements have been checked
+    // 2. the endorsements have been used (copied into proto message to send to server)
+    // in normal mode, 1. must happen before 2.
+    // in optimistic mode, 2. may happen before 1.
+    // thus, we need extra variables to track when both are done so we can destruct
+
     // number of pendingDigests we should expect to check before garbage collection
     int numChecksBeforeDestruct = -1;
     // number of validations that have been checked for this endorsement check state
     int numCheckValidations = 0;
+    // is client done using the endorsements
+    bool endorsementsUsed = false;
   };
   typedef tbb::concurrent_hash_map<uint64_t, EndorsementCheckState *> endorsementCheckStatesMap;
   endorsementCheckStatesMap endorsementCheckStates;

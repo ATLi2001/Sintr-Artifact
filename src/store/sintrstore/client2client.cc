@@ -1010,24 +1010,7 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
     finishValTxnMsg.ParseFromString(data);
 
     if (params.sintr_params.optimisticReceiveEndorsement) {
-      if (params.sintr_params.signFinishValidation) {
-        UW_ASSERT(finishValTxnMsg.has_signed_validation_txn_digest());
-        endorseClient->AddValidationOptimistic(
-          finishValTxnMsg.client_id(),
-          finishValTxnMsg.signed_validation_txn_digest()
-        );
-      }
-      else {
-        // dummy signed message
-        proto::SignedMessage signedMsg;
-        signedMsg.set_process_id(finishValTxnMsg.client_id());
-        signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
-        signedMsg.set_signature("");
-        endorseClient->AddValidationOptimistic(
-          finishValTxnMsg.client_id(),
-          signedMsg
-        );
-      }
+      HandleFinishValidateTxnMessageOptimistic(finishValTxnMsg);
     }
 
     HandleFinishValidateTxnMessage(finishValTxnMsg);
@@ -1042,24 +1025,7 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
     };
 
     if (params.sintr_params.optimisticReceiveEndorsement) {
-      if (params.sintr_params.signFinishValidation) {
-        UW_ASSERT(finishValTxnMsg->has_signed_validation_txn_digest());
-        endorseClient->AddValidationOptimistic(
-          finishValTxnMsg->client_id(),
-          finishValTxnMsg->signed_validation_txn_digest()
-        );
-      }
-      else {
-        // dummy signed message
-        proto::SignedMessage signedMsg;
-        signedMsg.set_process_id(finishValTxnMsg->client_id());
-        signedMsg.set_data(finishValTxnMsg->validation_txn_digest());
-        signedMsg.set_signature("");
-        endorseClient->AddValidationOptimistic(
-          finishValTxnMsg->client_id(),
-          signedMsg
-        );
-      }
+      HandleFinishValidateTxnMessageOptimistic(*finishValTxnMsg);
     }
 
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
@@ -1506,6 +1472,40 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   // in optimistic case, endorsement is added outside so just check
   else {
     endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnDigest);
+  }
+}
+
+void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg) {
+  uint64_t peer_client_id = finishValTxnMsg.client_id();
+  uint64_t val_txn_seq_num = finishValTxnMsg.validation_txn_seq_num();
+  // stale finish validation message
+  if (val_txn_seq_num != client_seq_num) {
+    Debug(
+      "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
+      peer_client_id, 
+      val_txn_seq_num,
+      client_seq_num
+    );
+    return;
+  }
+
+  if (params.sintr_params.signFinishValidation) {
+    UW_ASSERT(finishValTxnMsg.has_signed_validation_txn_digest());
+    endorseClient->AddValidationOptimistic(
+      peer_client_id,
+      finishValTxnMsg.signed_validation_txn_digest()
+    );
+  }
+  else {
+    // dummy signed message
+    proto::SignedMessage signedMsg;
+    signedMsg.set_process_id(peer_client_id);
+    signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
+    signedMsg.set_signature("");
+    endorseClient->AddValidationOptimistic(
+      peer_client_id,
+      signedMsg
+    );
   }
 }
 

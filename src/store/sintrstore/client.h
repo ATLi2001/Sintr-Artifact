@@ -249,7 +249,8 @@ class Client : public ::Client {
         decision(proto::COMMIT), fast(true), conflict_flag(false),
         startedPhase2(false), startedWriteback(false),
         callbackInvoked(false), timeout(0UL), slowAbortGroup(-1),
-        decision_view(0UL), startFB(false), eqv_ready(false), client(client) {
+        decision_view(0UL), startFB(false), eqv_ready(false), client(client),
+        waitingForEndorsementsTimeout(nullptr), waitingForEndorsements(true) {
     }
 
     ~PendingRequest() {
@@ -261,6 +262,9 @@ class Client : public ::Client {
       //     client->CleanFB(itr->second, fb_instance);
       //   }
       // }
+      if (waitingForEndorsementsTimeout != nullptr) {
+        delete waitingForEndorsementsTimeout;
+      }
     }
 
     Client *client;
@@ -305,6 +309,9 @@ class Client : public ::Client {
     proto::GroupedSignatures eqvAbortSigsGrouped;
     bool eqv_ready;
 
+    // waiting for endorsements
+    Timeout *waitingForEndorsementsTimeout;
+    bool waitingForEndorsements;
   };
 
   void Phase1(PendingRequest *req);
