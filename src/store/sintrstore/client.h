@@ -162,9 +162,19 @@ class Client : public ::Client {
       } else {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "");
       }
+
+      group_sigs = new std::map<uint64_t, std::vector<proto::SignedMessage *>>();
     }
     ~PendingQuery(){
        ClearReplySets();
+      if(group_sigs != nullptr){
+        for(auto &[group, sigs]: *group_sigs){
+          for(auto sig: sigs){
+            delete sig;
+          }
+        }
+        delete group_sigs;
+      }
     }
 
    void ClearReplySets(){
@@ -205,7 +215,7 @@ class Client : public ::Client {
     //std::map<uint64_t, std::map<std::string, TimestampMessage>> group_read_sets;
     std::map<uint64_t, proto::ReadSet*> group_read_sets;
     std::map<uint64_t, std::string> group_result_hashes;
-    std::map<uint64_t, std::vector<proto::SignedMessage>> group_sigs;
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs;
     std::string result;
     uint64_t group_replies;
    
@@ -231,7 +241,7 @@ class Client : public ::Client {
                             const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
-                            const std::vector<proto::SignedMessage> &query_sigs,
+                            std::vector<proto::SignedMessage *> *query_sigs, // take ownership
                             const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &queryPolicyMap);  //free parameters
   void ClearTxnQueries();
   void ClearQuery(PendingQuery *pendingQuery);

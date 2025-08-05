@@ -598,8 +598,9 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
      //Debug("[group %i] QueryResult Reply for req %lu is valid. Processing result %s:", group, queryResult.req_id(), replica_result->query_result());
     pendingQuery->numResults++;
 
-    pendingQuery->query_sigs.push_back(queryResult.signed_result());
-    
+    uint64_t signed_result_process_id = queryResult.signed_result().process_id();
+    pendingQuery->query_sigs->push_back(queryResult.release_signed_result());
+
     int matching_res;
     //std::map<std::string, TimestampMessage> read_set;
 
@@ -934,8 +935,9 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
         }
         //pendingQuery->rcb(REPLY_OK, group, read_set, *replica_result->mutable_query_result_hash(), *replica_result->mutable_query_result(), true);
         pendingQuery->rcb(REPLY_OK, group, replica_result->release_query_read_set(), *replica_result->mutable_query_result_hash(), *replica_result->mutable_query_result(), true,
-            pendingQuery->query_sigs, pendingQuery->queryPolicyMap);
-        // Remove/Deltete pendingQuery happens in upcall
+            std::move(pendingQuery->query_sigs), pendingQuery->queryPolicyMap);
+        pendingQuery->query_sigs = nullptr;
+        // Remove/Delete pendingQuery happens in upcall
         return;
     }
     //Note: If pendingQuery->done = true => will never reach any of the code below.
@@ -979,7 +981,8 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
             Notice("[group %i] Received sufficient inconsistent replies to determine Failure for QueryResult %lu", group, queryResult.req_id());
             //pendingQuery->rcb(REPLY_FAIL, group, read_set, *replica_result->mutable_query_result_hash(), *replica_result->mutable_query_result(), false);
             pendingQuery->rcb(REPLY_FAIL, group, replica_result->release_query_read_set(), *replica_result->mutable_query_result_hash(), *replica_result->mutable_query_result(), false,
-                pendingQuery->query_sigs, pendingQuery->queryPolicyMap);
+                std::move(pendingQuery->query_sigs), pendingQuery->queryPolicyMap);
+            pendingQuery->query_sigs = nullptr;
                 //Remove/Delete pendingQuery happens in upcall
             return;
         }
@@ -1005,8 +1008,8 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
 
         Debug("[group %i] Try to sync for Req %lu.\n", group, queryResult.req_id());
         if (params.validateProofs && params.signedMessages) {
-            if(replica_result->local_ss().replica_id() !=  queryResult.signed_result().process_id()){
-                        Debug("Replica %lu falsely claims to be replica %lu",  queryResult.signed_result().process_id(), replica_result->local_ss().replica_id());
+            if(replica_result->local_ss().replica_id() !=  signed_result_process_id){
+                        Debug("Replica %lu falsely claims to be replica %lu",  signed_result_process_id, replica_result->local_ss().replica_id());
                         return;
             } 
         }            
@@ -1081,7 +1084,8 @@ void ShardClient::HandleFailQuery(proto::FailQuery &queryFail){
         //std::map<std::string, TimestampMessage> dummy_read_set;
         proto::ReadSet *dummy_read_set = nullptr;
         std::string dummy("");
-        pendingQuery->rcb(REPLY_FAIL, group, dummy_read_set, dummy, dummy, false, pendingQuery->query_sigs, pendingQuery->queryPolicyMap);
+        pendingQuery->rcb(REPLY_FAIL, group, dummy_read_set, dummy, dummy, false, std::move(pendingQuery->query_sigs), pendingQuery->queryPolicyMap);
+        pendingQuery->query_sigs = nullptr;
     }
     return;
 }

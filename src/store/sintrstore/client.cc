@@ -711,8 +711,9 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
         c2client->SendForwardQueryResultMessage(
           pendingQuery->query_gen_id, itr->second,
           proto::QueryResultMetaData(),
-          std::map<uint64_t, std::vector<proto::SignedMessage>>(), false
+          std::move(pendingQuery->group_sigs), false
         );
+        pendingQuery->group_sigs = nullptr;
 
         auto res = new sql::QueryResultProtoWrapper(itr->second);
         qcb(REPLY_OK, res);
@@ -889,7 +890,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
 
 void Client::QueryResultCallback(PendingQuery *pendingQuery,  
                                   int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
-                                  const std::vector<proto::SignedMessage> &query_sigs,
+                                  std::vector<proto::SignedMessage *> *query_sigs,
                                   const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &queryPolicyMap) 
 { 
 
@@ -914,8 +915,13 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   // } 
 
   UW_ASSERT(pendingQuery != nullptr);
+  UW_ASSERT(query_sigs != nullptr);
   if(!success){ //Retry query
     delete query_read_set;
+    for (auto &sig : *query_sigs) {
+      delete sig;
+    }
+    delete query_sigs;
     Debug("[group %i] Reported failure for QuerySync [seq : ver] [%lu : %lu] \n", group, pendingQuery->queryMsg.query_seq_num(), pendingQuery->version);
     RetryQuery(pendingQuery);
     return;
@@ -935,9 +941,10 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   if(group == pendingQuery->involved_groups[0]) pendingQuery->result = std::move(result); 
 
   // add signatures to pendingQuery
-  for(auto &sig : query_sigs){
-    pendingQuery->group_sigs[group].push_back(sig);
+  for(auto &sig : *query_sigs){
+    (*pendingQuery->group_sigs)[group].push_back(std::move(sig));
   }
+  delete query_sigs;
 
   //wait for all shard read-sets to arrive before reporting result. (Realistically result shard replies last, since it has to coordinate data transfer for computation)
   if(pendingQuery->involved_groups.size() != pendingQuery->group_replies) return;
@@ -1037,15 +1044,16 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
     c2client->SendForwardQueryResultMessage(
       pendingQuery->query_gen_id, pendingQuery->result, queryResMetaData,
-      pendingQuery->group_sigs, true
+      std::move(pendingQuery->group_sigs), true
     );
   }
   else {
     c2client->SendForwardQueryResultMessage(
       pendingQuery->query_gen_id, pendingQuery->result, *queryRep,
-      pendingQuery->group_sigs, true
+      std::move(pendingQuery->group_sigs), true
     );
   }
+  pendingQuery->group_sigs = nullptr;
 
   Debug("Upcall with Query result");
 

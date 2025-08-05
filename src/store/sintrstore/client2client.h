@@ -99,9 +99,10 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     const proto::Dependency &dep, bool hasDep, bool addReadset);
   
   // forward query results to other clients
+  // take ownership of group_sigs
   void SendForwardQueryResultMessage(const std::string &query_gen_id, const std::string &query_result, 
     const proto::QueryResultMetaData &query_res_meta,
-    const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset);
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset);
 
   // send a blind write message to other clients
   // indicates that blind writes can now be written locally
@@ -256,10 +257,11 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     const std::string &serializedWrite, const std::string &serializedWriteTypeName,
     const proto::Dependency &dep, bool hasDep, bool addReadset);
   
+  // take ownership of the actual signatures inside group_sigs
   void SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
     const proto::QueryResultMetaData &query_res_meta,
-    const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset);
-  
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> &group_sigs, bool addReadset);
+
   void SendBlindWriteMessageHelper();
 
   void HandlePolicyUpdateHelper(const Policy *policy);

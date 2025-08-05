@@ -665,20 +665,23 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
 
 void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_id, const std::string &query_result,
     const proto::QueryResultMetaData &query_res_meta,
-    const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset) {
-
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset) {
+  UW_ASSERT(group_sigs != nullptr);
   if (!params.sintr_params.c2cSendThread) {
     SendForwardQueryResultMessageHelper(
       query_gen_id, query_result,
-      query_res_meta, group_sigs, addReadset
+      query_res_meta, *group_sigs, addReadset
     );
+    delete group_sigs;
+    // the signatures inside of group_sigs are moved in SendForwardQueryResultMessageHelper
   }
   else {
     auto f = [=]() {
       this->SendForwardQueryResultMessageHelper(
         query_gen_id, query_result,
-        query_res_meta, group_sigs, addReadset
+        query_res_meta, *group_sigs, addReadset
       );
+      delete group_sigs;
       return (void*) true;
     };
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
@@ -688,8 +691,8 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
 
 void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
     const proto::QueryResultMetaData &query_res_meta,
-    const std::map<uint64_t, std::vector<proto::SignedMessage>> &group_sigs, bool addReadset) {
-  
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> &group_sigs, bool addReadset) {
+
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardQueryResultMessage *fwdQueryResultMsgToSend = new proto::ForwardQueryResultMessage();
   proto::ForwardQueryResult fwdQueryResult;
@@ -737,10 +740,10 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
 
   if (addReadset) {
     if (params.validateProofs) {
-      for (const auto &[group, query_sigs] : group_sigs) {
+      for (auto &[group, query_sigs] : group_sigs) {
         proto::SignedMessages &curr_group_sigs = (*fwdQueryResultMsgToSend->mutable_query_sigs())[group];
-        for (const auto &query_sig : query_sigs) {
-          *curr_group_sigs.add_sig_msgs() = query_sig;
+        for (auto &query_sig : query_sigs) {
+          *curr_group_sigs.add_sig_msgs() = std::move(*query_sig);
         }
       }
     }

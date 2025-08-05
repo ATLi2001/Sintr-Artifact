@@ -77,7 +77,7 @@ typedef std::function<void(int, const std::string &)> read_timeout_callback;
 ////////// Queries
 //typedef std::function<void(int, int, std::map<std::string, TimestampMessage> &, std::string &, std::string &, bool)> result_callback; //status, group, read_set, result_hash, result, success
 typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string &, bool,
-  const std::vector<proto::SignedMessage> &,
+  std::vector<proto::SignedMessage *> *,
   const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
   const proto::Dependency &, bool, bool,
@@ -300,8 +300,16 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
         query_manager(false), success(false),  snapshot_mgr(query_params), pendingPointQuery(reqId), sync_started(false) //,  numSnapshotReplies(0UL),
         { 
           result_freq.clear();
+          query_sigs = new std::vector<proto::SignedMessage *>();
         }
-    ~PendingQuery() { }
+    ~PendingQuery() {
+      if (query_sigs != nullptr) {
+        for (auto sig : *query_sigs) {
+          delete sig;
+        }
+        delete query_sigs;
+      }
+    }
 
     //std::string first_result; //just for debugging
 
@@ -344,9 +352,9 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     std::unordered_map<std::string, std::unordered_map<std::string, Result_mgr>> result_freq; //result_hash (read-set) -> (result (serialization) -> freq)
     //TODO: For each read_set -> maintain a list of deps that is updated.
      std::unordered_map<std::string, std::unordered_map<std::string, proto::ReadSet>> result_read_set; // map: result -> read_set_hash -> read set.
-    
-    std::vector<proto::SignedMessage> query_sigs;
-    
+
+    std::vector<proto::SignedMessage *> *query_sigs;
+
     bool query_manager;
     result_callback rcb;
     result_timeout_callback rtcb;
