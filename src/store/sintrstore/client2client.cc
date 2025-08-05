@@ -674,16 +674,36 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
     );
     delete group_sigs;
     // the signatures inside of group_sigs are moved in SendForwardQueryResultMessageHelper
+
+    if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+      delete &query_res_meta;
+    }
   }
   else {
-    auto f = [=]() {
-      this->SendForwardQueryResultMessageHelper(
-        query_gen_id, query_result,
-        query_res_meta, *group_sigs, addReadset
-      );
-      delete group_sigs;
-      return (void*) true;
-    };
+    std::function<void*(void)> f;
+    if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+      // here query_res_meta is ours to own so capture it by pointer
+      f = [=, query_res_meta_ptr = &query_res_meta]() {
+        this->SendForwardQueryResultMessageHelper(
+          query_gen_id, query_result,
+          *query_res_meta_ptr, *group_sigs, addReadset
+        );
+        delete group_sigs;
+        delete query_res_meta_ptr;
+        return (void*) true;
+      };
+    }
+    else {
+      f = [=]() {
+        // here query_res_meta is from the client txn object, so we need to copy capture it
+        this->SendForwardQueryResultMessageHelper(
+          query_gen_id, query_result,
+          query_res_meta, *group_sigs, addReadset
+        );
+        delete group_sigs;
+        return (void*) true;
+      };
+    }
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
     c2cSendQueue.push(executor);
   }

@@ -941,10 +941,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   if(group == pendingQuery->involved_groups[0]) pendingQuery->result = std::move(result); 
 
   // add signatures to pendingQuery
-  for(auto &sig : *query_sigs){
-    (*pendingQuery->group_sigs)[group].push_back(std::move(sig));
-  }
-  delete query_sigs;
+  (*pendingQuery->group_sigs)[group] = std::move(*query_sigs);
 
   //wait for all shard read-sets to arrive before reporting result. (Realistically result shard replies last, since it has to coordinate data transfer for computation)
   if(pendingQuery->involved_groups.size() != pendingQuery->group_replies) return;
@@ -969,10 +966,15 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   // this is needed only in the case of cacheReadSet=false and mergeActiveAtClient=true
   // in that case, we need to separately maintain and forward queryResMetaData
   // otherwise, we can just use the queryRep directly
-  proto::QueryResultMetaData queryResMetaData;
+  proto::QueryResultMetaData *queryResMetaData = nullptr;
   if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
-    queryResMetaData.set_query_id(pendingQuery->queryId);
-    queryResMetaData.set_retry_version(pendingQuery->version);
+    queryResMetaData = new proto::QueryResultMetaData();
+    queryResMetaData->set_query_id(pendingQuery->queryId);
+    queryResMetaData->set_retry_version(pendingQuery->version);
+    // deletion of queryResMetaData will be handled by Client2Client::SendForwardQueryResultMessage
+  }
+  else {
+    queryResMetaData = queryRep;
   }
 
   if(params.query_params.cacheReadSet){ 
@@ -991,7 +993,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       
       if(params.query_params.mergeActiveAtClient){
         // must copy into queryResMetaData for forwarding
-        proto::QueryGroupMeta &queryMD = (*queryResMetaData.mutable_group_meta())[group]; 
+        proto::QueryGroupMeta &queryMD = (*queryResMetaData->mutable_group_meta())[group]; 
         *queryMD.mutable_query_read_set() = *query_read_set;
 
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
@@ -1041,18 +1043,10 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   }
 
   // forward to validating clients
-  if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
-    c2client->SendForwardQueryResultMessage(
-      pendingQuery->query_gen_id, pendingQuery->result, queryResMetaData,
-      std::move(pendingQuery->group_sigs), true
-    );
-  }
-  else {
-    c2client->SendForwardQueryResultMessage(
-      pendingQuery->query_gen_id, pendingQuery->result, *queryRep,
-      std::move(pendingQuery->group_sigs), true
-    );
-  }
+  c2client->SendForwardQueryResultMessage(
+    pendingQuery->query_gen_id, pendingQuery->result, *queryResMetaData,
+    std::move(pendingQuery->group_sigs), true
+  );
   pendingQuery->group_sigs = nullptr;
 
   Debug("Upcall with Query result");
