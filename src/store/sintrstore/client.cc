@@ -412,14 +412,16 @@ void Client::Put(const std::string &key, const std::string &value,
       }
       target_group_for_get = -1;
     } else {
-      // look in cache for policy
-      bool exists = endorseClient->GetPolicyFromCache(policyIdFunction(key, value), policy);
-      if (!exists) {
-        // if not found, use default policy for now
-        endorseClient->GetPolicyFromCache("p0", policy);
+      if (!params.sintr_params.ignorePolicyUpdate) {
+        // look in cache for policy
+        bool exists = endorseClient->GetPolicyFromCache(policyIdFunction(key, value), policy);
+        if (!exists) {
+          // if not found, use default policy for now
+          endorseClient->GetPolicyFromCache("p0", policy);
+        }
+        Debug("Sending policy update for put using c2client in regular transaction");
+        c2client->HandlePolicyUpdate(policy);
       }
-      Debug("Sending policy update for put using c2client in regular transaction");
-      c2client->HandlePolicyUpdate(policy);
       std::vector<int> txnGroups(txn.involved_groups().begin(), txn.involved_groups().end());
       int i = (*part)(key, nshards, -1, txnGroups) % ngroups; 
       // If needed, add this shard to set of participants and send BEGIN.
@@ -506,14 +508,16 @@ void Client::Write(std::string &write_statement, write_callback wcb,
         // add write statement if necessary to brackets and then uncomment debugs
         write_continuation(status, result);
 
-        // update policy for current transaction, make sure if policy is the same don't handle policy update
-        for (const auto &key : *keys_written) {
-          std::string policyId = policyIdFunction(key, "");
-          //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
-          const Policy *policy;
-          endorseClient->GetPolicyFromCache(policyId, policy);  
-          Debug("handle policy update for policy id %lu in write", policyId);
-          c2client->HandlePolicyUpdate(policy);
+        if (!params.sintr_params.ignorePolicyUpdate) {
+          // update policy for current transaction, make sure if policy is the same don't handle policy update
+          for (const auto &key : *keys_written) {
+            std::string policyId = policyIdFunction(key, "");
+            //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
+            const Policy *policy;
+            endorseClient->GetPolicyFromCache(policyId, policy);  
+            Debug("handle policy update for policy id %lu in write", policyId);
+            c2client->HandlePolicyUpdate(policy);
+          }
         }
 
         delete keys_written;
