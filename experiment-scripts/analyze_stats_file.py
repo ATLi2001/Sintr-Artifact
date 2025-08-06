@@ -89,7 +89,7 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
         ]
 
     # sort by experiment name and number of clients
-    out_df.sort_values(by=["experiment_name", "num_clients"], inplace=True)
+    out_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
 
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
 
