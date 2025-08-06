@@ -1,0 +1,71 @@
+{
+  "policy1R": {
+    "analysis_name": "sintr-rw-sql-U-policy1R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_max_client_sig_check_threads": 0
+    },
+    "client_processes_per_client_node": [[4]],
+    "pin_client_processes": [0, 2, 4, 6]
+  },
+  "policy1R-1": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-1",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_max_client_sig_check_threads": 0,
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false
+    },
+    "client_processes_per_client_node": [[4]],
+    "pin_client_processes": [0, 2, 4, 6]
+  },
+  "policy1R-2": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-2",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_max_client_sig_check_threads": 0,
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false,
+      "sintr_server_skip_endorsement_check": true
+    },
+    "client_processes_per_client_node": [[4]],
+    "pin_client_processes": [0, 2, 4, 6]
+  },
+  "policy1R-3": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-3",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_max_client_sig_check_threads": 0,
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false,
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_policy_CCC": false
+    },
+    "client_processes_per_client_node": [[4]],
+    "pin_client_processes": [0, 2, 4, 6]
+  },
+  "policy1R-4": {
+    "analysis_name": "sintr-rw-sql-U-policy1R-4",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_max_client_sig_check_threads": 0,
+      "sintr_hide_timestamps": false,
+      "sintr_hash_endorsements": false,
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_policy_CCC": false,
+      "sintr_sort_writeset": false
+    },
+    "client_processes_per_client_node": [[4]],
+    "pin_client_processes": [0, 2, 4, 6]
+  }
+}
