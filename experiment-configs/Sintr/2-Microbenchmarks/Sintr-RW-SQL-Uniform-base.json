@@ -143,7 +143,7 @@
       "force_read_from_snapshot": false,
 
       "query_read_prepared": true,
-      "query_cache_read_set": true,
+      "query_cache_read_set": false,
       "query_merge_active_at_client": true,
 
       "query_optimistic_txid": true,
@@ -189,7 +189,8 @@
     "sintr_val_client_selector_zipf": 1.1,
     "sintr_hide_timestamps": true,
     "sintr_server_skip_endorsement_check": false,
-    "sintr_optimistic_receive_endorsement": true
+    "sintr_optimistic_receive_endorsement": true,
+    "sintr_policy_CCC": true
   },
 
   "experiment_name": "sintr",
@@ -213,9 +214,9 @@
   "server_debug_stats": false,
   "client_debug_stats": false,
 
-  "client_experiment_length": 30,
-  "client_ramp_down": 5,
-  "client_ramp_up": 5,
+  "client_experiment_length": 60,
+  "client_ramp_down": 15,
+  "client_ramp_up": 15,
 
   "default_remote_shell": "bash",
 
