@@ -26,9 +26,9 @@
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[16, 20, 24]],
-    "client_processes_per_client_node": [[2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1]],
+    "client_total": [[20, 24]],
+    "client_processes_per_client_node": [[2, 2]],
+    "client_threads_per_process": [[1, 1]],
     "client_nodes_per_server": 2
   },
   "policy3R": {
@@ -42,9 +42,9 @@
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[24, 28, 32, 36]],
-    "client_processes_per_client_node": [[2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1]],
+    "client_total": [[28, 32, 36]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
     "client_nodes_per_server": 3
   }
 }
