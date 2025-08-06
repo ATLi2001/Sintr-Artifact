@@ -11,8 +11,8 @@
       "sintr_val_client_selector": "zipf"
     },
     "client_total": [[8, 12, 16]],
-    "client_processes_per_client_node": [[2, 2]],
-    "client_threads_per_process": [[1, 1]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
     "client_nodes_per_server": 2
   },
   "policy2Z-med": {
