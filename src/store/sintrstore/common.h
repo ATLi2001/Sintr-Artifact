@@ -882,6 +882,7 @@ typedef struct SintrParameters {
   const bool policyCCC; // perform CCC on policies
   const bool optimisticReceiveEndorsement; // receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)
   const bool ignorePolicyUpdate; // ignore policy updates during a transaction
+  const bool clientEstimatePolicy; // client estimates policy at start of transaction
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -889,7 +890,8 @@ typedef struct SintrParameters {
     bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
-    bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate) :
+    bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
+    bool clientEstimatePolicy) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -915,7 +917,8 @@ typedef struct SintrParameters {
     serverSkipEndorsementCheck(serverSkipEndorsementCheck),
     policyCCC(policyCCC),
     optimisticReceiveEndorsement(optimisticReceiveEndorsement),
-    ignorePolicyUpdate(ignorePolicyUpdate) {
+    ignorePolicyUpdate(ignorePolicyUpdate),
+    clientEstimatePolicy(clientEstimatePolicy) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message

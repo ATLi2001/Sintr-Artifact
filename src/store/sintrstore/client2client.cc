@@ -263,6 +263,20 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
 
 void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
     PolicyClient *policyClient) {
+
+  if (params.sintr_params.clientEstimatePolicy) {
+    UW_ASSERT(protoTxnState.IsInitialized() && policyClient != nullptr);
+  }
+  else {
+    // no estimate, so no need to send any begin validate messages
+    UW_ASSERT(!protoTxnState.IsInitialized() && policyClient == nullptr);
+    // still some bookkeeping to do
+    ResetTrackingState();
+    this->client_seq_num = client_seq_num;
+    beginValSent.insert(client_id);
+    return;
+  }
+  
   if (!params.sintr_params.c2cSendThread) {
     SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState, txnStartTime, policyClient);
     delete policyClient;
@@ -282,6 +296,7 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
 
 void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
     uint64_t txnStartTime, PolicyClient *policyClient) {
+  UW_ASSERT(policyClient != nullptr);
 
   // if (create_hmac_us.count > 0 && create_hmac_us.count % 2000 == 0) {
   //   std::cerr << "Mean create HMAC latency: " << create_hmac_us.mean() << std::endl;
@@ -314,7 +329,10 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   //   }
   // }
 
+  ResetTrackingState();
   this->client_seq_num = client_seq_num;
+  // for tracking purposes, must have self in beginValSent
+  beginValSent.insert(client_id);
 
   sentBeginValTxnMsg.Clear();
   sentBeginValTxnMsg.set_client_id(client_id);
@@ -327,15 +345,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     sentBeginValTxnMsg.mutable_timestamp()->set_id(client_id);
   }
 
-  beginValSent.clear();
-  std::unique_lock lock(sentFwdResultsMutex);
-  sentFwdResults.clear();
-  valClientOrder.clear();
-
   Debug("beginValTxnMsg client id %lu, seq num %lu", client_id, client_seq_num);
-
-  // for tracking purposes, must have self in beginValSent
-  beginValSent.insert(client_id);
 
   // num_pings = 0;
   // ping to test RTT
@@ -398,6 +408,13 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     // sanity check - policy should be satisfied by the clients we are sending to
     UW_ASSERT(policyClient->IsSatisfied(beginValSent));
   }
+}
+
+void Client2Client::ResetTrackingState() {
+  std::unique_lock lock(sentFwdResultsMutex);
+  beginValSent.clear();
+  sentFwdResults.clear();
+  valClientOrder.clear();
 }
 
 void Client2Client::SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,

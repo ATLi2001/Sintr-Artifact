@@ -247,7 +247,9 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   void SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
     uint64_t txnStartTime, PolicyClient *policyClient);
-  
+
+  void ResetTrackingState();
+
   void SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
     const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep);

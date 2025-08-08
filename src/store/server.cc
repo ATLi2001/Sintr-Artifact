@@ -852,7 +852,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_hash_endorsements, false, false, true,
         FLAGS_sintr_hide_timestamps, 1,
         FLAGS_sintr_server_skip_endorsement_check,
-        FLAGS_sintr_policy_CCC, false, false
+        FLAGS_sintr_policy_CCC, false, false, true
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

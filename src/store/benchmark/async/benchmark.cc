@@ -551,6 +551,7 @@ DEFINE_validator(sintr_val_client_selector, &ValidateSintrValClientSelector);
 DEFINE_double(sintr_val_client_selector_zipf, 0.5, "zipf parameter for sintr client validation client selector");
 DEFINE_bool(sintr_optimistic_receive_endorsement, true, "sintr receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)");
 DEFINE_bool(sintr_client_ignore_policy_update, false, "sintr client ignores policy updates during a transaction");
+DEFINE_bool(sintr_client_estimate_policy, true, "sintr client estimates policy at start of transaction");
 
 ///////////////////////////////////////////////////////////
 
@@ -1729,7 +1730,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_max_client_sig_check_threads,
         false, true,
         FLAGS_sintr_optimistic_receive_endorsement,
-        FLAGS_sintr_client_ignore_policy_update
+        FLAGS_sintr_client_ignore_policy_update,
+        FLAGS_sintr_client_estimate_policy
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

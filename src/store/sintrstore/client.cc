@@ -197,7 +197,7 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     if(!failureEnabled) stats.Increment("total_fresh_tx_honest", 1);
   }
 
-  transport->Timer(0, [this, bcb, btcb, timeout, txnState]() { 
+  transport->Timer(0, [this, bcb, btcb, timeout, &txnState]() { 
     if (pingReplicas) {
       if (!first && !startedPings) {
         startedPings = true;
@@ -213,15 +213,17 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     client_seq_num++;
 
     uint64_t txnStartTime = timeServer.GetTime();
-    TxnState protoTxnState;
-    protoTxnState.ParseFromString(txnState);
     
     // begin sintr validation
     endorseClient->SetClientSeqNum(client_seq_num);
     // using policy client with default policy set to weight 0 policy
-    // TODO: Default should be either ACL or Weight Policy depending on parameter
-    PolicyClient *policyClient = new PolicyClient();
-    EstimateTxnPolicy(protoTxnState, policyClient);
+    TxnState protoTxnState;
+    PolicyClient *policyClient = nullptr;
+    if (params.sintr_params.clientEstimatePolicy) {
+      policyClient = new PolicyClient();
+      protoTxnState.ParseFromString(txnState);
+      EstimateTxnPolicy(protoTxnState, policyClient);
+    }
     c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
 
     txn.Clear(); //txn = proto::Transaction();
