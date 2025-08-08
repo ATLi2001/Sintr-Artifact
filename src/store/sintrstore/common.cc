@@ -2128,25 +2128,30 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
   }
 }
 
-std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts) {
-  blake3_hasher hasher;
-  blake3_hasher_init(&hasher);
-  std::string digest(BLAKE3_OUT_LEN, 0);
-  blake3_hasher_update(&hasher, (unsigned char *) &query_cmd[0], query_cmd.length());
-  if(hashed_ts == "") {
-    uint64_t timestampId = query_ts.getID();
-    uint64_t timestampTs = query_ts.getTimestamp();
-    blake3_hasher_update(&hasher, (unsigned char *) &timestampId,
-        sizeof(timestampId));
-    blake3_hasher_update(&hasher, (unsigned char *) &timestampTs,
-        sizeof(timestampTs));
-  } else {
-    blake3_hasher_update(&hasher, (unsigned char *) &hashed_ts[0], hashed_ts.length());
+std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts, bool hashDigest) {
+  if (hashDigest) {
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+    std::string digest(BLAKE3_OUT_LEN, 0);
+    blake3_hasher_update(&hasher, (unsigned char *) &query_cmd[0], query_cmd.length());
+    if(hashed_ts == "") {
+      uint64_t timestampId = query_ts.getID();
+      uint64_t timestampTs = query_ts.getTimestamp();
+      blake3_hasher_update(&hasher, (unsigned char *) &timestampId,
+          sizeof(timestampId));
+      blake3_hasher_update(&hasher, (unsigned char *) &timestampTs,
+          sizeof(timestampTs));
+    } else {
+      blake3_hasher_update(&hasher, (unsigned char *) &hashed_ts[0], hashed_ts.length());
+    }
+  
+    blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
+  
+    return digest;
   }
-
-  blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
-
-  return digest;
+  else {
+    return query_cmd;
+  }
 }
 
 std::string QueryDigest(const proto::Query &query, bool queryHashDigest){

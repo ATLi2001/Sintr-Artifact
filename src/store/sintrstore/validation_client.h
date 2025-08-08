@@ -147,9 +147,9 @@ class ValidationClient : public ::Client {
     // difference between query seq num and client seq num?
     PendingValidationQuery(const Timestamp &ts,
         const std::string &query_cmd, const query_callback &qcb, bool cache_result,
-        const std::string &hashed_ts) :
+        const std::string &hashed_ts, bool hashQueryGenId) :
         vqcb(qcb), cache_result(cache_result), query_cmd(query_cmd), timeout(nullptr) {
-      query_gen_id = QueryGenId(query_cmd, ts, hashed_ts);
+      query_gen_id = QueryGenId(query_cmd, ts, hashed_ts, hashQueryGenId);
 
       struct timespec ts_start;
       clock_gettime(CLOCK_MONOTONIC, &ts_start);

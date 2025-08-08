@@ -158,9 +158,9 @@ class Client : public ::Client {
       queryMsg.set_retry_version(0);
       if(client->params.sintr_params.hideTimestamps) {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
-          TimestampDigest(Timestamp(client->txn.timestamp())));
+          TimestampDigest(Timestamp(client->txn.timestamp())), client->params.sintr_params.hashQueryGenId);
       } else {
-        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "");
+        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "", client->params.sintr_params.hashQueryGenId);
       }
 
       group_sigs = new std::map<uint64_t, std::vector<proto::SignedMessage *>>();

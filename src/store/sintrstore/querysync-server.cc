@@ -944,9 +944,9 @@ void Server::SendQueryReply(QueryMetaData *query_md){
     result->set_replica_id(id);
     if(params.sintr_params.hideTimestamps) {
         result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts,
-            TimestampDigest(query_md->ts)));
+            TimestampDigest(query_md->ts), params.sintr_params.hashQueryGenId));
     } else {
-        result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts, ""));
+        result->set_query_gen_id(QueryGenId(query_md->query_cmd, query_md->ts, "", params.sintr_params.hashQueryGenId));
     }    
     queryResultReply->set_req_id(query_md->req_id); //this implicitly captures retry-version
 

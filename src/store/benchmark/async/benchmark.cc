@@ -552,6 +552,7 @@ DEFINE_double(sintr_val_client_selector_zipf, 0.5, "zipf parameter for sintr cli
 DEFINE_bool(sintr_optimistic_receive_endorsement, true, "sintr receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)");
 DEFINE_bool(sintr_client_ignore_policy_update, false, "sintr client ignores policy updates during a transaction");
 DEFINE_bool(sintr_client_estimate_policy, true, "sintr client estimates policy at start of transaction");
+DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
 
 ///////////////////////////////////////////////////////////
 
@@ -1731,7 +1732,8 @@ int main(int argc, char **argv) {
         false, true,
         FLAGS_sintr_optimistic_receive_endorsement,
         FLAGS_sintr_client_ignore_policy_update,
-        FLAGS_sintr_client_estimate_policy
+        FLAGS_sintr_client_estimate_policy,
+        FLAGS_sintr_hash_query_gen_id
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

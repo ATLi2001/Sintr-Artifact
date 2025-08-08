@@ -349,9 +349,9 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
   
   PendingValidationQuery *pendingQuery;
   if(params.sintr_params.hideTimestamps) {
-    pendingQuery = new PendingValidationQuery(Timestamp(), query, qcb, cache_result, txn->hashed_timestamp());
+    pendingQuery = new PendingValidationQuery(Timestamp(), query, qcb, cache_result, txn->hashed_timestamp(), params.sintr_params.hashQueryGenId);
   } else {
-    pendingQuery = new PendingValidationQuery(Timestamp(txn->timestamp()), query, qcb, cache_result, "");
+    pendingQuery = new PendingValidationQuery(Timestamp(txn->timestamp()), query, qcb, cache_result, "", params.sintr_params.hashQueryGenId);
   } 
   // map query gen ID to query command
   a->second->queryIDToCmd[pendingQuery->query_gen_id] = query;

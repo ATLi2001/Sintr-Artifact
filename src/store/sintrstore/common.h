@@ -419,7 +419,7 @@ std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timesta
 void removeTsfromTx(proto::Transaction *txn);
 
 // general query id
-std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts);
+std::string QueryGenId(const std::string &query_cmd, const Timestamp &query_ts, const std::string &hashed_ts, bool hashDigest);
 
 std::string QueryDigest(const proto::Query &query, bool queryHashDigest);
 std::string QueryRetryId(const std::string &queryId, const uint64_t &retry_version, bool queryHashDigest);
@@ -883,6 +883,7 @@ typedef struct SintrParameters {
   const bool optimisticReceiveEndorsement; // receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)
   const bool ignorePolicyUpdate; // ignore policy updates during a transaction
   const bool clientEstimatePolicy; // client estimates policy at start of transaction
+  const bool hashQueryGenId; // hash query general id
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -891,7 +892,7 @@ typedef struct SintrParameters {
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
-    bool clientEstimatePolicy) :
+    bool clientEstimatePolicy, bool hashQueryGenId) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -918,7 +919,8 @@ typedef struct SintrParameters {
     policyCCC(policyCCC),
     optimisticReceiveEndorsement(optimisticReceiveEndorsement),
     ignorePolicyUpdate(ignorePolicyUpdate),
-    clientEstimatePolicy(clientEstimatePolicy) {
+    clientEstimatePolicy(clientEstimatePolicy),
+    hashQueryGenId(hashQueryGenId) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message

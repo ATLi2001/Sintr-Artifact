@@ -483,6 +483,8 @@ DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction d
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
 DEFINE_bool(sintr_server_skip_endorsement_check, false, "server skip endorsement check completely");
 DEFINE_bool(sintr_policy_CCC, true, "perform CCC for policies");
+DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
+
 
 /**
  * Experiment settings.
@@ -852,7 +854,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_hash_endorsements, false, false, true,
         FLAGS_sintr_hide_timestamps, 1,
         FLAGS_sintr_server_skip_endorsement_check,
-        FLAGS_sintr_policy_CCC, false, false, true
+        FLAGS_sintr_policy_CCC, false, false, true,
+        FLAGS_sintr_hash_query_gen_id
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
