@@ -265,11 +265,11 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
     PolicyClient *policyClient) {
 
   if (params.sintr_params.clientEstimatePolicy) {
-    UW_ASSERT(protoTxnState.IsInitialized() && policyClient != nullptr);
+    UW_ASSERT(policyClient != nullptr);
   }
   else {
     // no estimate, so no need to send any begin validate messages
-    UW_ASSERT(!protoTxnState.IsInitialized() && policyClient == nullptr);
+    UW_ASSERT(policyClient == nullptr);
     // still some bookkeeping to do
     ResetTrackingState();
     this->client_seq_num = client_seq_num;

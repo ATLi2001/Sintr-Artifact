@@ -233,7 +233,7 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     txn.mutable_timestamp()->set_timestamp(txnStartTime);
     txn.mutable_timestamp()->set_id(client_id);
 
-    if (IsPolicyChangeTxn(protoTxnState)) {
+    if (params.sintr_params.clientEstimatePolicy && IsPolicyChangeTxn(protoTxnState)) {
       Debug("Begin policy change transaction from client id %lu, seq num %lu", client_id, client_seq_num);
       txn.set_policy_type(proto::Transaction::POLICY_ID_POLICY);
     }

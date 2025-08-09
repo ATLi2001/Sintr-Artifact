@@ -201,6 +201,10 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_optimistic_receive_endorsement=%s' % str(config['sintr_protocol_settings']['sintr_optimistic_receive_endorsement']).lower()
             if 'sintr_client_ignore_policy_update' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_client_ignore_policy_update=%s' % str(config['sintr_protocol_settings']['sintr_client_ignore_policy_update']).lower()
+            if 'sintr_client_estimate_policy' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_estimate_policy=%s' % str(config['sintr_protocol_settings']['sintr_client_estimate_policy']).lower()
+            if 'sintr_hash_query_gen_id' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ##Sync protocol settings
@@ -619,6 +623,9 @@ class IndicusCodebase(ExperimentCodebase):
                 replica_command += ' --sintr_server_skip_endorsement_check=%s' % str(config['sintr_protocol_settings']['sintr_server_skip_endorsement_check']).lower()
             if 'sintr_policy_CCC' in config['sintr_protocol_settings']:
                 replica_command += ' --sintr_policy_CCC=%s' % str(config['sintr_protocol_settings']['sintr_policy_CCC']).lower()
+            if 'sintr_hash_query_gen_id' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
+
 
         #if 'rw_or_retwis' in config:
         #    replica_command += ' --rw_or_retwis=%s' % str(config['rw_or_retwis']).lower()
