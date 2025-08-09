@@ -1578,12 +1578,24 @@ void Server::ProcessSuppliedTxn(const std::string &txn_id, proto::TxnInfo &txn_i
         }
 
         //Check whether txn matches requested tx-id
-        std::string tempDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
+        std::string tempOldDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
+        std::string tempDigest;
+        bool txnIdMatch;
         if(params.sintr_params.hashEndorsements) {
-            tempDigest = EndorsedTxnDigest(tempDigest, *txn, params.hashDigest);
+            tempDigest = EndorsedTxnDigest(tempOldDigest, *txn, params.hashDigest);
+            txnIdMatch = (txn_id == tempDigest);
         }
-        if(txn_id != tempDigest){
-            Debug("Tx-id: [%s], TxDigest: [%s]", BytesToHex(txn_id, 16).c_str(), BytesToHex(tempDigest, 16).c_str());
+        else {
+            // avoid copying tempOldDigest into tempDigest
+            txnIdMatch = (txn_id == tempOldDigest);
+        }
+
+        if(!txnIdMatch){
+            Debug(
+                "Tx-id: [%s], TxDigest: [%s]",
+                BytesToHex(txn_id, 16).c_str(),
+                params.sintr_params.hashEndorsements ? BytesToHex(tempDigest, 16).c_str() : BytesToHex(tempOldDigest, 16).c_str()
+            );
             Panic("Supplied Wrong Txn for given tx-id");
             if(params.signClientProposals) delete txn;
             delete p1;
@@ -1597,13 +1609,13 @@ void Server::ProcessSuppliedTxn(const std::string &txn_id, proto::TxnInfo &txn_i
             // If optimistic ID maps to 2 txn-ids --> report issuing client (do this when you receive the tx already); vice versa, if we notice 2 optimistic ID's map to same tx --> report! 
             // (Can early abort query to not waste exec since sync might fail- or optimistically execute and hope for best) --> won't happen in simulation (unless testing failures)
     
-        auto f = [this, p1, txn, txn_dig = txn_id]() mutable {
+        auto f = [this, p1, txn, txn_dig = txn_id, tempOldDigest]() mutable {
             //if(params.signClientProposals) *txn->mutable_txndigest() = txn_dig; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
             *txn->mutable_txndigest() = txn_dig; //Hack to have access to txnDigest inside TXN later (used for abstain conflict, and for FindTableVersion)
 
             Debug("[CPU:%d] ProcessProposal via Sync. Txn: %s", sched_getcpu(), BytesToHex(txn_dig, 16).c_str());
             const TCPTransportAddress *dummy_remote = new TCPTransportAddress(sockaddr_in()); //must allocate because ProcessProposal binds ref...
-            ProcessProposal(*p1, *dummy_remote, txn, txn_dig, true, true); //Set gossip to true ==> No reply; set forceMaterialize to true   (Shouldn't be necessary anymore with the RegisterForce logic)                    
+            ProcessProposal(*p1, *dummy_remote, txn, txn_dig, tempOldDigest, true, true); //Set gossip to true ==> No reply; set forceMaterialize to true   (Shouldn't be necessary anymore with the RegisterForce logic)
             if((!params.mainThreadDispatching || (params.dispatchMessageReceive && !params.parallel_CCC)) && (!params.multiThreading || !params.signClientProposals)){
                 delete p1; //I.e. if receiveMessage would not be allocating (See ManageDispatchP1)
                 delete dummy_remote;

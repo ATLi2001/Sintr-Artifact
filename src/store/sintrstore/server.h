@@ -803,10 +803,10 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       bool VerifyClientProposal(proto::Phase1 &msg, const proto::Transaction *txn, std::string &txnDigest);
       bool VerifyClientProposal(proto::Phase1FB &msg, const proto::Transaction *txn, std::string &txnDigest);
   void* TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::Transaction *txn,
-                        std::string &txnDigest, bool isGossip = false, bool forceMaterialize = false);
+                        std::string &txnDigest, std::string &oldTxnDigest, bool isGossip = false, bool forceMaterialize = false);
                         //,const proto::CommittedProof *committedProof,const proto::Transaction *abstain_conflict,proto::ConcurrencyControl::Result &result);
   void ProcessProposal(proto::Phase1 &msg, const TransportAddress &remote, proto::Transaction *txn,
-                        std::string &txnDigest, bool isGossip = false, bool forceMaterialize = false); //,const proto::CommittedProof *committedProof,const proto::Transaction *abstain_conflict,proto::ConcurrencyControl::Result &result);
+                        std::string &txnDigest, std::string &oldTxnDigest, bool isGossip = false, bool forceMaterialize = false); //,const proto::CommittedProof *committedProof,const proto::Transaction *abstain_conflict,proto::ConcurrencyControl::Result &result);
 
   void CheckTxLocalPresence(const std::string &txn_id, proto::ConcurrencyControl::Result &res);
   void CheckDepLocalPresence(const proto::Transaction &txn, const DepSet &depSet, proto::ConcurrencyControl::Result &res);

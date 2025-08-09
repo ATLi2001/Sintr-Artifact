@@ -142,12 +142,14 @@ void Server::wakeSubscribedTx(const std::string query_id, const uint64_t &retry_
         if(!params.query_params.parallel_queries || !params.mainThreadDispatching){
           //If !parallel_queries.  ==> both Query and P1 follow the same dispatch rules (either both on network or both on main)
           //if parallel_queries && !mainThreadDispatching  => parallel_queries has no effect. Thus both Query and P1 follow same dispatch rules (depends on dispatchMessageReceive)
-          TryPrepare(waiting_meta->reqId, *waiting_meta->remote, waiting_meta->txn, txnDigest, waiting_meta->isGossip); //Includes call to HandlePhase1CB(..); 
+          std::string tempOldDigest;
+          TryPrepare(waiting_meta->reqId, *waiting_meta->remote, waiting_meta->txn, txnDigest, tempOldDigest, waiting_meta->isGossip); //Includes call to HandlePhase1CB(..); 
           delete waiting_meta;
         }
         else{ //params.mainThreadDispatching = true && parallel_queries == true ==> Query is on worker; but P1 should be on main (//TODO: Does it really need to be?)
            auto f = [this, waiting_meta, txnDigest]() mutable {
-              TryPrepare(waiting_meta->reqId, *waiting_meta->remote, waiting_meta->txn, txnDigest, waiting_meta->isGossip); //Includes call to HandlePhase1CB(..); 
+              std::string tempOldDigest;
+              TryPrepare(waiting_meta->reqId, *waiting_meta->remote, waiting_meta->txn, txnDigest, tempOldDigest, waiting_meta->isGossip); //Includes call to HandlePhase1CB(..); 
               delete waiting_meta;
               return (void*) true;
            };
@@ -1070,48 +1072,58 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
     // auto duration = end - start;
     // ccc_us.add(duration);
 
-    call_prepare = new std::function([this, txnDigest, &txn, &readSet, implicitPolicyReads]() {
-      Debug("Prepare called for txn %s", BytesToHex(txnDigest, 16).c_str());
+    if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
       //6) Prepare Transaction: No conflicts, No dependencies aborted --> Make writes visible.
       Prepare(txnDigest, txn, readSet, *implicitPolicyReads);
       delete implicitPolicyReads;
-    });
-
-    if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
-      (*call_prepare)();
-      delete call_prepare;
     }
     else {
       // don't know result of endorsement check yet, so must delay making stuff visible
+      call_prepare = new std::function([this, txnDigest, &txn, &readSet, implicitPolicyReads]() {
+        Debug("Prepare called for txn %s", BytesToHex(txnDigest, 16).c_str());
+        //6) Prepare Transaction: No conflicts, No dependencies aborted --> Make writes visible.
+        Prepare(txnDigest, txn, readSet, *implicitPolicyReads);
+        delete implicitPolicyReads;
+      });
     }
   }
-
-  std::function<proto::ConcurrencyControl::Result(void)> *call_dependencies_check = new std::function(
-    [this, txnDigest, &txn, &remote, reqId, fallback_flow, isGossip]() {
-      //7) Check whether all outstanding dependencies have committed
-        // If not, wait.
-      bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
-
-      if (!allFinished) {
-        stats.Increment("cc_waits", 1);
-        return proto::ConcurrencyControl::WAIT;
-      } else {
-        //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
-        Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
-        return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
-        //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
-        //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
-      }
-    }
-  );
   
   // if fallback, then there is no parallel endorsement check so call right away
   if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck || fallback_flow) {
-    proto::ConcurrencyControl::Result res = (*call_dependencies_check)();
-    delete call_dependencies_check;
-    return res;
+    //7) Check whether all outstanding dependencies have committed
+    // If not, wait.
+    bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
+
+    if (!allFinished) {
+      stats.Increment("cc_waits", 1);
+      return proto::ConcurrencyControl::WAIT;
+    } else {
+      //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
+      Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
+      return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
+      //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
+      //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+    }
   }
   else {
+    std::function<proto::ConcurrencyControl::Result(void)> *call_dependencies_check = new std::function(
+      [this, txnDigest, &txn, &remote, reqId, fallback_flow, isGossip]() {
+        //7) Check whether all outstanding dependencies have committed
+          // If not, wait.
+        bool allFinished = ManageDependencies(txnDigest, txn, remote, reqId, fallback_flow, isGossip);
+
+        if (!allFinished) {
+          stats.Increment("cc_waits", 1);
+          return proto::ConcurrencyControl::WAIT;
+        } else {
+          //8) Check whether all dependencies are committed (i.e. none abort), and whether TS still valid
+          Debug("check dependencies: %s", BytesToHex(txnDigest, 16).c_str());
+          return CheckDependencies(txn); //abort checks are redundant with new abort check in 5)
+          //TODO: Current Implementation iterates through dependencies 3 times -- re-factor code to do this once.
+          //Move check 5) up and outside the if/else case for whether prepared exists: if !params.verifyDeps, then CheckDependencies is mostly obsolete.
+        }
+      }
+    );
     UW_ASSERT(delay_prepare_cb != nullptr);
     Debug("Delaying prepare for txn %s", BytesToHex(txnDigest, 16).c_str());
     *delay_prepare_cb = new std::function<proto::ConcurrencyControl::Result(void)>(

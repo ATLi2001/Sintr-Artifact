@@ -1520,7 +1520,8 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
      txn = msg.mutable_txn();
   }
   
-  std::string txnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps); //could parallelize it too hypothetically
+  std::string txnDigest;
+  std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps); //could parallelize it too hypothetically
   //Notice("Txn:[%d:%d] has digest: %s", txn->client_id(), txn->client_seq_num(), BytesToHex(txnDigest, 16).c_str());
 
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
@@ -1532,16 +1533,19 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 
     // TODO: can get rid of phase1 message endorsements bc endorsements come with txn now
     // Right now we just check if the txn digest computed from both is the same
-    std::string newTxnDigest = EndorsedTxnDigest(txnDigest, *txn, params.hashDigest);
-    Debug("OLD TXN DIGEST: %s", BytesToHex(txnDigest, 16).c_str());
-    Debug("NEW TXN DIGEST:  %s", BytesToHex(newTxnDigest, 16).c_str());
-    txnDigest = newTxnDigest;
+    txnDigest = EndorsedTxnDigest(oldTxnDigest, *txn, params.hashDigest);
+    Debug("OLD TXN DIGEST: %s", BytesToHex(oldTxnDigest, 16).c_str());
+    Debug("NEW TXN DIGEST:  %s", BytesToHex(txnDigest, 16).c_str());
 
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
     // auto duration = end - start;
     // new_digest_us.add(duration);
+  }
+  else {
+    // avoid copying oldTxnDigest into txnDigest
+    txnDigest = std::move(oldTxnDigest);
   }
   Debug("Received Phase1 message for txn id: %s", BytesToHex(txnDigest, 16).c_str());
   *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict, and for FindTableVersion)
@@ -1646,7 +1650,13 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
     // Verification calls DispatchTP_main (ProcessProposal.) -- Re-cecheck hasP1 (if used multithread branch)
     
     Debug("P1 message for txn[%s] received is of type Normal, no P1 result exist. Calling ProcessProposal", BytesToHex(txnDigest, 16).c_str());
-    ProcessProposal(msg, remote, txn, txnDigest, isGossip); //committedProof, abstain_conflict, result);
+    if (params.sintr_params.hashEndorsements) {
+      ProcessProposal(msg, remote, txn, txnDigest, oldTxnDigest, isGossip); //committedProof, abstain_conflict, result);
+    }
+    else {
+      // oldTxnDigest is same as txnDigest but it has been moved out of
+      ProcessProposal(msg, remote, txn, txnDigest, txnDigest, isGossip);
+    }
   }
   else{ //If we already have result: Send it and free msg/delete txn --- only send result if it is of type != Wait/Ignore (i.e. only send Commit, Abstain, Abort)
       if(result != proto::ConcurrencyControl::WAIT && result != proto::ConcurrencyControl::IGNORE){
