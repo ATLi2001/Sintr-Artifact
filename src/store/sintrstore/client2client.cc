@@ -335,14 +335,25 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   beginValSent.insert(client_id);
 
   sentBeginValTxnMsg.Clear();
-  sentBeginValTxnMsg.set_client_id(client_id);
-  sentBeginValTxnMsg.set_client_seq_num(client_seq_num);
-  *sentBeginValTxnMsg.mutable_txn_state() = protoTxnState;
+  proto::BeginValidateTxn beginValTxn;
+  beginValTxn.set_client_id(client_id);
+  beginValTxn.set_client_seq_num(client_seq_num);
+  *beginValTxn.mutable_txn_state() = protoTxnState;
   if(params.sintr_params.hideTimestamps) {
-    sentBeginValTxnMsg.set_hashed_ts(TimestampDigest(client_id, txnStartTime));
+    beginValTxn.set_hashed_ts(TimestampDigest(client_id, txnStartTime));
   } else {
-    sentBeginValTxnMsg.mutable_timestamp()->set_timestamp(txnStartTime);
-    sentBeginValTxnMsg.mutable_timestamp()->set_id(client_id);
+    beginValTxn.mutable_timestamp()->set_timestamp(txnStartTime);
+    beginValTxn.mutable_timestamp()->set_id(client_id);
+  }
+
+  if (params.sintr_params.signFwdReadResults) {
+    CreateHMACedMessage(
+      beginValTxn,
+      *sentBeginValTxnMsg.mutable_signed_begin_validate_txn()
+    );
+  }
+  else {
+    *sentBeginValTxnMsg.mutable_begin_validate_txn() = std::move(beginValTxn);
   }
 
   Debug("beginValTxnMsg client id %lu, seq num %lu", client_id, client_seq_num);
@@ -1092,16 +1103,35 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   //   std::cerr << "Mean validation time: " << validation_time_us.mean() << std::endl;
   // }
 
-  uint64_t curr_client_id = beginValTxnMsg.client_id();
-  uint64_t curr_client_seq_num = beginValTxnMsg.client_seq_num();
-  TxnState txnState = beginValTxnMsg.txn_state();
+  proto::BeginValidateTxn beginValTxn;
+  if (params.sintr_params.signFwdReadResults) {
+    if (!beginValTxnMsg.has_signed_begin_validate_txn()) {
+      Debug("Missing client signature on begin validate txn message");
+      return;
+    }
+
+    std::string data;
+    if (!ValidateHMACedMessage(beginValTxnMsg.signed_begin_validate_txn(), data)) {
+      Debug("Invalid client signature on begin validate txn message");
+      return;
+    }
+
+    beginValTxn.ParseFromString(data);
+  }
+  else {
+    beginValTxn = beginValTxnMsg.begin_validate_txn();
+  }
+
+  uint64_t curr_client_id = beginValTxn.client_id();
+  uint64_t curr_client_seq_num = beginValTxn.client_seq_num();
+  TxnState txnState = beginValTxn.txn_state();
   Timestamp ts;
   std::string hashed_ts = "";
   if(params.sintr_params.hideTimestamps) {
-    hashed_ts = beginValTxnMsg.hashed_ts();
+    hashed_ts = beginValTxn.hashed_ts();
     Debug("hashed TS validation: %s", BytesToHex(hashed_ts, 16).c_str());
   } else {
-    ts = beginValTxnMsg.timestamp();
+    ts = beginValTxn.timestamp();
   }
   Debug(
     "HandleBeginValidateTxnMessage: from client id %lu, seq num %lu", 

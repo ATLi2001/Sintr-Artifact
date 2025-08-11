@@ -481,13 +481,20 @@ message SendView {
 
 // Sintr specific messages
 
-message BeginValidateTxnMessage {
+message BeginValidateTxn {
   required uint64 client_id = 1;
   required uint64 client_seq_num = 2;
   required TxnState txn_state = 3;
   oneof validation_ts_oneof {
     TimestampMessage timestamp = 4;
     bytes hashed_ts = 5;
+  }
+}
+
+message BeginValidateTxnMessage {
+  oneof begin_one_of {
+    BeginValidateTxn begin_validate_txn = 1;
+    SignedMessage signed_begin_validate_txn = 2;
   }
 }
 
