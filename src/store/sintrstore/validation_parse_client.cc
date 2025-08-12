@@ -38,8 +38,9 @@
 #include "store/benchmark/async/rw-sync/rw-validation-proto.pb.h"
 #include "store/benchmark/async/rw-sync/validation/rw-val_transaction.h"
 #include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
-#include "store/benchmark/async/rw-sql/rw-sql_base_transaction.h"
+#include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
+#include "store/benchmark/async/rw-sql/validation/rw-sql_val_policy_change.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_common.h"
 #include "store/benchmark/async/sql/tpcc/validation/delivery.h"
 #include "store/benchmark/async/sql/tpcc/validation/new_order.h"
@@ -162,10 +163,23 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());
     }
-  } else if (txn_bench == ::rwsql::BENCHMARK_NAME) {
-    ::rwsql::validation::proto::RWSql valTxnData;
-    UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
-    return new ::rwsql::RWSQLValTransaction(timeout, rand, valTxnData);
+  }
+  else if (txn_bench == ::rwsql::BENCHMARK_NAME) {
+    ::rwsql::RWSQLTransactionType rwsql_txn_type = ::rwsql::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (rwsql_txn_type) {
+      case ::rwsql::RW_SQL_TRANSACTION: {
+        ::rwsql::validation::proto::RWSql valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::rwsql::RWSQLValTransaction(timeout, rand, valTxnData);
+      }
+      case ::rwsql::RW_SQL_POLICY_CHANGE: {
+        ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::rwsql::RWSQLValPolicyChange(timeout, valTxnData);
+      }
+      default:
+        Panic("Received unexpected txn type: %s", txn_type.c_str());
+    }
   }
   else {
     Panic("Received unexpected txn benchmark: %s", txn_bench.c_str());

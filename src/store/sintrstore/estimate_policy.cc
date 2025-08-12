@@ -31,7 +31,7 @@
 #include "store/benchmark/async/tpcc/validation/payment.h"
 #include "store/benchmark/async/tpcc/tpcc-validation-proto.pb.h"
 #include "store/benchmark/async/tpcc/tpcc_common.h"
-#include "store/benchmark/async/rw-sql/rw-sql_base_transaction.h"
+#include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
 #include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
 #include "store/benchmark/async/rw-sync/rw-base_transaction.h"
@@ -166,14 +166,31 @@ namespace sintrstore {
         }
       }
     } else if (txn_bench == ::rwsql::BENCHMARK_NAME) {
-      ::rwsql::validation::proto::RWSql valTxnData;
-      UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
-      if (!valTxnData.read_only()) {
-        // txn will have writes
-        const Policy *temp_policy;
-        UW_ASSERT(endorseClient->GetPolicyFromCache("p0", temp_policy));
-        policyClient->AddPolicy(temp_policy);
+      ::rwsql::RWSQLTransactionType rwsql_txn_type = ::rwsql::GetBenchmarkTxnTypeEnum(txn_type);
+
+      switch (rwsql_txn_type) {
+        case ::rwsql::RW_SQL_TRANSACTION: {
+          ::rwsql::validation::proto::RWSql valTxnData;
+          UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+          if (!valTxnData.read_only()) {
+            // txn will have writes
+            const Policy *temp_policy;
+            UW_ASSERT(endorseClient->GetPolicyFromCache("p0", temp_policy));
+            policyClient->AddPolicy(temp_policy);
+          }
+          break;
+        }
+        case ::rwsql::RW_SQL_POLICY_CHANGE: {
+          ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
+          UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+          const Policy *temp_policy;
+          UW_ASSERT(endorseClient->GetPolicyFromCache("p0", temp_policy));
+          policyClient->AddPolicy(temp_policy);
+          break;
+        }
       }
+
+      
     }
     else {
       // return default policy ID (policy ID 0)

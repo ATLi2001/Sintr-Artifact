@@ -1,10 +1,10 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
 
-SRCS += $(addprefix $(d), rw-sql_base_transaction.cc)
+SRCS += $(addprefix $(d), rw-sql_base_transaction.cc rw-sql_base_policy_change.cc)
 
 PROTOS += $(addprefix $(d), rw-sql-validation-proto.proto)
 
-OBJ-rw-sql-base-transaction := $(LIB-store-frontend) $(o)rw-sql_base_transaction.o
+OBJ-rw-sql-base-transaction := $(LIB-store-frontend) $(o)rw-sql_base_transaction.o $(o)rw-sql_base_policy_change.o
 
 LIB-rw-sql-base := $(OBJ-rw-sql-base-transaction) $(o)rw-sql-validation-proto.o
 

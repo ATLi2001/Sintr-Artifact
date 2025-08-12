@@ -24,6 +24,8 @@
  * SOFTWARE.
  *
  **********************************************************************/
+
+#include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/benchmark/async/rw-sql/sync/rw-sql_transaction.h"
 #include <fmt/core.h>
 #include "store/common/query_result/query_result.h"
@@ -116,6 +118,7 @@ void RWSQLTransaction::SerializeTxnState(std::string &txnState) {
   std::string txn_name;
   txn_name.append(BENCHMARK_NAME);
   txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(RW_SQL_TRANSACTION));
   currTxnState.set_txn_name(txn_name);
 
   validation::proto::RWSql curr_txn;

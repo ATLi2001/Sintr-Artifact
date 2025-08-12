@@ -21,3 +21,8 @@ message RWSql {
   repeated int32 ends = 11;
   repeated SecondaryPair secondary_values = 12;
 }
+
+message RWSqlPolicyChange {
+  required uint64 table = 1;
+  required uint32 policy_weight = 2;
+}
