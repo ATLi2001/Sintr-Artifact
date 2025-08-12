@@ -58,6 +58,9 @@ class RWSQLBaseTransaction {
     return keyIdxs;
   }
  protected:
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys);
+  void SerializeTxnState(std::string &txnState);
+
   std::string GenerateStatement(const std::string &table_name, int &left_bound, int &right_bound);
   void SubmitStatement(SyncClient &client, uint32_t timeout, std::string &statement, const int &i);
   void GetResults(SyncClient &client, uint32_t timeout);

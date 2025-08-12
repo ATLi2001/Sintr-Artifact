@@ -27,13 +27,9 @@
 #ifndef RW_SQL_VAL_TRANSACTION_H
 #define RW_SQL_VAL_TRANSACTION_H
 
-#include "store/common/frontend/client.h"
-#include "store/benchmark/async/common/key_selector.h"
-#include "store/common/frontend/validation_transaction.h"
-
-#include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
 #include "store/common/frontend/sync_client.h"
-#include "store/common/frontend/sync_transaction.h"
+#include "store/common/frontend/validation_transaction.h"
+#include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
 #include "store/benchmark/async/rw-sql/rw-sql_base_transaction.h"
 
 #include <vector>

@@ -24,11 +24,9 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
-#include <fmt/core.h>
-#include "store/common/query_result/query_result.h"
 
-#include <functional>
+#include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
+
 
 namespace rwsql {
 
@@ -61,59 +59,8 @@ transaction_status_t RWSQLValTransaction::Validate(SyncClient &client) {
   
   //reset Tx exec state. When avoiding redundant queries we may split into new queries. liveOps keeps track of total number of attempted queries
   statements.clear();
-
-  Debug("Start next Transaction");
-
-  client.Begin(timeout);
-
-  //Execute #liveOps queries
-  for(int i=0; i < liveOps; ++i){
-    Debug("LiveOp: %d",i);
-    Debug("starts size: %d",starts.size());
-    //UW_ASSERT(liveOps <= (querySelector->numKeys)); //there should never be more ops than keys; those should've been cancelled. FIXME: new splits might only be cancelled later.
-
-    string table_name = "t" + std::to_string(tables[i]);
-    int left_bound = starts[i]; 
-    int right_bound = ends[i];
-    UW_ASSERT(left_bound < numKeys && right_bound < numKeys);
-    UW_ASSERT(left_bound >= 0 && left_bound < numKeys && right_bound >= 0 && right_bound < numKeys);
-
-    auto &secondary_val = secondary_values[i];
-
-    if(scanAsPoint){
-      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val);
-    }
-    else{
-      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val);
-    }
-    //TODO: Re-factor into Submit/Get logic so its naturally parallelizable between queries?
-
-    //std::string statement = GenerateStatement(table_name, left_bound, right_bound);
-    // statements.push_back(GenerateStatement(table_name, left_bound, right_bound));  
-    // std::string &statement = statements.back();
-
-    // Debug("Start new RW-SQL Request: %s", statement);
-
-    // SubmitStatement(client, statement, i);
-    //Note: Updates will not conflict on TableVersion -- Because we are not changing primary key, which is the search condition.  
-  }
-
-  //GetResults(client);
-
   
-  transaction_status_t commitRes = client.Commit(timeout);
-
-  Debug("TXN COMMIT STATUS: %d",commitRes);
-
-  // if(count++ == 2){
-  //    Panic("stop after two"); //Expectation: First TX writes something. Second Transaction will need to do sync protocol.
-
-  // }
-   // Panic("stop after one");
-
- 
-  //usleep(1000); //sleep to simulate sequential access.
-  return commitRes;
+  return RWSQLBaseTransaction::BaseExecute(client, timeout, false, liveOps, numKeys);
 }
 
-} // namespace rw
+} // namespace rwsql

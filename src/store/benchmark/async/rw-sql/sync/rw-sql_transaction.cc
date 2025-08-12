@@ -25,11 +25,8 @@
  *
  **********************************************************************/
 
-#include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/benchmark/async/rw-sql/sync/rw-sql_transaction.h"
-#include <fmt/core.h>
-#include "store/common/query_result/query_result.h"
-#include <functional>
+
 
 namespace rwsql {
 
@@ -55,98 +52,7 @@ transaction_status_t RWSQLTransaction::Execute(SyncClient &client) {
     secondary_values.push_back(GenerateSecondaryCondition());
   }
 
-  Debug("Start next Transaction");
-
-  std::string txnState;
-  SerializeTxnState(txnState);
-
-  client.Begin(timeout, txnState);
-
-  //Execute #liveOps queries
-  for(int i=0; i < liveOps; ++i){
-    Debug("LiveOp: %d",i);
-    Debug("starts size: %d",starts.size());
-    //UW_ASSERT(liveOps <= (querySelector->numKeys)); //there should never be more ops than keys; those should've been cancelled. FIXME: new splits might only be cancelled later.
-
-    string table_name = "t" + std::to_string(tables[i]);
-    int left_bound = starts[i]; 
-    int right_bound = ends[i];
-    UW_ASSERT(left_bound < querySelector->numKeys && right_bound < querySelector->numKeys);
-
-    UW_ASSERT(left_bound >= 0 && left_bound < querySelector->numKeys && right_bound >= 0 && right_bound < querySelector->numKeys);
-
-    auto &secondary_val = secondary_values[i];
-
-    if(scanAsPoint){
-      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val);
-    }
-    else{
-      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val);
-    }
-    //TODO: Re-factor into Submit/Get logic so its naturally parallelizable between queries?
-
-    //std::string statement = GenerateStatement(table_name, left_bound, right_bound);
-    // statements.push_back(GenerateStatement(table_name, left_bound, right_bound));  
-    // std::string &statement = statements.back();
-
-    // Debug("Start new RW-SQL Request: %s", statement);
-
-    // SubmitStatement(client, statement, i);
-    //Note: Updates will not conflict on TableVersion -- Because we are not changing primary key, which is the search condition.  
-  }
-
-  //GetResults(client);
-
-  
-  transaction_status_t commitRes = client.Commit(timeout);
-
-  Debug("TXN COMMIT STATUS: %d",commitRes);
-
-  // if(count++ == 2){
-  //    Panic("stop after two"); //Expectation: First TX writes something. Second Transaction will need to do sync protocol.
-
-  // }
-   // Panic("stop after one");
-
- 
-  //usleep(1000); //sleep to simulate sequential access.
-  return commitRes;
+  return RWSQLBaseTransaction::BaseExecute(client, timeout, true, liveOps, (int) querySelector->numKeys);
 }
 
-void RWSQLTransaction::SerializeTxnState(std::string &txnState) {
-  TxnState currTxnState;
-  std::string txn_name;
-  txn_name.append(BENCHMARK_NAME);
-  txn_name.push_back('_');
-  txn_name.append(GetBenchmarkTxnTypeName(RW_SQL_TRANSACTION));
-  currTxnState.set_txn_name(txn_name);
-
-  validation::proto::RWSql curr_txn;
-  curr_txn.set_num_ops(static_cast<uint64_t>(numOps));
-  curr_txn.set_read_only(readOnly);
-  curr_txn.set_read_secondary_condition(readSecondaryCondition);
-  curr_txn.set_value_size(value_size);
-  curr_txn.set_value_categories(value_categories);
-  curr_txn.set_scan_as_point(scanAsPoint);
-  curr_txn.set_exec_point_scan_parallel(execPointScanParallel);
-  curr_txn.set_num_keys(numKeys);
-  for (const uint64_t &i : tables) {
-    curr_txn.add_tables(i);
-  }
-  for (const int32_t &i : starts) {
-    curr_txn.add_starts(i);
-  }
-  for (const int32_t &i : ends) {
-    curr_txn.add_ends(i);
-  }
-  for(const std::pair<uint64_t, std::string> &i : secondary_values) {
-    validation::proto::SecondaryPair* pair = curr_txn.add_secondary_values();
-    pair->set_first(i.first);
-    pair->set_second(i.second);
-  }
-
-  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
-  currTxnState.SerializeToString(&txnState);
-}
-
-} // namespace rw
+} // namespace rwsql
