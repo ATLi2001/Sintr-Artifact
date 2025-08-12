@@ -40,8 +40,6 @@ class SyncSQLPayment : public SyncTPCCSQLTransaction, public SQLPayment {
       uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen);
   virtual ~SyncSQLPayment();
   virtual transaction_status_t Execute(SyncClient &client);
-  virtual std::vector<TPCC_Table> HeuristicFunction() override;
-  virtual void SerializeTxnState(std::string &txnState) override;
 };
 
 class SyncSQLPaymentSequential : public SyncTPCCSQLTransaction, public SQLPaymentSequential {

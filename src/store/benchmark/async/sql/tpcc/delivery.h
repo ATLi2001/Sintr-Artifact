@@ -32,13 +32,17 @@
 
 namespace tpcc_sql {
 
+static bool use_earliest_new_order_table = true; //Use this if backend executor is too stupid to execute MIN without doing a scan...
+
 class SQLDelivery : public TPCCSQLTransaction {
  public:
   SQLDelivery(uint32_t w_id, uint32_t d_id,
       std::mt19937 &gen);
   SQLDelivery() {};
   virtual ~SQLDelivery();
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
+  std::vector<TPCC_Table> HeuristicFunction();
 
 protected:
   uint32_t w_id;

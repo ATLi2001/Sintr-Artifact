@@ -40,8 +40,6 @@ class SyncSQLNewOrder : public SyncTPCCSQLTransaction, public SQLNewOrder {
       uint32_t num_warehouses, std::mt19937 &gen);
   virtual ~SyncSQLNewOrder();
   virtual transaction_status_t Execute(SyncClient &client);
-  virtual std::vector<TPCC_Table> HeuristicFunction() override;
-  virtual void SerializeTxnState(std::string &txnState) override;
 };
 
 //TODO: Create a shared super class...

@@ -38,7 +38,9 @@ class SQLNewOrder : public TPCCSQLTransaction {
       uint32_t num_warehouses, std::mt19937 &gen);
   SQLNewOrder() {};
   virtual ~SQLNewOrder();
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
+  std::vector<TPCC_Table> HeuristicFunction();
 
  protected:
   uint32_t w_id;

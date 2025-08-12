@@ -32,12 +32,15 @@
 
 namespace tpcc_sql {
 
+static bool join_free_version = false;
+
 class SQLStockLevel : public TPCCSQLTransaction {
  public:
   SQLStockLevel(uint32_t w_id, uint32_t d_id,
       std::mt19937 &gen);
   virtual ~SQLStockLevel();
   SQLStockLevel() {};
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:

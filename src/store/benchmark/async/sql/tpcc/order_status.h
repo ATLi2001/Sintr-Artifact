@@ -38,6 +38,7 @@ class SQLOrderStatus : public TPCCSQLTransaction {
       uint32_t c_c_id, std::mt19937 &gen);
   SQLOrderStatus() {};
   virtual ~SQLOrderStatus();
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:

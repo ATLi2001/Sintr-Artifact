@@ -31,6 +31,7 @@
 #include "store/benchmark/async/sql/tpcc/tpcc_common.h"
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
 #include "store/common/common-proto.pb.h"
+#include "store/common/policy/policy-proto.pb.h"
 
 
 namespace tpcc_sql {
@@ -46,6 +47,32 @@ PolicyChange::PolicyChange(uint32_t w_id, uint32_t policy_weight) : w_id(w_id), 
 
 PolicyChange::~PolicyChange() {
 }
+
+transaction_status_t PolicyChange::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
+  Debug("POLICY_CHANGE");
+  Debug("Warehouse: %u", w_id);
+
+  std::string txnState;
+  if (serialize) {
+    PolicyChange::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
+
+  // distict table has policy id 1, change it to be policy of weight 1 or 3
+  PolicyObject policy;
+  policy.set_policy_type(PolicyObject::WEIGHT_POLICY);
+  WeightPolicyMessage weight_policy;
+  weight_policy.set_weight(randWeight);
+  weight_policy.SerializeToString(policy.mutable_policy_data());
+  
+  std::string policy_str;
+  policy.SerializeToString(&policy_str);
+  client.Put("p0", policy_str, timeout);
+
+  return client.Commit(timeout);
+}
+
 
 void PolicyChange::SerializeTxnState(std::string &txnState) {
   TxnState currTxnState;

@@ -33,8 +33,6 @@
 
 namespace tpcc_sql {
 
-static bool join_free_version = false;
-
 class ValidationSQLStockLevel : public ValidationTPCCSQLTransaction, public SQLStockLevel {
  public:
   ValidationSQLStockLevel(uint32_t timeout, const validation::proto::StockLevel &valStockLevelMsg);

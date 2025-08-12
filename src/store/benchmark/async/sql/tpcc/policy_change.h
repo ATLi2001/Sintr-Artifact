@@ -39,6 +39,7 @@ class PolicyChange : public TPCCSQLTransaction {
   PolicyChange() {};
   virtual ~PolicyChange();
 
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:

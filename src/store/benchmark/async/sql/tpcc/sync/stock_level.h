@@ -34,8 +34,6 @@
 
 namespace tpcc_sql {
 
-static bool join_free_version = false;
-
 class SyncSQLStockLevel : public SyncTPCCSQLTransaction, public SQLStockLevel {
  public:
  SyncSQLStockLevel(uint32_t timeout, uint32_t w_id, uint32_t d_id,
