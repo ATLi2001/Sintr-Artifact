@@ -97,16 +97,17 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
 
 
 def create_lat_tput_plots(df, output_dir, now_string):
-    plt.xlabel("Throughput (txn/s)")
-    plt.ylabel("Latency (ms)")
-    plt.grid(True)
+    fig, ax = plt.subplots(layout="constrained")
+    ax.set_xlabel("Throughput (txn/s)")
+    ax.set_ylabel("Latency (ms)")
+    ax.grid(True)
 
     for experiment_name, group in df.groupby(["experiment_name"]):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
         latency = client_groups["latency"].mean()
-        plt.plot(tput, latency, "-o", label=experiment_name[0])
-    plt.legend()
+        ax.plot(tput, latency, "-o", label=experiment_name[0])
+    fig.legend(loc="outside lower center", ncol=2)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
     plt.close()
 
