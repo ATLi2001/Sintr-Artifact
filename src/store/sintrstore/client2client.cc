@@ -703,7 +703,9 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
     delete group_sigs;
     // the signatures inside of group_sigs are moved in SendForwardQueryResultMessageHelper
 
-    if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+    // query_res_meta is a newly allocated object only if result is not from cache (addReadset=true)
+    // and cacheReadSet=false and mergeActiveAtClient=true
+    if (addReadset && !params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
       delete &query_res_meta;
     }
   }
