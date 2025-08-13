@@ -49,6 +49,8 @@ class Delivery : public TPCCTransaction {
   uint32_t d_id;
   uint32_t o_carrier_id;
   uint32_t ol_delivery_d;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 } // namespace tpcc

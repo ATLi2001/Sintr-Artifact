@@ -57,6 +57,8 @@ class Payment : public TPCCTransaction {
   uint32_t h_date;
   bool c_by_last_name;
   std::string c_last;
+  std::vector<Tables> HeuristicFunction();
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
 };
 
 } // namespace tpcc

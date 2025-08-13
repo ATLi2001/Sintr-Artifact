@@ -28,51 +28,14 @@
 namespace rwsync {
 
 RWValTransaction::RWValTransaction(uint32_t timeout, const std::vector<std::string> &keys, const validation::proto::RWSync &msg)
-    : ::ValidationTransaction(timeout), keys(keys) {
-  numOps = msg.num_ops();
-  readOnly = msg.read_only();
-  for (size_t i = 0; i < numOps; ++i) {
-    keyIdxs.push_back(msg.key_idxs(i));
-  }
+    : ::ValidationTransaction(timeout), RWBaseTransaction(msg, keys) {
 }
 
 RWValTransaction::~RWValTransaction() {
 }
 
 transaction_status_t RWValTransaction::Validate(::SyncClient &client) {
-  readValues.clear();
-
-  client.Begin(timeout);
-
-  for (size_t op = 0; op < GetNumOps(); op++) {
-    if (readOnly || op % 2 == 0) {
-      std::string str;
-      client.Get(GetKey(op), str, timeout);
-      readValues.insert(std::make_pair(GetKey(op), str));
-    }
-    else {
-      auto strValueItr = readValues.find(GetKey(op));
-      UW_ASSERT(strValueItr != readValues.end());
-      std::string strValue = strValueItr->second;
-      std::string writeValue;
-      if (strValue.length() == 0) {
-        writeValue = std::string(100, '\0'); //make a longer string
-      }
-      else {
-        uint64_t intValue = 0;
-        for (int i = 0; i < 100; ++i) {
-          intValue = intValue | (static_cast<uint64_t>(strValue[i]) << ((99 - i) * 8));
-        }
-        intValue++;
-        for (int i = 0; i < 100; ++i) {
-          writeValue += static_cast<char>((intValue >> (99 - i) * 8) & 0xFF);
-        }
-      }
-      client.Put(GetKey(op), writeValue, timeout);
-    }
-  }
-
-  return client.Commit(timeout);
+  return RWBaseTransaction::BaseExecute(client, timeout, false);
 }
 
 } // namespace rwsync

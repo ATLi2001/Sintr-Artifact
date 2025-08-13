@@ -53,6 +53,8 @@ class NewOrder : public TPCCTransaction {
   std::vector<uint8_t> o_ol_quantities;
   uint32_t o_entry_d;
   bool all_local;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 }

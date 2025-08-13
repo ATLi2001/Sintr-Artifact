@@ -47,23 +47,7 @@ ValidationPolicyChange::~ValidationPolicyChange() {
 }
 
 transaction_status_t ValidationPolicyChange::Validate(::SyncClient &client) {
-  Debug("POLICY_CHANGE");
-  Debug("Warehouse: %u", w_id);
-
-  client.Begin(timeout);
-
-  // distict table has policy id 1, change it to be policy of random weight
-  PolicyObject policy;
-  policy.set_policy_type(PolicyObject::WEIGHT_POLICY);
-  WeightPolicyMessage weight_policy;
-  weight_policy.set_weight(randWeight);
-  weight_policy.SerializeToString(policy.mutable_policy_data());
-  
-  std::string policy_str;
-  policy.SerializeToString(&policy_str);
-  client.Put("p0", policy_str, timeout);
-
-  return client.Commit(timeout);
+  return PolicyChange::BaseExecute(client, timeout, false);
 }
 
 } // namespace tpcc
