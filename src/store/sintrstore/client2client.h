@@ -208,6 +208,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::mutex mtx;
     uint64_t num_check_passed;
     uint64_t num_finished;
+    proto::ReadSet query_read_set;
+    std::string query_read_set_hash;
   };
 
   struct SentFwdResultState {

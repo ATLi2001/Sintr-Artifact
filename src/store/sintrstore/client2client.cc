@@ -1803,9 +1803,17 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
 
     for (const auto &[group, curr_query_sigs] : fwdQueryResultMsg.query_sigs()) {
       uint64_t total_sigs = curr_query_sigs.sig_msgs_size();
+      const proto::ReadSet &query_read_set = fwdQueryResult.query_res_meta().group_meta().at(group).query_read_set();
+      const std::string &query_read_set_hash = fwdQueryResult.query_res_meta().group_meta().at(group).read_set_hash();
+
+      if (params.sintr_params.parallelQuerySigsCheck) {
+        // first copy query read set and hash into async object
+        // so it doesn't have to be copied again for each thread
+        asyncQuerySigCheck->query_read_set = query_read_set;
+        asyncQuerySigCheck->query_read_set_hash = query_read_set_hash;
+      }
+
       for (const auto &query_sig : curr_query_sigs.sig_msgs()) {
-        const proto::ReadSet &query_read_set = fwdQueryResult.query_res_meta().group_meta().at(group).query_read_set();
-        const std::string &query_read_set_hash = fwdQueryResult.query_res_meta().group_meta().at(group).read_set_hash();
         if (!params.sintr_params.parallelQuerySigsCheck) {
           if (!CheckQuerySigHelper(query_sig, query_gen_id, query_result,
               query_read_set, query_read_set_hash)) {
@@ -1824,11 +1832,11 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
           auto f = [
             this, asyncQuerySigCheck, total_sigs,
             curr_client_id, curr_client_seq_num,
-            fwdQueryResult, addReadset=fwdQueryResult.add_readset(),
-            query_sig, query_gen_id, query_result,
-            query_read_set, query_read_set_hash
+            query_sig, query_gen_id, query_result
           ] {
-            bool is_valid = this->CheckQuerySigHelper(query_sig, query_gen_id, query_result, query_read_set, query_read_set_hash);
+            bool is_valid = this->CheckQuerySigHelper(query_sig, query_gen_id, query_result, 
+              asyncQuerySigCheck->query_read_set, asyncQuerySigCheck->query_read_set_hash);
+
             std::lock_guard<std::mutex> lock(asyncQuerySigCheck->mtx);
 
             Debug(
