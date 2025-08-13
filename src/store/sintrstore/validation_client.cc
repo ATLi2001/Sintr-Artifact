@@ -573,6 +573,22 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
   }
 
+  if (params.sintr_params.parallelQuerySigsCheck && a->second->numValidForwardQuery < a->second->numProcessedForwardQuery) {
+    // still need to wait for all forward queries to be validated
+    // call commit callback later
+    Debug(
+      "Validating for client id %lu seq num %lu commit received %lu of %lu parallel query sigs check",
+      txn_client_id,
+      txn_client_seq_num,
+      a->second->numValidForwardQuery,
+      a->second->numProcessedForwardQuery
+    );
+    a->second->commitWaitOnValidForwardQuery = true;
+    a->second->ccb = std::move(ccb);
+    a->second->ctcb = std::move(ctcb);
+    return;
+  }
+
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -870,6 +886,7 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
     this, &curr_query_gen_id, &curr_query_result, &fwdQueryResult, addReadset
   ](AllValidationTxnState *allValTxnState, const std::string &query_cmd, sql::QueryResultProtoWrapper *q_result, bool cache_result) {
     if (addReadset) {
+      ++allValTxnState->numProcessedForwardQuery;
       allValTxnState->queriesAddedToReadset.insert(curr_query_gen_id);
       AddQueryReadset(allValTxnState, fwdQueryResult);
     }
@@ -952,6 +969,24 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
   reqs->erase(reqs_itr);
   // free memory
   delete req;
+}
+
+void ValidationClient::NotifyForwardQueryResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
+  std::string curr_txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+  allValTxnStatesMap::accessor a;
+  if (!allValTxnStates.find(a, curr_txn_id)) {
+    Panic("cannot find transaction %s in allValTxnStates", curr_txn_id.c_str());
+  }
+  ++a->second->numValidForwardQuery;
+  Debug(
+    "numValidForwardQuery for client id %lu seq num %lu is now %lu",
+    txn_client_id, txn_client_seq_num, a->second->numValidForwardQuery
+  );
+  if (a->second->commitWaitOnValidForwardQuery && a->second->numValidForwardQuery == a->second->numProcessedForwardQuery) {
+    Debug("Unblocking commit for client id %lu seq num %lu", txn_client_id, txn_client_seq_num);
+    a->second->commitWaitOnValidForwardQuery = false;
+    a->second->ccb(COMMITTED);
+  }
 }
 
 void ValidationClient::ProcessBlindWrite(uint64_t txn_client_id, uint64_t txn_client_seq_num) {

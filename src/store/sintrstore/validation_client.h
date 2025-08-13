@@ -113,6 +113,8 @@ class ValidationClient : public ::Client {
     const proto::ForwardReadResult &fwdPointQueryResult, const proto::Dependency &dep, bool hasDep, bool addReadset);
   void ProcessForwardQueryResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
     const proto::ForwardQueryResult &fwdQueryResult, bool addReadset);
+  // for the parallel query sig check case, should be later notified of validity
+  void NotifyForwardQueryResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
   void ProcessBlindWrite(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
@@ -234,6 +236,12 @@ class ValidationClient : public ::Client {
     // queriesAddedToReadset should match seenQueries
     std::set<std::string> seenQueries;
     std::set<std::string> queriesAddedToReadset;
+
+    uint64_t numProcessedForwardQuery = 0;
+    uint64_t numValidForwardQuery = 0;
+    bool commitWaitOnValidForwardQuery = false;
+    commit_callback ccb;
+    commit_timeout_callback ctcb;
   };
 
   bool BufferGet(const AllValidationTxnState *allValTxnState, const std::string &key, 

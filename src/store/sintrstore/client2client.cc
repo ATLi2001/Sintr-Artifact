@@ -1852,7 +1852,14 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
             }
             ++asyncQuerySigCheck->num_finished;
 
+            if (asyncQuerySigCheck->called_val_client) {
+              // if valClient has already been called, then just return to avoid double notify
+              return (void*) true;
+            }
+
             if (asyncQuerySigCheck->num_check_passed >= params.query_params.resultQuorum) {
+              asyncQuerySigCheck->called_val_client = true;
+              valClient->NotifyForwardQueryResultValid(curr_client_id, curr_client_seq_num);
               return (void*) true;
             }
             // all sigs have been checked, but not enough matches
