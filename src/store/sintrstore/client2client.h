@@ -208,7 +208,6 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::mutex mtx;
     uint64_t num_check_passed;
     uint64_t num_finished;
-    bool called_val_client = false;
   };
 
   struct SentFwdResultState {

@@ -711,7 +711,7 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
   }
   else {
     std::function<void*(void)> f;
-    if (!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+    if (addReadset && !params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
       // here query_res_meta is ours to own so capture it by pointer
       f = [=, query_res_meta_ptr = &query_res_meta]() {
         this->SendForwardQueryResultMessageHelper(
@@ -1406,9 +1406,10 @@ void Client2Client::HandleForwardQueryResultMessage(const proto::ForwardQueryRes
         BytesToHex(curr_query_gen_id, 16).c_str(),
         BytesToHex(curr_query_result, 16).c_str()
       );
-      // this will be async so no need to check the result or tell valClient
+      // this will be async so no need to check the result
       CheckPreparedCommittedEvidence(fwdQueryResult, fwdQueryResultMsg);
-      return;
+      // but still tell valClient to maintain order of readset
+      // failed check will later stop validation
     }
   }
 
@@ -1843,14 +1844,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardQueryResu
             }
             ++asyncQuerySigCheck->num_finished;
 
-            if (asyncQuerySigCheck->called_val_client) {
-              // if valClient has already been called, then just return
-              return (void*) true;
-            }
-
             if (asyncQuerySigCheck->num_check_passed >= params.query_params.resultQuorum) {
-              asyncQuerySigCheck->called_val_client = true;
-              valClient->ProcessForwardQueryResult(curr_client_id, curr_client_seq_num, fwdQueryResult, addReadset);
               return (void*) true;
             }
             // all sigs have been checked, but not enough matches
