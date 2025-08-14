@@ -170,20 +170,17 @@
   "client_total": [
     [
       2,
-      4,
-      8
+      4
     ]
   ],
   "client_processes_per_client_node": [
     [
-      2,
       2,
       2
     ]
   ],
   "client_threads_per_process": [
     [
-      1,
       1,
       1
     ]

@@ -169,7 +169,6 @@
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
   "client_total": [
     [
-      12,
       16,
       20,
       24,
@@ -185,13 +184,11 @@
       2,
       2,
       2,
-      2,
       2
     ]
   ],
   "client_threads_per_process": [
     [
-      1,
       1,
       1,
       1,

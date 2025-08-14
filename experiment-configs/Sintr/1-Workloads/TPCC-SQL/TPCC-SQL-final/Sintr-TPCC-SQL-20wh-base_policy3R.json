@@ -149,7 +149,7 @@
     "sintr_c2c_receive_thread": false,
     "sintr_client_parallel_endorsement_check": true,
     "sintr_server_parallel_endorsement_check": true,
-    "sintr_parallel_query_sigs_check": false,
+    "sintr_parallel_query_sigs_check": true,
     "sintr_hash_endorsements": true,
     "sintr_use_occ_for_policies": true,
     "sintr_blind_write_message": false,
