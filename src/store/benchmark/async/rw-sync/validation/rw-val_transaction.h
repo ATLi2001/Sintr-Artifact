@@ -46,15 +46,6 @@ class RWValTransaction : public ::ValidationTransaction, RWBaseTransaction {
   virtual ~RWValTransaction();
 
   transaction_status_t Validate(::SyncClient &client);
-
- private:
-  inline const std::string &GetKey(int i) const {
-    return keys[keyIdxs[i]];
-  }
-  
-  std::map<std::string, std::string> readValues;
-  const std::vector<std::string> &keys;
-
 };
 
 }

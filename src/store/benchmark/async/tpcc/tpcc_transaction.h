@@ -28,6 +28,8 @@
 #define TPCC_TRANSACTION_H
 
 #include <string>
+#include "store/common/frontend/sync_transaction.h"
+#include "store/benchmark/async/tpcc/tpcc-proto.pb.h"
 
 namespace tpcc {
 

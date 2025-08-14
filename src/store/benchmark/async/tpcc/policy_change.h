@@ -46,6 +46,7 @@ class PolicyChange : public TPCCTransaction {
   uint32_t randWeight;
   std::mt19937 rand;
   inline std::mt19937 &GetRand() { return rand; }
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
 };
 
 } // namespace tpcc

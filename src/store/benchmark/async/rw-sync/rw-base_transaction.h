@@ -27,6 +27,8 @@
 #define RW_BASE_TRANSACTION_H
 
 #include "store/benchmark/async/common/key_selector.h"
+#include "store/common/frontend/sync_client.h"
+#include "store/benchmark/async/rw-sync/rw-validation-proto.pb.h"
 
 #include <vector>
 #include <string>
@@ -39,6 +41,7 @@ const std::string BENCHMARK_NAME = "rwsync";
 class RWBaseTransaction {
  public:
   RWBaseTransaction(KeySelector *keySelector, int numOps, bool readOnly, std::mt19937 &rand);
+  RWBaseTransaction(const validation::proto::RWSync &msg, const std::vector<std::string> &keys);
   RWBaseTransaction() {};
   virtual ~RWBaseTransaction();
 
@@ -46,8 +49,8 @@ class RWBaseTransaction {
     return keyIdxs;
   }
  protected:
-  inline const std::string &GetKey(int i) const {
-    return keySelector->GetKey(keyIdxs[i]);
+  inline const std::string &GetKey(int i, bool serialize) const {
+    return serialize ? keySelector->GetKey(keyIdxs[i]) : keys[keyIdxs[i]];
   }
 
   inline const size_t GetNumOps() const { return numOps; }
@@ -56,6 +59,10 @@ class RWBaseTransaction {
   size_t numOps;
   bool readOnly;
   std::vector<int> keyIdxs;
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
+  void SerializeTxnState(std::string &txnState);
+  std::map<std::string, std::string> readValues;
+  std::vector<std::string> keys;
 };
 
 }

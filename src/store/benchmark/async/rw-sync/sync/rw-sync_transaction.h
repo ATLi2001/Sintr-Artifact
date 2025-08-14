@@ -42,12 +42,6 @@ class RWSyncTransaction : public SyncTransaction, public RWBaseTransaction {
   virtual ~RWSyncTransaction();
 
   transaction_status_t Execute(SyncClient &client);
-
-  void SerializeTxnState(std::string &txnState);
-
- private:
-  std::map<std::string, std::string> readValues;
-
 };
 
 }

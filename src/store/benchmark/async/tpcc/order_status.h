@@ -53,6 +53,7 @@ class OrderStatus : public TPCCTransaction {
   uint32_t o_id;
   bool c_by_last_name;
   std::string c_last;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
 };
 
 } // namespace tpcc
