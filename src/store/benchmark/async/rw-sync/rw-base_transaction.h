@@ -62,7 +62,7 @@ class RWBaseTransaction {
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   void SerializeTxnState(std::string &txnState);
   std::map<std::string, std::string> readValues;
-  std::vector<string> keys;
+  std::vector<std::string> keys;
 };
 
 }
