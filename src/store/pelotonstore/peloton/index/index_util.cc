@@ -345,7 +345,7 @@ void IndexUtil::FindMaxMinInColumns(oid_t leading_column_id,
   }
 }
 
-std::string IndexUtil::Debug(Index *index) {
+std::string IndexUtil::DebugPeloton(Index *index) {
   std::vector<ItemPointer *> location_ptrs;
   index->ScanAllKeys(location_ptrs);
 
