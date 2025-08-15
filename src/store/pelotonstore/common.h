@@ -76,6 +76,18 @@ namespace pelotonstore {
     bool terminate;
   };
 
+struct QueryReadSetMgr {
+  QueryReadSetMgr() {}
+  ~QueryReadSetMgr() {}
+
+  void AddToReadSet(const std::string &key) {
+    readset.push_back(key);
+  }
+
+  // don't need timestamps since those are just slot numbers handled above by replica.cc
+  std::vector<std::string> readset;
+};
+
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg);
 

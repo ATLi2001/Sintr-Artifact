@@ -267,8 +267,9 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   // }
   // std::string result = table_store->ExecTransactional(stmt, client_id, tx_id, result_status, error_msg);
   
+  QueryReadSetMgr query_read_set_mgr;
   //result == serialized ProtoWrapper result
-  std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg);
+  std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg, query_read_set_mgr);
 
   bool terminate = true;
 
