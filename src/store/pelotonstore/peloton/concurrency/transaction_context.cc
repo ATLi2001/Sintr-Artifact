@@ -85,7 +85,7 @@ void TransactionContext::Init(const size_t thread_id,
 
   on_commit_triggers_.reset();
 
-  // sintr specific default values
+  ///////////////////// sintr specific ///////////////////////////////////
   has_read_set_mgr_ = false;
 }
 

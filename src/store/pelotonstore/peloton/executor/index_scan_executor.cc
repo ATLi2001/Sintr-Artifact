@@ -345,8 +345,10 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
   oid_t current_tile_group_oid = INVALID_OID;
   std::vector<oid_t> tuples;
 
+  ///////////////////// sintr specific ///////////////////////////////////
   auto const &primary_index_columns_ = index_->GetMetadata()->GetKeyAttrs();
   auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
+  ////////////////////////////////////////////////////////////////////////
 
   for (auto &visible_tuple_location : visible_tuple_locations) {
     if (current_tile_group_oid == INVALID_OID) {
@@ -355,7 +357,7 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
     if (current_tile_group_oid == visible_tuple_location.block) {
       tuples.push_back(visible_tuple_location.offset);
 
-      // extract readset to sintr
+      ///////////////////// sintr specific ///////////////////////////////////
       if (current_txn->GetHasReadSetMgr()) {
         auto tile_group = storage_manager->GetTileGroup(visible_tuple_location.block);
         auto tile_group_header = tile_group->GetHeader();
@@ -373,6 +375,7 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
         Debug("encoded read set key is: %s.", encoded.c_str());
         query_read_set_mgr->AddToReadSet(std::move(encoded));
       }
+      ////////////////////////////////////////////////////////////////////////
     } else {
       // Since the tile_group_oids differ, fill in the current tile group
       // into the result vector
@@ -392,7 +395,7 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
       current_tile_group_oid = visible_tuple_location.block;
       tuples.push_back(visible_tuple_location.offset);
 
-      // extract readset to sintr
+      ///////////////////// sintr specific ///////////////////////////////////
       if (current_txn->GetHasReadSetMgr()) {
         auto tile_group = storage_manager->GetTileGroup(visible_tuple_location.block);
         auto tile_group_header = tile_group->GetHeader();
@@ -410,6 +413,7 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
         Debug("encoded read set key is: %s.", encoded.c_str());
         query_read_set_mgr->AddToReadSet(std::move(encoded));
       }
+      ////////////////////////////////////////////////////////////////////////
     }
   }
 
