@@ -297,6 +297,12 @@ class TransactionContext : public Printable {
     query_read_set_mgr_ = query_read_set_mgr;
   }
 
+  bool GetHasReadSetMgr() { return has_read_set_mgr_; }
+
+  void SetHasReadSetMgr(bool has_read_set_mgr) {
+    has_read_set_mgr_ = has_read_set_mgr;
+  }
+
   ////////////////////////////////////////////////////////////////////////
 
  private:
@@ -360,7 +366,12 @@ class TransactionContext : public Printable {
   bool read_only_ = false;
 
   ///////////////////// sintr specific ///////////////////////////////////
+  
+  /** Query read set manager */
   pelotonstore::QueryReadSetMgr *query_read_set_mgr_ = nullptr;
+
+  /** Whether read set manager was passed in */
+  bool has_read_set_mgr_ = false;
 };
 
 }  // namespace concurrency

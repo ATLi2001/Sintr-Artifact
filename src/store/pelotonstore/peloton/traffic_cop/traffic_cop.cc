@@ -186,7 +186,11 @@ executor::ExecutionResult TrafficCop::ExecuteHelper(
   }
 
   ///////////////////// sintr specific ///////////////////////////////////
-  txn->SetQueryReadSetMgr(query_read_set_mgr);
+  if (query_read_set_mgr != nullptr) {
+    txn->SetQueryReadSetMgr(query_read_set_mgr);
+    txn->SetHasReadSetMgr(true);
+  }
+  ////////////////////////////////////////////////////////////////////////
 
   // skip if already aborted
   if (curr_state.second == ResultType::ABORTED) {

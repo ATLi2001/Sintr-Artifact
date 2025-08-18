@@ -84,8 +84,13 @@ struct QueryReadSetMgr {
     readset.push_back(key);
   }
 
+  void AddToWriteSet(const std::string &key) {
+    writeset.push_back(key);
+  }
+
   // don't need timestamps since those are just slot numbers handled above by replica.cc
   std::vector<std::string> readset;
+  std::vector<std::string> writeset;
 };
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
