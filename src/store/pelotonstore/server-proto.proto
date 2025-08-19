@@ -17,6 +17,8 @@ message TryCommit {
   required uint64 req_id = 1;
   required uint64 client_id = 3;
   required uint64 txn_seq_num = 4;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 5;
 }
 
 message UserAbort {

@@ -74,7 +74,8 @@ class ShardClient : public TransportReceiver {
 
   void Query(const std::string &query, uint64_t client_id, uint64_t client_seq_num, sql_rpc_callback srcb, sql_rpc_timeout_callback srtcb,  uint32_t timeout);
 
-  void Commit(uint64_t client_id, uint64_t client_seq_num, try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout);
+  void Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
+    try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout);
 
   void Abort(uint64_t client_id, uint64_t client_seq_num);
 

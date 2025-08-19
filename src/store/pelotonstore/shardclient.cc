@@ -206,7 +206,7 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
   }
 }
 
-void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, 
+void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
   try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout) {
 
   reqId++;
@@ -217,7 +217,8 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
   try_commit.set_req_id(reqId);
   try_commit.set_client_id(client_id);
   try_commit.set_txn_seq_num(client_seq_num);
-  
+  try_commit.set_allocated_txn_msg(txn_msg);
+
   //Register Reply Handler
   PendingTryCommit &ptc = pendingTryCommits[reqId];
   ptc.tccb = std::move(tccb);

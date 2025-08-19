@@ -206,7 +206,8 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
       return HandleSQL_RPC(c, req_id, client_id, tx_id, sql_rpc->query());
     } 
     else if (type == try_commit_template.GetTypeName()) {
-      return HandleTryCommit(c, req_id, client_id, tx_id);
+      proto::TryCommit *try_commit = (proto::TryCommit*) req;
+      return HandleTryCommit(c, req_id, client_id, tx_id, *try_commit);
     } 
     else if (type == user_abort_template.GetTypeName()) {
       //Panic("This case should not be triggered in simple RW-SQL test with single client");
@@ -320,8 +321,17 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   return reply;
 }
 
-::google::protobuf::Message* Server::HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id) {
+::google::protobuf::Message* Server::HandleTryCommit(ClientStateMap::accessor &c,
+    uint64_t req_id, uint64_t client_id, uint64_t tx_id, const proto::TryCommit &try_commit) {
   Debug("Trying to commit a txn %d", req_id);
+  if (false) {
+    for (const auto &read : try_commit.txn_msg().readset()) {
+      Debug("read key: %s", read.key().c_str());
+    }
+    for (const auto &write : try_commit.txn_msg().writeset()) {
+      Debug("write key: %s", write.key().c_str());
+    }
+  }
  
   proto::TryCommitReply* reply = new proto::TryCommitReply();
   reply->set_req_id(req_id);
