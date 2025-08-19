@@ -77,20 +77,18 @@ namespace pelotonstore {
   };
 
 struct QueryReadSetMgr {
-  QueryReadSetMgr() {}
+  QueryReadSetMgr(TransactionMessage *txn_msg) : txn_msg(txn_msg) {}
   ~QueryReadSetMgr() {}
 
   void AddToReadSet(const std::string &key) {
-    readset.push_back(key);
+    txn_msg->add_readset()->set_key(key);
   }
 
   void AddToWriteSet(const std::string &key) {
-    writeset.push_back(key);
+    txn_msg->add_writeset()->set_key(key);
   }
 
-  // don't need timestamps since those are just slot numbers handled above by replica.cc
-  std::vector<std::string> readset;
-  std::vector<std::string> writeset;
+  TransactionMessage *txn_msg;
 };
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,

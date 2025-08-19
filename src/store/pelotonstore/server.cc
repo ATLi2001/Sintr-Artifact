@@ -266,8 +266,9 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   //     stmt += " ON CONFLICT DO NOTHING";
   // }
   // std::string result = table_store->ExecTransactional(stmt, client_id, tx_id, result_status, error_msg);
-  
-  QueryReadSetMgr query_read_set_mgr;
+
+  // query_read_set_mgr will directly modify reply read set and write set
+  QueryReadSetMgr query_read_set_mgr(reply->mutable_txn_msg());
   //result == serialized ProtoWrapper result
   std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg, query_read_set_mgr);
 

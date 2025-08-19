@@ -134,7 +134,9 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
 
     Debug("Invoke SQL Request: %s", statement.c_str());
 
-    sql_rpc_callback srcb = [scb, statement, this](int status, const std::string& sql_res) {
+    sql_rpc_callback srcb = [scb, statement, this](
+      int status, const std::string& sql_res, TransactionMessage *txn_msg
+    ) {
       Debug("Received query response");
 
       // struct timespec ts_start;
@@ -147,6 +149,16 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
       if(status == REPLY_OK) {
         Debug("Statement execution SUCCESS. Return result");
         query_res = new sql::QueryResultProtoWrapper(sql_res);
+
+        // make sure extracted readset writeset make sense
+        if (false) {
+          for (const auto &read : txn_msg->readset()) {
+            Debug("read key: %s", read.key().c_str());
+          }
+          for (const auto &write : txn_msg->writeset()) {
+            Debug("write key: %s", write.key().c_str());
+          }
+        }
       } else {
         Debug("Statement execution FAILURE.");
         //This is simply a hack to force all follower replicas to also abort in order to make them unlock any held locks.
