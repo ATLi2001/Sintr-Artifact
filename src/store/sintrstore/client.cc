@@ -36,7 +36,7 @@
 #include "store/sintrstore/common.h"
 #include "store/sintrstore/common2.h"
 #include "store/common/policy/policy.h"
-#include "store/sintrstore/estimate_policy.h"
+#include "store/common/sintring/estimate_policy.h"
 #include <sys/time.h>
 #include <algorithm>
 
@@ -102,7 +102,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(params.sintr_params.policyConfigPath);
 
   endorseClient = new EndorsementClient(client_id, keyManager, policyIdFunction);
-  endorseClient->InitializePolicyCache(policies);
+  endorseClient->InitializePolicyCache(std::move(policies));
 
   // create client for other clients
   // right now group is always 0, maybe configure later
@@ -275,7 +275,7 @@ void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *poli
   } 
   else {
     EstimatePolicy est_policy_obj;
-    est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, endorseClient);
+    est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, endorseClient->GetPolicyCache());
   }
 }
 
@@ -326,7 +326,7 @@ void Client::Get(const std::string &key, get_callback gcb,
           Debug("PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %lu",client_id, client_seq_num, BytesToHex(key, 16).c_str(), policyMsg.policy_id());
         }
         Policy *policy = policyParseClient->Parse(policyMsg.policy());
-        endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+        endorseClient->UpdatePolicyCache(policyMsg.policy_id(), std::move(policy));
       }
       if (hasDep) {
         *txn.add_deps() = dep;
@@ -833,7 +833,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR key %s in GET",client_id, client_seq_num, BytesToHex(key, 16).c_str());
       Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), std::move(policy));
     }
   }
   if (hasDep) {
@@ -1044,7 +1044,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id);
       Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), std::move(policy));
     }
   }
 

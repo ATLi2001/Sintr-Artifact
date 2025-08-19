@@ -1,6 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2024 Daniel Lee <dhl93@cornell.edu>
+ * Copyright 2024 Austin Li <atl63@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -24,34 +24,31 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_POLICY_ESTIMATE_H
-#define _SINTR_POLICY_ESTIMATE_H
+#ifndef _POLICY_CACHE_H_
+#define _POLICY_CACHE_H_
 
-#include "lib/assert.h"
-#include "store/common/common-proto.pb.h"
-#include "store/common/frontend/validation_transaction.h"
 #include "store/common/policy/policy.h"
-#include "store/common/policy/policy_client.h"
-#include "store/sintrstore/endorsement_client.h"
+#include <map>
+#include <string>
 
-namespace sintrstore {
-
-// this class takes parses TxnState proto message and estimates the policy needed for the transaction
-class EstimatePolicy {
+class PolicyCache {
  public:
-  EstimatePolicy() {}
-  ~EstimatePolicy(){}
-  // takes in transaction state, policy, and endorsement client and returns an estimated policy
-  void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const EndorsementClient *endorseClient) const;
+  PolicyCache();
+  ~PolicyCache();
+  
+  // initialize the policy cache with the given map; takes ownership of policies (policies should be allocated on heap)
+  void Initialize(std::map<std::string, Policy *> &&policies);
+  // is empty
+  bool IsEmpty() const;
+  // return true if policy exists for key, false otherwise
+  // given a reference to a policy pointer, update it with the policy in the cache
+  // does not allocate a new policy object
+  bool Get(const std::string &policyId, const Policy *&policy) const;
+  // update the mapping from policy id to policy; takes ownership of policy (policy should be allocated on heap)
+  void Put(const std::string &policyId, Policy *&&policy);
 
  private:
-  /*
-    As this is a prototype, we'll implement the tables-to-policy ID mapping function in the Sintr client code. 
-    Application developers should implement it in their own client code (e.g., tpcc) and then use it within Sintr.
-  */
-  std::string TableToPolicyID(const int &t, const std::string &txn_bench) const;
+  std::map<std::string, Policy *> policyCache;
 };
 
-} // namespace sintrstore
-
-#endif
+#endif /* _POLICY_CACHE_H_ */

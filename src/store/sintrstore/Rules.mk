@@ -4,7 +4,7 @@ SRCS += $(addprefix $(d), client.cc shardclient.cc server.cc server_fallback.cc 
 		phase1validator.cc localbatchsigner.cc sharedbatchsigner.cc \
 		basicverifier.cc localbatchverifier.cc sharedbatchverifier.cc \
 		querysync-server.cc querysync-servertools.cc querysync-tests.cc querysync-client.cc queryexec.cc checkpointing.cc snapshot_mgr.cc sql_interpreter.cc \
-		concurrencycontrol_semantic.cc validation_parse_client.cc client2client.cc endorsement_client.cc estimate_policy.cc \
+		concurrencycontrol_semantic.cc client2client.cc endorsement_client.cc \
 		validation_client.cc common2.cc)
 
 PROTOS += $(addprefix $(d), sintr-proto.proto)
@@ -30,7 +30,7 @@ LIB-sintr-store := $(o)server.o $(o)server_fallback.o $(o)servertools.o $(o)quer
 	$(LIB-policy)  #$(o)table_store_interface_old.o
 
 LIB-sintr-validation := $(LIB-store-frontend) $(LIB-validation-tpcc) $(LIB-rw-val) $(LIB-rw-sql-val) \
-	$(o)validation_parse_client.o $(o)validation_client.o $(o)estimate_policy.o
+	$(LIB-common-sintring) $(o)validation_client.o
 
 LIB-sintr-client := $(LIB-udptransport) \
 	$(LIB-store-frontend) $(LIB-store-common) $(o)sintr-proto.o $(o)query-proto.o\

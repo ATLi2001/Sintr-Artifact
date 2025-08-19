@@ -29,6 +29,7 @@
 
 #include "store/common/policy/policy_client.h"
 #include "store/common/policy/policy_function.h"
+#include "store/common/policy/policy_cache.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "lib/keymanager.h"
 
@@ -73,14 +74,16 @@ class EndorsementClient {
   // check if the policy is satisfied by actual endorsements collected so far
   bool IsSatisfied();
 
+  // return const ref to policy cache
+  const PolicyCache &GetPolicyCache() const;
   // return true if policy exists for key, false otherwise
   // given a reference to a policy pointer, update it with the policy in the cache
   // does not allocate a new policy object
   bool GetPolicyFromCache(const std::string &policyId, const Policy *&policy) const;
   // update the mapping from policy id to policy; takes ownership of policy (policy should be allocated on heap)
-  void UpdatePolicyCache(std::string policyId, Policy *policy);
+  void UpdatePolicyCache(std::string policyId, Policy *&&policy);
   // initialize the policy cache with the given map; takes ownership of policies (policies should be allocated on heap)
-  void InitializePolicyCache(const std::map<std::string, Policy *> &policies);
+  void InitializePolicyCache(std::map<std::string, Policy *> &&policies);
 
  private:
   void DebugCheck(const proto::Transaction &expectedTxn, const proto::Transaction &txn);
@@ -93,8 +96,8 @@ class EndorsementClient {
   policy_id_function policyIdFunction;
 
   // client side cache of policy store
-  std::map<std::string, Policy *> policyCache;
-  
+  PolicyCache policyCache;
+
   // current sequence number for transaction that is ongoing
   uint64_t client_seq_num;
   

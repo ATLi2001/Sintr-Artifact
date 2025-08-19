@@ -35,11 +35,7 @@ namespace sintrstore {
 
 EndorsementClient::EndorsementClient(uint64_t client_id, KeyManager *keyManager, policy_id_function policyIdFunction) : 
     client_id(client_id), keyManager(keyManager), policyIdFunction(policyIdFunction) {}
-EndorsementClient::~EndorsementClient() {
-  for (const auto &idPolicy : policyCache) {
-    delete idPolicy.second;
-  }
-}
+EndorsementClient::~EndorsementClient() {}
 
 const std::vector<proto::SignedMessage> &EndorsementClient::GetEndorsements() const {
   endorsementCheckStatesMap::const_accessor a;
@@ -496,29 +492,29 @@ bool EndorsementClient::IsSatisfied() {
   return satisfied;
 }
 
+const PolicyCache &EndorsementClient::GetPolicyCache() const {
+  return policyCache;
+}
+
 bool EndorsementClient::GetPolicyFromCache(const std::string &policyId, const Policy *&policy) const {
-  auto it = policyCache.find(policyId);
-  if (it == policyCache.end()) {
+  if (!policyCache.Get(policyId, policy)) {
     Panic("Policy cache is missing policy with id %s", policyId.c_str());
+    return false;
   }
 
-  policy = it->second;
+  Debug("Policy cache hit for policy with id %s, policy %s", policyId.c_str(), policy->ToString().c_str());
+
   return true;
 }
 
-void EndorsementClient::UpdatePolicyCache(std::string policyId, Policy *policy) {
+void EndorsementClient::UpdatePolicyCache(std::string policyId, Policy *&&policy) {
   UW_ASSERT(policy != nullptr);
-  if (policyCache.find(policyId) != policyCache.end()) {
-    delete policyCache[policyId];
-  }
-  policyCache[policyId] = policy;
+  policyCache.Put(policyId, std::move(policy));
 }
 
-void EndorsementClient::InitializePolicyCache(const std::map<std::string, Policy *> &policies) {
-  UW_ASSERT(this->policyCache.empty());
-  for (const auto &p : policies) {
-    policyCache[p.first] = p.second;
-  }
+void EndorsementClient::InitializePolicyCache(std::map<std::string, Policy *> &&policies) {
+  UW_ASSERT(policyCache.IsEmpty());
+  policyCache.Initialize(std::move(policies));
 }
 
 } // namespace sintrstore
