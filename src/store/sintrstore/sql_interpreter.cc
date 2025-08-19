@@ -734,6 +734,9 @@ void SQLTransformer::TransformUpdate(size_t pos, std::string_view &write_stateme
                 write->set_key(enc_key);
                 write->set_value("d");
                 write->mutable_rowupdates()->set_deletion(true);
+                if (keys_written != nullptr) {
+                    keys_written->push_back(enc_key);
+                }
 
                  row_update = AddTableWriteRow(table_write, col_registry);
 
