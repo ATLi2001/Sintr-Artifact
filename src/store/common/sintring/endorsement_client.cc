@@ -24,14 +24,13 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/endorsement_client.h"
-#include "store/sintrstore/common.h"
+#include "store/common/sintring/endorsement_client.h"
+#include "store/common/util.h"
 #include "lib/message.h"
 #include "lib/assert.h"
 
 #include <algorithm>
 
-namespace sintrstore {
 
 EndorsementClient::EndorsementClient(uint64_t client_id) : client_id(client_id) {}
 EndorsementClient::~EndorsementClient() {}
@@ -294,5 +293,3 @@ bool EndorsementClient::IsSatisfied() {
 void EndorsementClient::SetDebugCheckFunction(std::function<void(const ::google::protobuf::Message *expectedTxn, const ::google::protobuf::Message *txn)> func) {
   DebugCheckFunction = func;
 }
-
-} // namespace sintrstore

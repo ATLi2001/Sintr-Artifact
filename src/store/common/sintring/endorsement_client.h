@@ -24,8 +24,8 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_ENDORSEMENT_CLIENT_H_
-#define _SINTR_ENDORSEMENT_CLIENT_H_
+#ifndef _ENDORSEMENT_CLIENT_H_
+#define _ENDORSEMENT_CLIENT_H_
 
 #include "store/common/policy/policy_client.h"
 
@@ -37,7 +37,6 @@
 
 #include "tbb/concurrent_hash_map.h"
 
-namespace sintrstore {
 
 // this class keeps state for an ongoing transaction endorsement
 // now as a generic not store specific class, endorsements are treated as generic protobuf messages
@@ -136,6 +135,4 @@ class EndorsementClient {
   std::set<uint64_t> blacklistedClients;
 };
 
-} // namespace sintrstore
-
-#endif /* _SINTR_ENDORSEMENT_CLIENT_H_ */
+#endif /* _ENDORSEMENT_CLIENT_H_ */

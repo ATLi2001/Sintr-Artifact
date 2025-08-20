@@ -47,7 +47,7 @@
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "store/common/common-proto.pb.h"
 #include "store/sintrstore/client2client.h"
-#include "store/sintrstore/endorsement_client.h"
+#include "store/common/sintring/endorsement_client.h"
 #include "store/common/policy/policy-proto.pb.h"
 #include "store/common/policy/policy_parse_client.h"
 #include "store/common/policy/policy_function.h"

@@ -34,6 +34,7 @@
 
 #include "store/common/timestamp.h"
 #include "store/common/transaction.h"
+#include "store/common/util.h"
 //#include "../../query-engine/type/value.h"
 #include <utility>
 #include "store/common/policy/policy_function.h"
@@ -2331,14 +2332,7 @@ std::string generateReadSetMerkleRoot(const std::map<std::string, TimestampMessa
 
 
 std::string BytesToHex(const std::string &bytes, size_t maxLength) {
-  static const char digits[] = "0123456789abcdef";
-  std::string hex;
-  size_t length = (bytes.size() < maxLength) ? bytes.size() : maxLength;
-  for (size_t i = 0; i < length; ++i) {
-    hex.push_back(digits[static_cast<uint8_t>(bytes[i]) >> 4]);
-    hex.push_back(digits[static_cast<uint8_t>(bytes[i]) & 0xF]);
-  }
-  return hex;
+  return ::BytesToHex(bytes, maxLength);
 }
 
 //FIXME: This Function is not taking into account the Timestamps. Should add timestamp based checks and semanticCC (like in concurrencycontrol.cc)
