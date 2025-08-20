@@ -282,10 +282,12 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg);
   void HandleForwardQueryResultMessage(const proto::ForwardQueryResultMessage &fwdQueryResultMsg);
   void HandleBlindWriteMessage(const proto::BlindWriteMessage &blindWriteMsg);
-  void HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg);
+  void HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg,
+    std::shared_ptr<proto::SignedMessage> signedMsg);
   // optimistic does not check endorsement for validity, just accepts it
   // used before normal HandleFinishValidateTxnMessage
-  void HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg);
+  void HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg,
+    std::shared_ptr<proto::SignedMessage> signedMsg);
   void HandlePingMessage(const PingMessage &ping);
 
   // check if fwdReadResultMsg is valid based on either prepared dependency or committed proof

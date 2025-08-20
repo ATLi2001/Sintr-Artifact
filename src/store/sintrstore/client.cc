@@ -101,7 +101,8 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
   std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(params.sintr_params.policyConfigPath);
 
-  endorseClient = new EndorsementClient(client_id, keyManager);
+  endorseClient = new EndorsementClient(client_id);
+  endorseClient->SetDebugCheckFunction(DebugCheck);
   UW_ASSERT(policyCache.IsEmpty());
   policyCache.Initialize(std::move(policies));
 
@@ -1421,7 +1422,8 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {
-      endorseClient->DebugSetExpectedTxn(txn);
+      std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(txn);
+      endorseClient->DebugSetExpectedTxn(std::move(debug_txn));
     }
     endorseClient->SetExpectedTxnDigest(digest);
 
@@ -1485,11 +1487,8 @@ void Client::Phase1(PendingRequest *req) {
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
 
-  // use Release so we have ownership and can avoid copying
-  // const std::vector<proto::SignedMessage> &endorsements = endorseClient->GetEndorsements();
-  std::vector<proto::SignedMessage> *endorsements = endorseClient->ReleaseEndorsements();
-  endorseClient->SetEndorsementsUsed();
-  
+  const auto &endorsements = endorseClient->GetEndorsements();
+
   if(PROFILING_LAT){
     struct timespec ts_start;
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -1506,12 +1505,12 @@ void Client::Phase1(PendingRequest *req) {
   }
   */
 
-  if (endorsements->size() > 0) {
-    for (auto &endorsement : *endorsements) {
-      *txn.mutable_endorsements()->add_sig_msgs() = std::move(endorsement);
+  if (endorsements.size() > 0) {
+    for (auto &endorsement : endorsements) {
+      *txn.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
     }
   }
-  delete endorsements;
+  endorseClient->SetEndorsementsUsed();
 
   // copy into req
   req->txn = txn;

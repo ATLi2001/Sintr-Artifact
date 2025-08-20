@@ -449,6 +449,8 @@ bool IsReplicaInGroup(uint64_t id, uint32_t group,
 
 int64_t GetLogGroup(const proto::Transaction &txn, const std::string &txnDigest);
 
+void DebugCheck(const ::google::protobuf::Message *expected, const ::google::protobuf::Message *given);
+
 inline static bool sortReadSetByKey(const ReadMessage &lhs, const ReadMessage &rhs) { 
     //UW_ASSERT(lhs.key() != rhs.key());  //Read Set should not contain same key twice (doomed to abort) 
                                           //==> Currenty this might happen since different queries might read the same read set & read sets are stored as list currently instead of a set

@@ -1061,24 +1061,27 @@ void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remo
 void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
   if (!params.sintr_params.c2cReceiveThread && !params.sintr_params.parallelEndorsementCheck) {
     finishValTxnMsg.ParseFromString(data);
+    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg.release_signed_validation_txn_digest());
 
     if (params.sintr_params.optimisticReceiveEndorsement) {
-      HandleFinishValidateTxnMessageOptimistic(finishValTxnMsg);
+      HandleFinishValidateTxnMessageOptimistic(finishValTxnMsg, signedMsg);
     }
 
-    HandleFinishValidateTxnMessage(finishValTxnMsg);
+    HandleFinishValidateTxnMessage(finishValTxnMsg, signedMsg);
   }
   else {
     proto::FinishValidateTxnMessage *finishValTxnMsg = new proto::FinishValidateTxnMessage();
     finishValTxnMsg->ParseFromString(data);
-    auto f = [this, finishValTxnMsg](){
-      this->HandleFinishValidateTxnMessage(*finishValTxnMsg);
+    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg->release_signed_validation_txn_digest());
+
+    auto f = [this, finishValTxnMsg, signedMsg](){
+      this->HandleFinishValidateTxnMessage(*finishValTxnMsg, signedMsg);
       delete finishValTxnMsg;
       return (void*) true;
     };
 
     if (params.sintr_params.optimisticReceiveEndorsement) {
-      HandleFinishValidateTxnMessageOptimistic(*finishValTxnMsg);
+      HandleFinishValidateTxnMessageOptimistic(*finishValTxnMsg, signedMsg);
     }
 
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
@@ -1465,7 +1468,8 @@ void Client2Client::HandleBlindWriteMessage(const proto::BlindWriteMessage &blin
   valClient->ProcessBlindWrite(curr_client_id, curr_client_seq_num);
 }
 
-void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg) {
+void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg,
+    std::shared_ptr<proto::SignedMessage> signedMsg) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t finish = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
@@ -1497,22 +1501,20 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     return;
   }
 
-  proto::SignedMessage signedMsg;
   std::string valTxnDigest;
   if (params.sintr_params.signFinishValidation) {
     // verify signature
-    if (!finishValTxnMsg.has_signed_validation_txn_digest()) {
+    if (signedMsg == nullptr) {
       Debug("Missing signed validation txn digest sent from client id %lu", peer_client_id);
       return;
     }
-    signedMsg = finishValTxnMsg.signed_validation_txn_digest();
 
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
-    if(!clients_verifier->Verify(keyManager->GetPublicKey(keyManager->GetClientKeyId(signedMsg.process_id())),
-        signedMsg.data(), signedMsg.signature())) {
+    if(!clients_verifier->Verify(keyManager->GetPublicKey(keyManager->GetClientKeyId(signedMsg->process_id())),
+        signedMsg->data(), signedMsg->signature())) {
       Debug("Invalid signature on validation txn digest sent from client id %lu", peer_client_id);
       return;
     }
@@ -1522,13 +1524,15 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     // auto duration = end - start;
     // verify_endorse_us.add(duration);
 
-    valTxnDigest = signedMsg.data();
+    valTxnDigest = signedMsg->data();
   }
   else {
     // dummy signed message
-    signedMsg.set_process_id(peer_client_id);
-    signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
-    signedMsg.set_signature("");
+    UW_ASSERT(signedMsg == nullptr);
+    signedMsg = std::make_shared<proto::SignedMessage>();
+    signedMsg->set_process_id(peer_client_id);
+    signedMsg->set_data(finishValTxnMsg.validation_txn_digest());
+    signedMsg->set_signature("");
     valTxnDigest = finishValTxnMsg.validation_txn_digest();
   }
 
@@ -1536,7 +1540,8 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     BytesToHex(valTxnDigest, 16).c_str(), client_id, peer_client_id,val_txn_seq_num);
 
   if (params.sintr_params.debugEndorseCheck) {
-    endorseClient->DebugCheck(finishValTxnMsg.val_txn());
+    std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(finishValTxnMsg.val_txn());
+    endorseClient->DebugCheck(std::move(debug_txn));
   }
 
   if (!params.sintr_params.optimisticReceiveEndorsement) {
@@ -1548,7 +1553,8 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
 }
 
-void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg) {
+void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg,
+    std::shared_ptr<proto::SignedMessage> signedMsg) {
   uint64_t peer_client_id = finishValTxnMsg.client_id();
   uint64_t val_txn_seq_num = finishValTxnMsg.validation_txn_seq_num();
   // stale finish validation message
@@ -1563,18 +1569,16 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
   }
 
   if (params.sintr_params.signFinishValidation) {
-    UW_ASSERT(finishValTxnMsg.has_signed_validation_txn_digest());
-    endorseClient->AddValidationOptimistic(
-      peer_client_id,
-      finishValTxnMsg.signed_validation_txn_digest()
-    );
+    UW_ASSERT(signedMsg != nullptr);
+    endorseClient->AddValidationOptimistic(peer_client_id, signedMsg);
   }
   else {
     // dummy signed message
-    proto::SignedMessage signedMsg;
-    signedMsg.set_process_id(peer_client_id);
-    signedMsg.set_data(finishValTxnMsg.validation_txn_digest());
-    signedMsg.set_signature("");
+    UW_ASSERT(signedMsg == nullptr);
+    signedMsg = std::make_shared<proto::SignedMessage>();
+    signedMsg->set_process_id(peer_client_id);
+    signedMsg->set_data(finishValTxnMsg.validation_txn_digest());
+    signedMsg->set_signature("");
     endorseClient->AddValidationOptimistic(
       peer_client_id,
       signedMsg
