@@ -15,6 +15,7 @@ mod ffi {
             committee_file: String,
             parameters_file: String,
             store_path: String,
+            is_primary: bool,
             worker_id: u32,
         );
     }

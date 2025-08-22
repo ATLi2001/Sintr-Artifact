@@ -15,6 +15,7 @@ pub fn start_server(
     committee_file: String,
     parameters_file: String,
     store_path: String,
+    is_primary: bool,
     worker_id: u32,
 ) {
     /// The default channel capacity.
@@ -48,32 +49,33 @@ pub fn start_server(
     let (_tx_pushdown_cert, rx_pushdown_cert) = channel(CHANNEL_CAPACITY);
     let (_tx_request_header_sync, rx_request_header_sync) = channel(CHANNEL_CAPACITY);
 
-    Primary::spawn(
-        name,
-        committee.clone(),
-        parameters.clone(),
-        signature_service.clone(),
-        store.clone(),
-        /* tx_consensus */ tx_new_certificates,
-        tx_committer,
-        rx_committer,
-        /* rx_consensus */ rx_feedback,
-        tx_sailfish,
-        //rx_ticket,
-        rx_pushdown_cert,
-        rx_request_header_sync,
-        tx_output,
-    );
+    if is_primary {
+        Primary::spawn(
+            name,
+            committee.clone(),
+            parameters.clone(),
+            signature_service.clone(),
+            store.clone(),
+            /* tx_consensus */ tx_new_certificates,
+            tx_committer,
+            rx_committer,
+            /* rx_consensus */ rx_feedback,
+            tx_sailfish,
+            //rx_ticket,
+            rx_pushdown_cert,
+            rx_request_header_sync,
+            tx_output,
+        );
 
-    Worker::spawn(keypair.name, worker_id, committee, parameters, store);
-
-    let handle_copy = handle;
-    std::thread::spawn(move || {
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async move {
-            while let Some(header) = rx_output.recv().await {
-                autobahn_callback(handle_copy, header.to_string());
-            }
+        std::thread::spawn(move || {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                while let Some(header) = rx_output.recv().await {
+                    autobahn_callback(handle, header.to_string());
+                }
+            });
         });
-    });
+    } else {
+        Worker::spawn(keypair.name, worker_id, committee, parameters, store);
+    }
 }
