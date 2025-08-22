@@ -23,33 +23,15 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef _AUTOBAHN_AGENT_H_
-#define _AUTOBAHN_AGENT_H_
+#ifndef _AUTOBAHN_CALLBACK_H_
+#define _AUTOBAHN_CALLBACK_H_
 
-// lib.rs.h cpp rust interface for autobahn
-#include "bftinterface/src/lib.rs.h"
-#include "lib/transport.h"
-#include "lib/message.h"
+// rust/cxx.h for converted rust types
+#include "rust/cxx.h"
 
 namespace autobahn {
 
-class AutobahnAgent{
-public:
-  AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, const std::string &config_path);
-
-
-private:
-  void CreateClientInterface();
-  void CreateServerInterface(TransportReceiver *receiver);
-
-  size_t id;
-  bool is_client;
-  TransportReceiver *receiver;
-  std::string config_path;
-
-  std::unique_ptr<rust::Box<Client>> client;
-  std::unique_ptr<rust::Box<Server>> server;
-};
+void autobahn_callback(int64_t handle, rust::String message);
 
 } // namespace autobahn
 

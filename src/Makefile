@@ -95,7 +95,7 @@ LDFLAGS += -L/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server -ljvm
 #CFLAGS += -I store/pelotonstore/peloton
 
 # Autobahn
-CFLAGS += -Istore/autobahn/library/target/cxxbridge
+CFLAGS += -Istore/autobahn/library/target/cxxbridge -Istore/autobahn/library/bftinterface/cppinclude
 LDFLAGS += -Lstore/autobahn/library/target/release -lbftinterface -lpthread -ldl
 
 # Additional flags
