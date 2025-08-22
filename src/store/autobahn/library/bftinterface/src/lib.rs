@@ -9,15 +9,14 @@ mod ffi {
         fn new_client(target: String, size: usize) -> Box<Client>;
         fn send(self: &mut Client, buf: Vec<u8>) -> Result<()>;
 
-        type Server;
-        fn new_server(
+        fn start_server(
             handle: i64,
             key_file: String,
             committee_file: String,
             parameters_file: String,
             store_path: String,
             worker_id: u32,
-        ) -> Box<Server>;
+        );
     }
 
     unsafe extern "C++" {
@@ -29,4 +28,4 @@ mod ffi {
 }
 
 pub use crate::client::{new_client, Client};
-pub use crate::server::{new_server, Server};
+pub use crate::server::start_server;

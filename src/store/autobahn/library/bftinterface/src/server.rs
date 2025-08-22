@@ -9,25 +9,14 @@ use worker::Worker;
 
 use crate::ffi::autobahn_callback;
 
-pub struct Server {
-    handle: i64,
-}
-
-impl Server {
-    fn new(handle: i64) -> Self {
-        Self { handle }
-    }
-}
-
-// Exposed constructor
-pub fn new_server(
+pub fn start_server(
     handle: i64,
     key_file: String,
     committee_file: String,
     parameters_file: String,
     store_path: String,
     worker_id: u32,
-) -> Box<Server> {
+) {
     /// The default channel capacity.
     const CHANNEL_CAPACITY: usize = 1_000;
 
@@ -82,11 +71,9 @@ pub fn new_server(
     std::thread::spawn(move || {
         let rt = Runtime::new().unwrap();
         rt.block_on(async move {
-            while let Some(_header) = rx_output.recv().await {
-                autobahn_callback(handle_copy, "name".to_string());
+            while let Some(header) = rx_output.recv().await {
+                autobahn_callback(handle_copy, header.to_string());
             }
         });
     });
-
-    Box::new(Server::new(handle))
 }

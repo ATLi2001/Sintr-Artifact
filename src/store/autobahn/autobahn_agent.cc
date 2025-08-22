@@ -49,9 +49,7 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   // TODO: get json configs
   std::string address = "127.0.0.1:3000";
   int64_t handle = reinterpret_cast<int64_t>(receiver);
-  server = std::make_unique<rust::Box<Server>>(
-    new_server(handle, "key", "committee", "params", "store", 0)
-  );
+  start_server(handle, "key", "committee", "params", "store", 0);
 }
 
 } // namespace autobahn
