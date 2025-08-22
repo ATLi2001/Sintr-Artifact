@@ -94,6 +94,10 @@ LDFLAGS += -L/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server -ljvm
 # Include peloton
 #CFLAGS += -I store/pelotonstore/peloton
 
+# Autobahn
+CFLAGS += -Istore/autobahn/library/target/cxxbridge
+LDFLAGS += -Lstore/autobahn/library/target/release -lbftinterface -lpthread -ldl
+
 # Additional flags
 PARANOID = 1
 ifneq ($(PARANOID),0)
@@ -221,6 +225,8 @@ include store/pequinstore/Rules.mk
 
 include store/sintrstore/query-engine/Rules.mk
 include store/sintrstore/Rules.mk
+
+include store/autobahn/Rules.mk
 
 include store/Rules.mk
 include store/benchmark/Rules.mk
@@ -397,6 +403,11 @@ hotstuff:
 	cd ./store/hotstuffstore/libhotstuff/; ./build.sh
 	@echo '====== Finish Building HotStuff ======'
 
+.PHONY: autobahn
+autobahn: 
+	@echo '====== Start Building Autobahn ======'
+	cd ./store/autobahn/library; cargo build --release
+	@echo '====== Finish Building Autobahn ======'
 
 .PHONY: indicus
 indicus: $(BINS) #$(TEST_BINS)
@@ -404,7 +415,7 @@ indicus: $(BINS) #$(TEST_BINS)
 
 .PHONY: all
 #all: bftsmart bftsmart2 hotstuff augustus_smart stable
-all: hotstuff bftsmart compression
+all: hotstuff bftsmart compression autobahn
 	@echo '====== Start Building Indicus ======'
 	$(MAKE) indicus 
 	@echo '====== Finish Building Indicus ======'

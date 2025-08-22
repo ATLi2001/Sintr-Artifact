@@ -8,6 +8,6 @@ $(d)server: $(LIB-tapir-store) $(LIB-strong-store) $(LIB-weak-store) \
 	$(LIB-pbft-store) $(LIB-hotstuff-store) $(LIB-hotstuff-pg-store) $(LIB-augustus-store) \
 	$(LIB-bftsmart-store) $(LIB-bftsmart-augustus-store) $(LIB-bftsmart-stable-store) \
 	$(LIB-tpcc) $(LIB-indicus-store) $(LIB-pequin-store) $(LIB-postgres-store) \
-	$(LIB-peloton-store) $(LIB-cockroachdb-store) $(LIB-sintr-store)
+	$(LIB-peloton-store) $(LIB-cockroachdb-store) $(LIB-sintr-store) $(LIB-autobahn)
 
 BINS += $(d)server
