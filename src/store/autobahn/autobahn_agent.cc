@@ -25,6 +25,7 @@
  **********************************************************************/
 
 #include "store/autobahn/autobahn_agent.h"
+#include "lib/assert.h"
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -56,7 +57,7 @@ void AutobahnAgent::CreateClientInterface() {
   size_t target = id % authorities.size();
   std::string target_addr = committee_json["authorities"][authorities[target]]["transactions"];
 
-  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(target_addr, 32));
+  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(target_addr));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
@@ -106,7 +107,11 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
       i
     );
   }
+}
 
+void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size) {
+  UW_ASSERT(is_client);
+  (*client)->send(rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size));
 }
 
 } // namespace autobahn

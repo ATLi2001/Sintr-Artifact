@@ -6,8 +6,8 @@ mod ffi {
     extern "Rust" {
         type AutobahnClient;
 
-        fn new_client(target: String, size: usize) -> Box<AutobahnClient>;
-        fn send(self: &mut AutobahnClient, buf: Vec<u8>) -> Result<()>;
+        fn new_client(target: String) -> Box<AutobahnClient>;
+        fn send(self: &mut AutobahnClient, buf: &[u8]) -> Result<()>;
 
         fn start_server(
             handle: i64,

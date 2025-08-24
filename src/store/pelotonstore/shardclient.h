@@ -85,6 +85,10 @@ class ShardClient : public TransportReceiver {
   void SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_idx);
 
   ::autobahn::AutobahnAgent* autobahn_agent;
+  void SendMessageToGroup_viaAutobahn(proto::Request& msg, int group_idx);
+
+  // common helper between viaBFTSMART and viaAutobahn
+  void SendMessageToGroup_via_Helper(const ::google::protobuf::Message &msg, int group_idx);
 
   uint64_t start_time;
   uint64_t total_elapsed = 0 ;

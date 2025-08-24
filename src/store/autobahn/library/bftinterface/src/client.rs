@@ -8,27 +8,23 @@ use tokio::runtime::Runtime;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 pub struct AutobahnClient {
-    // specifies the bit size of transactions
-    size: usize,
     // only connects to a single node
     transport: Framed<TcpStream, LengthDelimitedCodec>,
 }
 
 impl AutobahnClient {
-    fn new(target: SocketAddr, size: usize) -> Self {
+    fn new(target: SocketAddr) -> Self {
         let rt = Runtime::new().unwrap();
         let stream = rt
             .block_on(TcpStream::connect(target))
             .expect(&format!("failed to connect to {}", target));
         let transport = Framed::new(stream, LengthDelimitedCodec::new());
-        Self { size, transport }
+        Self { transport }
     }
 
-    pub fn send(&mut self, buf: Vec<u8>) -> Result<()> {
-        let mut tx = BytesMut::with_capacity(self.size);
-        tx.put_u8(1u8); // Standard txs start with 1.
+    pub fn send(&mut self, buf: &[u8]) -> Result<()> {
+        let mut tx = BytesMut::with_capacity(buf.len());
         tx.put_slice(&buf);
-        tx.resize(self.size, 0u8); //Truncate any bits past size
         let bytes = tx.split().freeze(); //split() moves byte content from tx to bytes (i.e. avoids copy). freeze() makes it const so it can be shared. (bytes can now be used/sent async)
 
         let rt = Runtime::new().unwrap();
@@ -39,7 +35,7 @@ impl AutobahnClient {
 }
 
 // Exposed constructor
-pub fn new_client(target: String, size: usize) -> Box<AutobahnClient> {
+pub fn new_client(target: String) -> Box<AutobahnClient> {
     let target = target.parse().unwrap();
-    Box::new(AutobahnClient::new(target, size))
+    Box::new(AutobahnClient::new(target))
 }

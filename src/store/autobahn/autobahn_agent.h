@@ -29,7 +29,6 @@
 // lib.rs.h cpp rust interface for autobahn
 #include "bftinterface/src/lib.rs.h"
 #include "lib/transport.h"
-#include "lib/message.h"
 
 namespace autobahn {
 
@@ -37,6 +36,7 @@ class AutobahnAgent{
 public:
   AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, const std::string &config_path);
 
+  void SendMessageToGroup(int group_idx, void *buffer, size_t size);
 
 private:
   void CreateClientInterface();

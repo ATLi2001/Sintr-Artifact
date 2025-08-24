@@ -98,10 +98,24 @@ void ShardClient::SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_
   msg.set_client_id(client_id);
   Debug("sending to group with client id %d", client_id);
 
-  // Serialize message
-  string data;
+  SendMessageToGroup_via_Helper(msg, group_idx);
+}
+
+// ================================
+// ==== Autobahn INTERFACE ====
+// ================================
+
+void ShardClient::SendMessageToGroup_viaAutobahn(proto::Request& msg, int group_idx) {
+  msg.set_client_id(client_id);
+  Debug("sending to group with client id %d", client_id);
+
+  SendMessageToGroup_via_Helper(msg, group_idx);
+}
+
+void ShardClient::SendMessageToGroup_via_Helper(const ::google::protobuf::Message &msg, int group_idx) {
+  std::string data;
   UW_ASSERT(msg.SerializeToString(&data));
-  string type = msg.GetTypeName();
+  std::string type = msg.GetTypeName();
   size_t typeLen = type.length();
   size_t dataLen = data.length();
   size_t totalLen = (typeLen + sizeof(typeLen) +
@@ -137,11 +151,19 @@ void ShardClient::SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_
   memcpy(ptr, data.c_str(), dataLen);
   ptr += dataLen;
   Debug("sending the buffer to the group!");
-  this->bftsmartagent->send_to_group(this, group_idx, buf, totalLen);
+
+  if (SMR_mode == 2) {
+    this->bftsmartagent->send_to_group(this, group_idx, buf, totalLen);
+  }
+  else if (SMR_mode == 3) {
+    this->autobahn_agent->SendMessageToGroup(group_idx, buf, totalLen);
+  }
+  else {
+    Panic("Unexpected SMR mode");
+  }
+
   Debug("finished sending the buffer to the group!");
 }
-
-
 
 // ================================
 // ==== SHARD CLIENT INTERFACE ====
@@ -205,6 +227,9 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
     if(SMR_mode == 2){
       SendMessageToGroup_viaBFTSMART(request, group_idx);
     }
+    else if (SMR_mode == 3) {
+      SendMessageToGroup_viaAutobahn(request, group_idx);
+    }
     else{
       transport->SendMessageToGroup(this, group_idx, request);
     }
@@ -255,6 +280,9 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
     if(SMR_mode == 2){
       SendMessageToGroup_viaBFTSMART(request, group_idx);
     }
+    else if (SMR_mode == 3) {
+      SendMessageToGroup_viaAutobahn(request, group_idx);
+    }
     else{
       transport->SendMessageToGroup(this, group_idx, request);
     }
@@ -294,6 +322,9 @@ void ShardClient::Abort(uint64_t client_id, uint64_t client_seq_num) {
   else{
     if(SMR_mode == 2){
       SendMessageToGroup_viaBFTSMART(request, group_idx);
+    }
+    else if (SMR_mode == 3) {
+      SendMessageToGroup_viaAutobahn(request, group_idx);
     }
     else{
       transport->SendMessageToGroup(this, group_idx, request);
