@@ -21,4 +21,4 @@ LIB-peloton := $(LIB-adr-p) $(LIB-binder-p) $(LIB-catalog-p) $(LIB-common-p) $(L
 LIB-peloton-store := $(LIB-peloton) $(o)common.o $(o)replica.o $(o)server.o $(o)table_store.o\
 	$(o)pbft-proto.o $(o)server-proto.o $(o)app.o $(o)bftsmartagent.o $(o)shardclient.o \
 	$(o)client.o $(LIB-crypto) $(LIB-peloton-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
-	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-peloton-interface) $(LIB-peloton)
+	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-peloton-interface) $(LIB-peloton) $(LIB-autobahn)

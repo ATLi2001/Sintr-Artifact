@@ -36,7 +36,8 @@ static bool ONLY_WAIT_FOR_LEADER = true;
 ShardClient::ShardClient(const transport::Configuration& config, Transport *transport,
     uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
     bool signMessages, bool validateProofs, KeyManager *keyManager, Stats* stats, 
-    bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path) :
+    bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path,
+    const std::string& autobahn_config_path) :
     config(config), transport(transport), group_idx(group_idx), signMessages(signMessages), validateProofs(validateProofs),
     keyManager(keyManager), stats(stats), reqId(0UL), client_id(client_id),
     fake_SMR(fake_SMR), SMR_mode(SMR_mode)  {
@@ -67,6 +68,10 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
     connect.set_client_id(client_id);
     transport->SendMessageToGroup(this, group_idx, connect);
     Debug("Finished sending connect messages!");
+  }
+  else if (SMR_mode == 3) {
+    Debug("created autobahn agent in shard client!");
+    autobahn_agent = new ::autobahn::AutobahnAgent(client_id, true, this, autobahn_config_path);
   }
 
 }

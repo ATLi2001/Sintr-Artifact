@@ -414,6 +414,8 @@ DEFINE_bool(pequin_disable_prepare_visibility, false, "do not make prepared writ
 //Baseline settings
 DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart configurations");
 
+DEFINE_string(autobahn_config_dir, "", "path to directory containing autobahn configurations");
+
 DEFINE_uint64(pbft_esig_batch, 1, "signature batch size"
 		" sig batch size (for PBFT decision phase)");
 DEFINE_uint64(pbft_esig_batch_timeout, 10, "signature batch timeout ms"
@@ -424,7 +426,7 @@ DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
 
 //PG-SMR / Peloton-SMR settings.
 DEFINE_bool(pg_fake_SMR, true, "Indicate if server is asynchronous or not. If so, will return leader's results for consistency");
-DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart");
+DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart, 3 = Autobahn");
 DEFINE_uint64(hs_dummy_to, 5, "hotstuff dummy timeout ms (to fill pipeline)");
 
 const std::string occ_type_args[] = {
@@ -1101,8 +1103,8 @@ int main(int argc, char **argv) {
                                        FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx, protocol_cpu, FLAGS_local_config, FLAGS_num_shards, tport, 
-                                       FLAGS_pg_fake_SMR, FLAGS_hs_dummy_to, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
-    
+                                       FLAGS_pg_fake_SMR, FLAGS_hs_dummy_to, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir, FLAGS_autobahn_config_dir);
+
       break;
   }
 

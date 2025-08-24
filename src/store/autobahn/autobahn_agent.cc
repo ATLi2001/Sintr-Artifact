@@ -56,7 +56,7 @@ void AutobahnAgent::CreateClientInterface() {
   size_t target = id % authorities.size();
   std::string target_addr = committee_json["authorities"][authorities[target]]["transactions"];
 
-  client = std::make_unique<rust::Box<Client>>(new_client(target_addr, 32));
+  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(target_addr, 32));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {

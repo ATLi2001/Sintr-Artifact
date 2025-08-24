@@ -51,6 +51,9 @@
 
 #include "store/pelotonstore/bftsmartagent.h"
 
+#include "store/autobahn/autobahn_agent.h"
+
+
 namespace pelotonstore {
 
 static bool TEST_WITHOUT_HOTSTUFF = true;
@@ -60,7 +63,8 @@ public:
   Replica(const transport::Configuration &config, KeyManager *keyManager,
     App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
           uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuffpg_cpu, bool local_config, int numShards, Transport *transport,
-          bool fake_SMR = false, int dummyTO = 100, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
+          bool fake_SMR = false, int dummyTO = 100, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "",
+          const std::string& autobahn_config_dir = "");
   ~Replica();
 
   // Message handlers.
@@ -83,7 +87,7 @@ public:
     std::unordered_map<uint64_t, const TransportAddress*> clientCache;
     std::unordered_map<uint64_t, std::vector<proto::Request>> reqBuffer;
 
-
+  autobahn::AutobahnAgent* autobahn_agent;
 
   std::unordered_set<std::string> requests_dup;
 

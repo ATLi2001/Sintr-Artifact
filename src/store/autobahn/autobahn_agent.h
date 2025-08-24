@@ -47,7 +47,7 @@ private:
   TransportReceiver *receiver;
   std::string config_path;
 
-  std::unique_ptr<rust::Box<Client>> client;
+  std::unique_ptr<rust::Box<AutobahnClient>> client;
 };
 
 } // namespace autobahn

@@ -35,7 +35,8 @@ using namespace std;
 
 Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
   uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuffpg_cpu, bool local_config, 
-  int numShards, Transport *transport, bool fake_SMR, int dummyTO, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path)
+  int numShards, Transport *transport, bool fake_SMR, int dummyTO, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path,
+  const std::string& autobahn_config_dir)
     : config(config), keyManager(keyManager), app(app), groupIdx(groupIdx), idx(idx),
       id(groupIdx * config.n + idx), signMessages(signMessages), maxBatchSize(maxBatchSize), batchTimeoutMS(batchTimeoutMS), EbatchSize(EbatchSize), EbatchTimeoutMS(EbatchTimeoutMS), 
       primaryCoordinator(primaryCoordinator), requestTx(requestTx), numShards(numShards), transport(transport), 
@@ -45,7 +46,7 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
   Notice("Param: SignMessages: %d. EbatchSize: %d. EbatchTimeout: %d ms", signMessages, EbatchSize, EbatchTimeoutMS);
 
   Notice("SMR_mode: %d", SMR_mode);
-  UW_ASSERT(SMR_mode < 3);
+  UW_ASSERT(SMR_mode < 4);
 
   if(SMR_mode == 1){
     hotstuffpg_interface = new hotstuffstore::IndicusInterface(groupIdx, idx, hotstuffpg_cpu, local_config);
@@ -53,6 +54,10 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
   else if(SMR_mode == 2){
     Notice("bftsmart config path: %s", PG_BFTSMART_config_path.c_str());
     bftsmartagent = new pelotonstore::BftSmartAgent(false, this, idx, groupIdx, PG_BFTSMART_config_path);
+  }
+  else if (SMR_mode == 3) {
+    Notice("autobahn config dir: %s", autobahn_config_dir.c_str());
+    autobahn_agent = new ::autobahn::AutobahnAgent(idx, false, this, autobahn_config_dir);
   }
 
   transport->Register(this, config, groupIdx, idx);
@@ -98,6 +103,9 @@ Replica::~Replica() {
   }
   else if(SMR_mode == 2){
     delete bftsmartagent;
+  }
+  else if (SMR_mode == 3) {
+    delete autobahn_agent;
   }
 }
 

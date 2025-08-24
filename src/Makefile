@@ -217,6 +217,8 @@ include store/postgresstore/Rules.mk
 include store/cockroachdb/Rules.mk
 include store/pg_SMRstore/Rules.mk
 
+include store/autobahn/Rules.mk
+
 include store/pelotonstore/peloton/Rules.mk
 include store/pelotonstore/Rules.mk
 
@@ -225,8 +227,6 @@ include store/pequinstore/Rules.mk
 
 include store/sintrstore/query-engine/Rules.mk
 include store/sintrstore/Rules.mk
-
-include store/autobahn/Rules.mk
 
 include store/Rules.mk
 include store/benchmark/Rules.mk

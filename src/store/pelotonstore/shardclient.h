@@ -43,6 +43,7 @@
 #include <sys/time.h>
 
 #include "store/pelotonstore/bftsmartagent.h"
+#include "store/autobahn/autobahn_agent.h"
 
 #include <map>
 #include <string>
@@ -67,7 +68,8 @@ class ShardClient : public TransportReceiver {
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
       bool signMessages, bool validateProofs,
       KeyManager *keyManager, Stats* stats,
-      bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
+      bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "",
+      const std::string& autobahn_config_path = "");
   ~ShardClient();
 
   void ReceiveMessage(const TransportAddress &remote, const std::string &type, const std::string &data, void *meta_data);
@@ -81,6 +83,8 @@ class ShardClient : public TransportReceiver {
  private:
   pelotonstore::BftSmartAgent* bftsmartagent;
   void SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_idx);
+
+  ::autobahn::AutobahnAgent* autobahn_agent;
 
   uint64_t start_time;
   uint64_t total_elapsed = 0 ;

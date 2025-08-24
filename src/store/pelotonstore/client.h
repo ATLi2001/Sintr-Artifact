@@ -56,7 +56,8 @@ class Client : public ::Client {
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
       bool validateProofs, KeyManager *keyManager,
-      TrueTime timeserver = TrueTime(0,0), bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "");
+      TrueTime timeserver = TrueTime(0,0), bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "",
+      const std::string &autobahn_config_dir = "");
   ~Client();
 
   // Begin a transaction.
@@ -122,6 +123,7 @@ class Client : public ::Client {
   uint64_t SMR_mode; //Control whether to run without replication (0), with Hotstuff (1) or BFTSmart (2)
   const std::string& PG_BFTSMART_config_path; //Path for BFTSmart (if in use)
 
+  const std::string& autobahn_config_dir;
 
   /* Debug State */
   std::unordered_map<std::string, uint32_t> statInts;

@@ -315,13 +315,15 @@ DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
 
 DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart configurations");
 
+DEFINE_string(autobahn_config_dir, "", "path to directory containing autobahn configurations");
+
 DEFINE_bool(indicus_parallel_CCC, true, "sort read/write set for parallel CCC locking at server");
 
 DEFINE_bool(indicus_hyper_threading, true, "use hyperthreading");
 
 //PG-SM / PELOTON-SMR
 DEFINE_bool(pg_fake_SMR, true, "Indicate if server is asynchronous or not. If so, will return leader's results for consistency");
-DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart");
+DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart, 3 = Autobahn");
 
 //Indicus failure handling and injection
 DEFINE_bool(indicus_no_fallback, false, "turn off fallback protocol");
@@ -1944,7 +1946,8 @@ int main(int argc, char **argv) {
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
                                        keyManager,
-																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
+																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir,
+                                       FLAGS_autobahn_config_dir);
         break;
     }
 
