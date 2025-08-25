@@ -26,12 +26,17 @@
 
 #include "autobahn_callback.h"
 #include <iostream>
+#include <string>
 
 namespace autobahn {
 
 void autobahn_callback(int64_t handle, rust::String message) {
   // Implementation for the callback
   std::cout << "Received message: " << message << " for handle: " << handle << std::endl;
+}
+
+void debug_via_cpp(rust::Str message) {
+  std::cerr << "Debug message: " << message << std::endl;
 }
 
 } // namespace autobahn

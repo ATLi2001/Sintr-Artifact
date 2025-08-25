@@ -48,6 +48,8 @@ private:
   std::string config_path;
 
   std::unique_ptr<rust::Box<AutobahnClient>> client;
+  std::unique_ptr<rust::Box<AutobahnServer>> primary;
+  std::vector<std::unique_ptr<rust::Box<AutobahnServer>>> workers;
 };
 
 } // namespace autobahn

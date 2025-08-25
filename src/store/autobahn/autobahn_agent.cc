@@ -26,6 +26,7 @@
 
 #include "store/autobahn/autobahn_agent.h"
 #include "lib/assert.h"
+#include "lib/message.h"
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -50,17 +51,26 @@ void AutobahnAgent::CreateClientInterface() {
   json committee_json = json::parse(f);
 
   std::vector<std::string> authorities;
+  std::vector<size_t> num_workers_per_authority;
   for (auto& [key, value] : committee_json["authorities"].items()) {
     authorities.push_back(key);
+    num_workers_per_authority.push_back(value["workers"].size());
+    Debug("Authority: %s", key.c_str());
   }
 
-  size_t target = id % authorities.size();
-  std::string target_addr = committee_json["authorities"][authorities[target]]["transactions"];
+  // distribute clients evenly across authorities
+  size_t target_authority = id % authorities.size();
+  // and also evenly within each authority
+  size_t target_worker = (id / authorities.size()) % num_workers_per_authority[target_authority];
+
+  std::string target_worker_name = std::to_string(target_worker);
+  std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
 
   client = std::make_unique<rust::Box<AutobahnClient>>(new_client(target_addr));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
+  Debug("Starting autobahn server interface");
   std::filesystem::path committee_json_path = config_path;
   committee_json_path /= ".committee.json";
   std::ifstream f1(committee_json_path);
@@ -82,7 +92,8 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   primary_db_path /= db_name;
 
   // start primary
-  start_server(
+  primary = std::make_unique<rust::Box<AutobahnServer>>(new_server());
+  (*primary)->start_server(
     handle,
     node_json_path.string(),
     committee_json_path.string(),
@@ -92,12 +103,15 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
     0 // ignored for primary
   );
 
+  Debug("Finished starting primary");
+
   // start workers
   for (size_t i = 0; i < committee_json["authorities"][node_json["name"]]["workers"].size(); ++i) {
     std::string worker_db_name = ".db-" + std::to_string(id) + "-" + std::to_string(i);
     std::filesystem::path worker_db_path = config_path;
     worker_db_path /= worker_db_name;
-    start_server(
+    workers.emplace_back(std::make_unique<rust::Box<AutobahnServer>>(new_server()));
+    (*workers[i])->start_server(
       handle,
       node_json_path.string(),
       committee_json_path.string(),

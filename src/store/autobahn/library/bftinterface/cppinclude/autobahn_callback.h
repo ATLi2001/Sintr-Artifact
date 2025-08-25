@@ -33,6 +33,8 @@ namespace autobahn {
 
 void autobahn_callback(int64_t handle, rust::String message);
 
+void debug_via_cpp(rust::Str message);
+
 } // namespace autobahn
 
 #endif

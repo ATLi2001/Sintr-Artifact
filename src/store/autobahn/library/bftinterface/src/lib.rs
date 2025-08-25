@@ -5,11 +5,13 @@ mod server;
 mod ffi {
     extern "Rust" {
         type AutobahnClient;
-
         fn new_client(target: String) -> Box<AutobahnClient>;
         fn send(self: &mut AutobahnClient, buf: &[u8]) -> Result<()>;
 
+        type AutobahnServer;
+        fn new_server() -> Box<AutobahnServer>;
         fn start_server(
+            self: &AutobahnServer,
             handle: i64,
             key_file: String,
             committee_file: String,
@@ -25,8 +27,10 @@ mod ffi {
 
         #[namespace = "autobahn"]
         fn autobahn_callback(handle: i64, message: String);
+        #[namespace = "autobahn"]
+        fn debug_via_cpp(message: &str);
     }
 }
 
 pub use crate::client::{new_client, AutobahnClient};
-pub use crate::server::start_server;
+pub use crate::server::{new_server, AutobahnServer};
