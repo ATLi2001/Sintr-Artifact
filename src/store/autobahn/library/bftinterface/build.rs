@@ -2,6 +2,7 @@ fn main() {
     cxx_build::bridge("src/lib.rs")
         .file("cppinclude/autobahn_callback.cc")
         .include("cppinclude")
+        .include("../../../..") // include the root directory src/ so we can include lib/...
         .flag_if_supported("-std=c++17")
         .compile("bftinterface");
 

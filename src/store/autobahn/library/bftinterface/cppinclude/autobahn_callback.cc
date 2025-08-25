@@ -25,6 +25,8 @@
  **********************************************************************/
 
 #include "autobahn_callback.h"
+#include "lib/transport.h"
+#include "lib/repltransport.h"
 #include <iostream>
 #include <string>
 
@@ -33,10 +35,13 @@ namespace autobahn {
 void autobahn_callback(int64_t handle, rust::String message) {
   // Implementation for the callback
   std::cout << "Received message: " << message << " for handle: " << handle << std::endl;
+
+  // TransportReceiver* replica = reinterpret_cast<TransportReceiver*>(handle);
+  // ReplTransportAddress* repl_addr = new ReplTransportAddress("client", "");
 }
 
 void debug_via_cpp(rust::Str message) {
-  std::cerr << "Debug message: " << message << std::endl;
+  std::cout << "Debug message: " << message << std::endl;
 }
 
 } // namespace autobahn
