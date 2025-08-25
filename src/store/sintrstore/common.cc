@@ -1736,8 +1736,7 @@ void asyncValidateTransactionWriteCB(const proto::CommittedProof &proof,
 }
 
 bool isPolicyKey(const std::string& s) {
-  std::regex pattern("^p\\d+$");
-  return std::regex_match(s, pattern);
+  return s[0] == 'p' && s[1] == '#';
 }
 
 bool ValidateTransactionWrite(const proto::CommittedProof &proof,

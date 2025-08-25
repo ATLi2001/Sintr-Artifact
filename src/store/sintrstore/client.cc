@@ -272,7 +272,7 @@ void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *poli
   if (IsPolicyChangeTxn(protoTxnState)) {
     // policy change transaction could require separate handling
     const Policy *policy;
-    UW_ASSERT(policyCache.Get("p0", policy));
+    UW_ASSERT(policyCache.Get("p#0", policy));
     policyClient->AddPolicy(policy);
   } 
   else {
@@ -421,7 +421,7 @@ void Client::Put(const std::string &key, const std::string &value,
         bool exists = policyCache.Get(policyIdFunction(key, value), policy);
         if (!exists) {
           // if not found, use default policy for now
-          UW_ASSERT(policyCache.Get("p0", policy));
+          UW_ASSERT(policyCache.Get("p#0", policy));
         }
         Debug("Sending policy update for put using c2client in regular transaction");
         c2client->HandlePolicyUpdate(policy);

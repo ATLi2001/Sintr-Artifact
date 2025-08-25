@@ -46,16 +46,16 @@ typedef std::function<std::string(const std::string &, const std::string &)> pol
 inline policy_id_function GetPolicyIdFunction(const std::string &policy_function_name) {
   if (policy_function_name == "basic_id") {
     return [](const std::string &key, const std::string &value) -> std::string {
-      return "p0";
+      return "p#0";
     };
   }
   else if (policy_function_name == "grouped") {
     return [](const std::string &key, const std::string &value) -> std::string {
       switch (key.c_str()[0]) {
         case tpcc::Tables::DISTRICT:
-          return "p1";
+          return "p#1";
         default:
-          return "p0";
+          return "p#0";
       }
     };
   }
@@ -68,11 +68,11 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
   //     // // if not an encoded key, then no need to decode
   //     // size_t pos = key.find(unique_delimiter);
   //     // if (pos == std::string::npos) {
-  //     //   return "p4";
+  //     //   return "p#4";
   //     // }
   //     // // table col name will only have one delimiter
   //     // if (key.find(unique_delimiter, pos + unique_delimiter.length()) == std::string::npos) {
-  //     //   return "p4";
+  //     //   return "p#4";
   //     // }
   //     Debug("GetPolicyIdFunction: key %s", key.c_str());
   //     DecodeTableRow(key, table_name, primary_key_column_values);
