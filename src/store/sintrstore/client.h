@@ -47,11 +47,12 @@
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "store/common/common-proto.pb.h"
 #include "store/sintrstore/client2client.h"
-#include "store/sintrstore/endorsement_client.h"
+#include "store/common/sintring/endorsement_client.h"
 #include "store/common/policy/policy-proto.pb.h"
 #include "store/common/policy/policy_parse_client.h"
 #include "store/common/policy/policy_function.h"
 #include "store/common/policy/client_selector.h"
+#include "store/common/policy/policy_cache.h"
 #include <sys/time.h>
 #include "store/common/stats.h"
 #include <unistd.h>
@@ -424,6 +425,7 @@ class Client : public ::Client {
   EndorsementClient *endorseClient;
   PolicyParseClient *policyParseClient;
   policy_id_function policyIdFunction;
+  PolicyCache policyCache;
   Partitioner *part;
   bool syncCommit;
   const bool pingReplicas;

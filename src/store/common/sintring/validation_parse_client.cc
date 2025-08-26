@@ -24,7 +24,7 @@
  *
  **********************************************************************/
 
-#include "store/sintrstore/validation_parse_client.h"
+#include "store/common/sintring/validation_parse_client.h"
 #include "store/benchmark/async/tpcc/validation/tpcc_transaction.h"
 #include "store/benchmark/async/tpcc/validation/delivery.h"
 #include "store/benchmark/async/tpcc/validation/new_order.h"

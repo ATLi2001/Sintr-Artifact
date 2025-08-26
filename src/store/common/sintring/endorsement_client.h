@@ -24,38 +24,35 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_ENDORSEMENT_CLIENT_H_
-#define _SINTR_ENDORSEMENT_CLIENT_H_
+#ifndef _ENDORSEMENT_CLIENT_H_
+#define _ENDORSEMENT_CLIENT_H_
 
 #include "store/common/policy/policy_client.h"
-#include "store/common/policy/policy_function.h"
-#include "store/sintrstore/sintr-proto.pb.h"
-#include "lib/keymanager.h"
 
 #include <vector>
 #include <set>
 #include <map>
 #include <shared_mutex>
+#include <google/protobuf/message.h>
 
 #include "tbb/concurrent_hash_map.h"
 
-namespace sintrstore {
 
 // this class keeps state for an ongoing transaction endorsement
+// now as a generic not store specific class, endorsements are treated as generic protobuf messages
+// user of this class is responsible for casting appropriately on the outside
 class EndorsementClient {
  public:
-  EndorsementClient(uint64_t client_id, KeyManager *keyManager, policy_id_function policyIdFunction);
+  EndorsementClient(uint64_t client_id);
   ~EndorsementClient();
 
-  const std::vector<proto::SignedMessage> &GetEndorsements() const;
-  // release transfers ownership of endorsements to caller
-  std::vector<proto::SignedMessage> *ReleaseEndorsements();
+  const std::vector<std::shared_ptr<::google::protobuf::Message>> &GetEndorsements() const;
   const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
   void SetEndorsementsUsed();
   void SetExpectedTxnDigest(const std::string &expectedTxnDigest);
-  void DebugSetExpectedTxn(const proto::Transaction &expectedTxn);
-  void DebugCheck(const proto::Transaction &txn);
+  void DebugSetExpectedTxn(std::unique_ptr<::google::protobuf::Message> expectedTxn);
+  void DebugCheck(std::unique_ptr<::google::protobuf::Message> txn);
   // update current policy by merging with passed in policy
   void UpdateRequirement(const Policy *policy);
   // what additional client ids are needed so that this policy is satisfied by potentialEndorsements
@@ -64,45 +61,31 @@ class EndorsementClient {
   // add validation from peer client
   // this can be called from a different thread than the rest of the functions
   void AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest, 
-    const proto::SignedMessage &signedValTxnDigest);
+    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest);
   // in optimistic case do not check if endorsement is correct, just add it
-  void AddValidationOptimistic(const uint64_t peer_client_id, const proto::SignedMessage &signedValTxnDigest);
+  void AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest);
   // check if the validation is correct, do not add it as an endorsement
   // this is used in optimistic case where endorsement is already added and we need to later check if correct
   void CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest);
   // check if the policy is satisfied by actual endorsements collected so far
   bool IsSatisfied();
-
-  // return true if policy exists for key, false otherwise
-  // given a reference to a policy pointer, update it with the policy in the cache
-  // does not allocate a new policy object
-  bool GetPolicyFromCache(const std::string &policyId, const Policy *&policy) const;
-  // update the mapping from policy id to policy; takes ownership of policy (policy should be allocated on heap)
-  void UpdatePolicyCache(std::string policyId, Policy *policy);
-  // initialize the policy cache with the given map; takes ownership of policies (policies should be allocated on heap)
-  void InitializePolicyCache(const std::map<std::string, Policy *> &policies);
+  // function passed in by specific store defining its own debug check function
+  void SetDebugCheckFunction(std::function<void(const ::google::protobuf::Message *, const ::google::protobuf::Message *)> func);
 
  private:
-  void DebugCheck(const proto::Transaction &expectedTxn, const proto::Transaction &txn);
-
   // this client information
   const uint64_t client_id;
-  KeyManager *keyManager;
-
-  // policy function
-  policy_id_function policyIdFunction;
-
-  // client side cache of policy store
-  std::map<std::string, Policy *> policyCache;
-  
   // current sequence number for transaction that is ongoing
   uint64_t client_seq_num;
-  
+
+  std::function<void(const ::google::protobuf::Message *, const ::google::protobuf::Message *)> DebugCheckFunction;
+
   // in the optimistic case, the endorsement check state may need to stay alive even after current transaction commits
   // this is because the checking of the validity of the endorsement is off the critical path
   // so next transaction may start before that check completes
   struct EndorsementCheckState {
-    EndorsementCheckState() : policyClient(new PolicyClient()), endorsements(new std::vector<proto::SignedMessage>()) {}
+    EndorsementCheckState() : policyClient(new PolicyClient()),
+      endorsements(new std::vector<std::shared_ptr<::google::protobuf::Message>>()) {}
     ~EndorsementCheckState() {
       delete policyClient;
       if (endorsements != nullptr) {
@@ -116,20 +99,20 @@ class EndorsementClient {
     // expected validation transaction digest
     std::string expectedTxnDigest;
     // debug by checking entire validation txn
-    proto::Transaction expectedTxn;
+    std::unique_ptr<::google::protobuf::Message> expectedTxn;
     // policy client tracks the policy which must be satisfied
     PolicyClient *policyClient;
     // which peer clients have endorsed
     std::set<uint64_t> client_ids_received;
     // confirmed endorsement signatures to send to server
-    std::vector<proto::SignedMessage> *endorsements;
+    std::vector<std::shared_ptr<::google::protobuf::Message>> *endorsements;
     // also maintain pending endorsements if endorsement comes back before expectedValTxnDigest is set
     // map from client id to (digest, signed message)
-    std::map<uint64_t, std::pair<std::string, proto::SignedMessage>> pendingEndorsements;
+    std::map<uint64_t, std::pair<std::string, std::shared_ptr<::google::protobuf::Message>>> pendingEndorsements;
     // for the optimistic case we don't actually need the endorsement, just the digest
     std::map<uint64_t, std::string> pendingDigests;
     // debug pending transactions
-    std::vector<proto::Transaction> pendingTxns;
+    std::vector<std::unique_ptr<::google::protobuf::Message>> pendingTxns;
 
     // deletion of an endorsement check state should happen only after:
     // 1. endorsements have been checked
@@ -152,6 +135,4 @@ class EndorsementClient {
   std::set<uint64_t> blacklistedClients;
 };
 
-} // namespace sintrstore
-
-#endif /* _SINTR_ENDORSEMENT_CLIENT_H_ */
+#endif /* _ENDORSEMENT_CLIENT_H_ */

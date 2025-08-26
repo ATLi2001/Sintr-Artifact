@@ -36,7 +36,7 @@
 #include "store/sintrstore/common.h"
 #include "store/sintrstore/common2.h"
 #include "store/common/policy/policy.h"
-#include "store/sintrstore/estimate_policy.h"
+#include "store/common/sintring/estimate_policy.h"
 #include <sys/time.h>
 #include <algorithm>
 
@@ -101,8 +101,10 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
   std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(params.sintr_params.policyConfigPath);
 
-  endorseClient = new EndorsementClient(client_id, keyManager, policyIdFunction);
-  endorseClient->InitializePolicyCache(policies);
+  endorseClient = new EndorsementClient(client_id);
+  endorseClient->SetDebugCheckFunction(DebugCheck);
+  UW_ASSERT(policyCache.IsEmpty());
+  policyCache.Initialize(std::move(policies));
 
   // create client for other clients
   // right now group is always 0, maybe configure later
@@ -270,12 +272,12 @@ void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *poli
   if (IsPolicyChangeTxn(protoTxnState)) {
     // policy change transaction could require separate handling
     const Policy *policy;
-    UW_ASSERT(endorseClient->GetPolicyFromCache("p0", policy));
+    UW_ASSERT(policyCache.Get("p0", policy));
     policyClient->AddPolicy(policy);
   } 
   else {
     EstimatePolicy est_policy_obj;
-    est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, endorseClient);
+    est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
   }
 }
 
@@ -326,7 +328,7 @@ void Client::Get(const std::string &key, get_callback gcb,
           Debug("PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %lu",client_id, client_seq_num, BytesToHex(key, 16).c_str(), policyMsg.policy_id());
         }
         Policy *policy = policyParseClient->Parse(policyMsg.policy());
-        endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+        policyCache.Put(policyMsg.policy_id(), std::move(policy));
       }
       if (hasDep) {
         *txn.add_deps() = dep;
@@ -380,7 +382,7 @@ void Client::Put(const std::string &key, const std::string &value,
     // Contact the appropriate shard to set the value.
     if(txn.policy_type() == proto::Transaction::POLICY_ID_POLICY) {
       // look in cache for policy
-      bool exists = endorseClient->GetPolicyFromCache(key, policy);
+      bool exists = policyCache.Get(key, policy);
       if (!exists) {
         // if not found, that means we are trying to write to a policy that doesn't exist
         Panic("Attempting to write to policy ID %lu when policy ID doesn't exist", key);
@@ -416,10 +418,10 @@ void Client::Put(const std::string &key, const std::string &value,
     } else {
       if (!params.sintr_params.ignorePolicyUpdate) {
         // look in cache for policy
-        bool exists = endorseClient->GetPolicyFromCache(policyIdFunction(key, value), policy);
+        bool exists = policyCache.Get(policyIdFunction(key, value), policy);
         if (!exists) {
           // if not found, use default policy for now
-          endorseClient->GetPolicyFromCache("p0", policy);
+          UW_ASSERT(policyCache.Get("p0", policy));
         }
         Debug("Sending policy update for put using c2client in regular transaction");
         c2client->HandlePolicyUpdate(policy);
@@ -516,7 +518,7 @@ void Client::Write(std::string &write_statement, write_callback wcb,
             std::string policyId = policyIdFunction(key, "");
             //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
             const Policy *policy;
-            endorseClient->GetPolicyFromCache(policyId, policy);  
+            UW_ASSERT(policyCache.Get(policyId, policy));
             Debug("handle policy update for policy id %lu in write", policyId);
             c2client->HandlePolicyUpdate(policy);
           }
@@ -833,7 +835,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR key %s in GET",client_id, client_seq_num, BytesToHex(key, 16).c_str());
       Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+      policyCache.Put(policyMsg.policy_id(), std::move(policy));
     }
   }
   if (hasDep) {
@@ -1044,7 +1046,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id);
       Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      endorseClient->UpdatePolicyCache(policyMsg.policy_id(), policy);
+      policyCache.Put(policyMsg.policy_id(), std::move(policy));
     }
   }
 
@@ -1420,7 +1422,8 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck) {
-      endorseClient->DebugSetExpectedTxn(txn);
+      std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(txn);
+      endorseClient->DebugSetExpectedTxn(std::move(debug_txn));
     }
     endorseClient->SetExpectedTxnDigest(digest);
 
@@ -1484,11 +1487,8 @@ void Client::Phase1(PendingRequest *req) {
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
 
-  // use Release so we have ownership and can avoid copying
-  // const std::vector<proto::SignedMessage> &endorsements = endorseClient->GetEndorsements();
-  std::vector<proto::SignedMessage> *endorsements = endorseClient->ReleaseEndorsements();
-  endorseClient->SetEndorsementsUsed();
-  
+  const auto &endorsements = endorseClient->GetEndorsements();
+
   if(PROFILING_LAT){
     struct timespec ts_start;
     clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -1505,12 +1505,12 @@ void Client::Phase1(PendingRequest *req) {
   }
   */
 
-  if (endorsements->size() > 0) {
-    for (auto &endorsement : *endorsements) {
-      *txn.mutable_endorsements()->add_sig_msgs() = std::move(endorsement);
+  if (endorsements.size() > 0) {
+    for (auto &endorsement : endorsements) {
+      *txn.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
     }
   }
-  delete endorsements;
+  endorseClient->SetEndorsementsUsed();
 
   // copy into req
   req->txn = txn;

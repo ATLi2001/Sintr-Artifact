@@ -1,6 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2024 Daniel Lee <dhl93@cornell.edu>
+ * Copyright 2024 Austin Li <atl63@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -24,34 +24,11 @@
  *
  **********************************************************************/
 
-#ifndef _SINTR_POLICY_ESTIMATE_H
-#define _SINTR_POLICY_ESTIMATE_H
+#ifndef _UTIL_H_
+#define _UTIL_H_
 
-#include "lib/assert.h"
-#include "store/common/common-proto.pb.h"
-#include "store/common/frontend/validation_transaction.h"
-#include "store/common/policy/policy.h"
-#include "store/common/policy/policy_client.h"
-#include "store/sintrstore/endorsement_client.h"
+#include <string>
 
-namespace sintrstore {
+std::string BytesToHex(const std::string &bytes, size_t maxLength);
 
-// this class takes parses TxnState proto message and estimates the policy needed for the transaction
-class EstimatePolicy {
- public:
-  EstimatePolicy() {}
-  ~EstimatePolicy(){}
-  // takes in transaction state, policy, and endorsement client and returns an estimated policy
-  void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const EndorsementClient *endorseClient) const;
-
- private:
-  /*
-    As this is a prototype, we'll implement the tables-to-policy ID mapping function in the Sintr client code. 
-    Application developers should implement it in their own client code (e.g., tpcc) and then use it within Sintr.
-  */
-  std::string TableToPolicyID(const int &t, const std::string &txn_bench) const;
-};
-
-} // namespace sintrstore
-
-#endif
+#endif /* _UTIL_H_ */
