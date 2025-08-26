@@ -61,7 +61,7 @@ void ValidationClient::Begin(begin_callback bcb, begin_timeout_callback btcb,
   // }
 
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
   allValTxnStatesMap::accessor a;
@@ -85,7 +85,7 @@ void ValidationClient::Get(const std::string &key, get_callback gcb,
   };
 
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
   Debug("Validation GET[%lu:%lu] key %s", txn_client_id, txn_client_seq_num, BytesToHex(key,16).c_str());
@@ -178,7 +178,7 @@ void ValidationClient::Put(const std::string &key, const std::string &value,
     put_callback pcb, put_timeout_callback ptcb,
     uint32_t timeout) {
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
   Debug("Validation PUT[%lu:%lu] key %s value %s", txn_client_id, txn_client_seq_num, BytesToHex(key,16).c_str(), BytesToHex(value,16).c_str());
@@ -237,7 +237,7 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
   uint64_t point_target_group = 0;
 
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, txn_id)) {
@@ -336,7 +336,7 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
 
   UW_ASSERT(query.length() < ((uint64_t)1<<32));    
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);  
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, txn_id)) {
@@ -496,7 +496,7 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     uint32_t timeout) {
 
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
   allValTxnStatesMap::accessor a;
@@ -604,7 +604,7 @@ void ValidationClient::Abort(abort_callback acb, abort_timeout_callback atcb,
     uint32_t timeout) {
   // on abort, clean up stored data
   uint64_t txn_client_id, txn_client_seq_num;
-  GetThreadValTxnId(&txn_client_id, &txn_client_seq_num);
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
 
   allValTxnStatesMap::accessor a;
@@ -619,12 +619,6 @@ void ValidationClient::Abort(abort_callback acb, abort_timeout_callback atcb,
   allValTxnStates.erase(a);
   a.release();
   acb();
-}
-
-void ValidationClient::SetThreadValTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
-  threadValTxnIdsMap::accessor a;
-  threadValTxnIds.insert(a, std::this_thread::get_id());
-  a->second = std::make_pair(txn_client_id, txn_client_seq_num);
 }
 
 void ValidationClient::SetThreadValSQLInterpreter() {
@@ -1150,20 +1144,6 @@ bool ValidationClient::IsTxnParticipant(proto::Transaction *txn, int g) {
     }
   }
   return false;
-}
-
-void ValidationClient::GetThreadValTxnId(uint64_t *txn_client_id, uint64_t *txn_client_seq_num) {
-  threadValTxnIdsMap::const_accessor a;
-  if (!threadValTxnIds.find(a, std::this_thread::get_id())) {
-    Panic("Current thread does not validate transactions");
-  }
-
-  *txn_client_id = a->second.first;
-  *txn_client_seq_num = a->second.second;
-}
-
-std::string ValidationClient::ToTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
-  return std::to_string(txn_client_id) + "_" + std::to_string(txn_client_seq_num);
 }
 
 } // namespace sintrstore

@@ -32,6 +32,7 @@
 #include "store/common/promise.h"
 #include "store/common/timestamp.h"
 #include "store/common/partitioner.h"
+#include "store/common/sintring/validation_client_common.h"
 #include "store/sintrstore/sintr-proto.pb.h"
 #include "store/sintrstore/common.h"
 
@@ -57,7 +58,7 @@ typedef std::function<void(int, const std::string &)> validation_read_timeout_ca
 // will call Begin, Get, Put, Commit, Abort (these through SyncClient interface), 
 // SetThreadValTxnId, SetTxnTimestamp, GetCompletedTxn
 // on a different thread, client2client will call ProcessForwardReadResult upon receiving forwarded read results
-class ValidationClient : public ::Client {
+class ValidationClient : public ::Client, public ::ValidationClientCommon {
  public:
   ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, Partitioner *part,
     std::string &table_registry, Parameters params);
@@ -89,10 +90,6 @@ class ValidationClient : public ::Client {
 
   // Abort all Get(s) and Put(s) since Begin().
   virtual void Abort(abort_callback acb, abort_timeout_callback atcb, uint32_t timeout) override;
-
-  // Set the current transaction id (client that initiated and seq num)
-  // associate transaction id with current thread id
-  void SetThreadValTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num);
   
   // Associate the current validation thread id with an SQL Interpreter
   void SetThreadValSQLInterpreter();
@@ -257,9 +254,6 @@ class ValidationClient : public ::Client {
   void AddDep(AllValidationTxnState *allValTxnState, const proto::Dependency &dep);
   // is group g involved in txn
   bool IsTxnParticipant(proto::Transaction *txn, int g);
-  // read from threadValTxnIds and set the passed in pointers to the current threads txn id 
-  void GetThreadValTxnId(uint64_t *txn_client_id, uint64_t *txn_client_seq_num);
-  std::string ToTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
   // transport for timeout functionality
   Transport *transport;
@@ -275,10 +269,6 @@ class ValidationClient : public ::Client {
 
   std::string table_registry;
 
-  // map from thread id to (txn_client_id, txn_client_seq_num) tracks what each thread is doing
-  // TODO: Change to a regular map instead of a concurrent hash map because the keys are thread IDs
-  typedef tbb::concurrent_hash_map<std::thread::id, std::pair<uint64_t, uint64_t>> threadValTxnIdsMap;
-  threadValTxnIdsMap threadValTxnIds;
   // map from (txn_client_id, txn_client_seq_num) to all relevant validation txn state
   typedef tbb::concurrent_hash_map<std::string, AllValidationTxnState *> allValTxnStatesMap;
   allValTxnStatesMap allValTxnStates;
