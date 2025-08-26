@@ -34,7 +34,6 @@
 
 #include <iostream>
 #include <sstream>
-#define MAGIC 0x06121983
 
 namespace pelotonstore{
 class ShardClient;

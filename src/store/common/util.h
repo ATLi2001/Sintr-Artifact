@@ -29,6 +29,9 @@
 
 #include <string>
 
+#define MAGIC 0x06121983
+
+
 std::string BytesToHex(const std::string &bytes, size_t maxLength);
 
 #endif /* _UTIL_H_ */

@@ -95,8 +95,9 @@ LDFLAGS += -L/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server -ljvm
 #CFLAGS += -I store/pelotonstore/peloton
 
 # Autobahn
-CFLAGS += -Istore/autobahn/library/target/cxxbridge -Istore/autobahn/library/bftinterface/cppinclude
-LDFLAGS += -Lstore/autobahn/library/target/release -lbftinterface -lpthread -ldl
+AUTOBAHN_RUST_LIB_DIR = store/autobahn/library/target
+CFLAGS += -I$(AUTOBAHN_RUST_LIB_DIR)/cxxbridge -Istore/autobahn/library/bftinterface/cppinclude
+LDFLAGS += -L$(AUTOBAHN_RUST_LIB_DIR)/release -lbftinterface -lpthread -ldl
 
 # Additional flags
 PARANOID = 1

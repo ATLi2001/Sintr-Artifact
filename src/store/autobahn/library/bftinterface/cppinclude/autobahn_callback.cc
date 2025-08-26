@@ -27,21 +27,59 @@
 #include "autobahn_callback.h"
 #include "lib/transport.h"
 #include "lib/repltransport.h"
+#include "lib/assert.h"
+#include "lib/message.h"
+#include "store/common/util.h"
 #include <iostream>
 #include <string>
 
 namespace autobahn {
 
 void autobahn_callback(int64_t handle, rust::String message) {
-  // Implementation for the callback
-  std::cout << "Received message: " << message << " for handle: " << handle << std::endl;
+  Debug("autobahn callback for handle %ld with message %s", handle, message.c_str());
+  return;
 
   // TransportReceiver* replica = reinterpret_cast<TransportReceiver*>(handle);
   // ReplTransportAddress* repl_addr = new ReplTransportAddress("client", "");
+
+  // // parse like in tcptransport.cc
+  // size_t capacity = message.size();
+  // const char *req = message.c_str();
+
+  // const uint32_t *magic = reinterpret_cast<const uint32_t*>(req);
+  // UW_ASSERT(*magic == MAGIC);
+
+  // const size_t *sz = (const size_t*) (req + sizeof(*magic));
+
+  // size_t totalSize = *sz;
+  // UW_ASSERT(totalSize < 1073741826);
+  // UW_ASSERT(totalSize == capacity);
+
+  // const char *ptr = req + sizeof(*sz) + sizeof(*magic);
+
+  // size_t typeLen = *((const size_t *)ptr);
+  // ptr += sizeof(size_t);
+  // UW_ASSERT((size_t)(ptr-req) < totalSize);
+
+  // UW_ASSERT((size_t)(ptr+typeLen-req) < totalSize);
+  // std::string msgType(ptr, typeLen);
+  // ptr += typeLen;
+
+  // size_t msgLen = *((const size_t *)ptr);
+  // ptr += sizeof(size_t);
+  // UW_ASSERT((size_t)(ptr-req) < totalSize);
+
+  // UW_ASSERT((size_t)(ptr+msgLen-req) <= totalSize);
+  // std::string msg(ptr, msgLen);
+  // ptr += msgLen;
+  // Debug("start sending the message to the receiver!");
+
+  // replica->ReceiveMessage(*repl_addr, msgType, msg, nullptr);
 }
 
 void debug_via_cpp(rust::Str message) {
-  std::cout << "Debug message: " << message << std::endl;
+  std::string cpp_message(message.data(), message.size());
+  Debug("From rust: %s", cpp_message.c_str());
 }
 
 } // namespace autobahn

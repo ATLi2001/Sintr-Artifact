@@ -25,6 +25,7 @@
  *
  **********************************************************************/
 #include "store/pelotonstore/bftsmartagent.h"
+#include "store/common/util.h"
 
 namespace pelotonstore{
 
