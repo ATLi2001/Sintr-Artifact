@@ -30,6 +30,8 @@
 #include "lib/transport.h"
 #include "store/common/frontend/client.h"
 #include "store/common/sintring/validation_client_common.h"
+#include "store/common/sintring/params.h"
+#include "store/pelotonstore/common.h"
 #include "store/pelotonstore/peloton-sintr-proto.pb.h"
 
 #include <string>
@@ -48,7 +50,7 @@ namespace pelotonstore {
 // on a different thread, client2client will call ProcessForwardReadResult upon receiving forwarded read results
 class ValidationClient : public ::Client, public ::ValidationClientCommon {
  public:
-  ValidationClient(Transport *transport, uint64_t client_id);//, Parameters params);
+  ValidationClient(Transport *transport, uint64_t client_id, SintrParameters sintr_params);
   virtual ~ValidationClient();
 
   // Begin a transaction.
@@ -89,10 +91,10 @@ class ValidationClient : public ::Client, public ::ValidationClientCommon {
 
  private:
   struct PendingValidationSQLRequest {
-    PendingValidationSQLRequest(const std::string &statement, sql_callback scb, sql_timeout_callback stcb) :
-      statement(statement), vscb(scb), vstcb(stcb), timeout(nullptr) {
-      // query_gen_id = GenerateQueryGenId();
-
+    PendingValidationSQLRequest(const std::string &statement, sql_callback scb, sql_timeout_callback stcb,
+        uint64_t txn_client_id, uint64_t txn_client_seq_num, bool hashQueryGenId) :
+        statement(statement), vscb(scb), vstcb(stcb), timeout(nullptr) {
+      sql_gen_id = SQLGenId(statement, txn_client_id, txn_client_seq_num, hashQueryGenId);
     }
     ~PendingValidationSQLRequest() {
       if (timeout != nullptr) {
@@ -145,7 +147,7 @@ class ValidationClient : public ::Client, public ::ValidationClientCommon {
   // My own client ID
   const uint64_t client_id;
 
-  // Parameters params;
+  SintrParameters sintr_params;
 
   // map from (txn_client_id, txn_client_seq_num) to all relevant validation txn state
   typedef tbb::concurrent_hash_map<std::string, AllValidationTxnState *> allValTxnStatesMap;

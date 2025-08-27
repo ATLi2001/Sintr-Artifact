@@ -35,8 +35,8 @@
 
 namespace pelotonstore {
 
-ValidationClient::ValidationClient(Transport *transport, uint64_t client_id) ://, Parameters params) : 
-    transport(transport), client_id(client_id) {} //, params(params) {}
+ValidationClient::ValidationClient(Transport *transport, uint64_t client_id, SintrParameters sintr_params) : 
+    transport(transport), client_id(client_id), sintr_params(sintr_params) {}
 
 ValidationClient::~ValidationClient() {
   for (auto it = allValTxnStates.begin(); it != allValTxnStates.end(); ++it) {
@@ -84,7 +84,8 @@ void ValidationClient::SQLRequest(std::string &statement, sql_callback scb,
     Panic("cannot find transaction %s in allValTxnStates", txn_id.c_str());
   }
 
-  PendingValidationSQLRequest *pendingSQLReq = new PendingValidationSQLRequest(statement, scb, stcb);
+  PendingValidationSQLRequest *pendingSQLReq = new PendingValidationSQLRequest(statement, scb, stcb,
+    txn_client_id, txn_client_seq_num, sintr_params.hashQueryGenId);
 
   auto itr = std::find_if(
     a->second->pendingForwardedSQLResults.begin(), a->second->pendingForwardedSQLResults.end(),
@@ -164,25 +165,24 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
     Panic("Transaction includes extra forwarded SQL Results: %u", a->second->pendingForwardedSQLResults.size());
   }
-  
-  // Debug("Committing validation for client id %lu, seq num %lu and txn ID: %s", txn_client_id, txn_client_seq_num,
-  //     BytesToHex(TransactionDigest(*txn, true), 16).c_str());
 
-  // if (params.sintr_params.parallelQuerySigsCheck && a->second->numValidForwardQuery < a->second->numProcessedForwardQuery) {
-  //   // still need to wait for all forward queries to be validated
-  //   // call commit callback later
-  //   Debug(
-  //     "Validating for client id %lu seq num %lu commit received %lu of %lu parallel query sigs check",
-  //     txn_client_id,
-  //     txn_client_seq_num,
-  //     a->second->numValidForwardQuery,
-  //     a->second->numProcessedForwardQuery
-  //   );
-  //   a->second->commitWaitOnValidForwardQuery = true;
-  //   a->second->ccb = std::move(ccb);
-  //   a->second->ctcb = std::move(ctcb);
-  //   return;
-  // }
+  Debug("Committing validation for client id %lu, seq num %lu", txn_client_id, txn_client_seq_num);
+
+  if (sintr_params.parallelQuerySigsCheck && a->second->numValidForwardQuery < a->second->numProcessedForwardQuery) {
+    // still need to wait for all forward queries to be validated
+    // call commit callback later
+    Debug(
+      "Validating for client id %lu seq num %lu commit received %lu of %lu parallel query sigs check",
+      txn_client_id,
+      txn_client_seq_num,
+      a->second->numValidForwardQuery,
+      a->second->numProcessedForwardQuery
+    );
+    a->second->commitWaitOnValidForwardQuery = true;
+    a->second->ccb = std::move(ccb);
+    a->second->ctcb = std::move(ctcb);
+    return;
+  }
 
   ccb(COMMITTED);
 }

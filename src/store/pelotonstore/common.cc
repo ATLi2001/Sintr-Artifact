@@ -39,6 +39,16 @@ namespace pelotonstore {
 
 using namespace CryptoPP;
 
+std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t client_seq_num, bool hashDigest) {
+  if (hashDigest) {
+    std::string toHash = statement + std::to_string(client_id) + std::to_string(client_seq_num);
+    return crypto::Hash(toHash);
+  }
+  else {
+    return statement;
+  }
+}
+
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg) {
   proto::PackedMessage packedMessage;

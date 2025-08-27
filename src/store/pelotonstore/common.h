@@ -91,6 +91,9 @@ struct QueryReadSetMgr {
   TransactionMessage *txn_msg;
 };
 
+// general sql id
+std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t client_seq_num, bool hashDigest);
+
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg);
 
