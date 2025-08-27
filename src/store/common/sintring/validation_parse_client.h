@@ -33,8 +33,6 @@
 #include <vector>
 #include <string>
 
-namespace sintrstore {
-
 // this class takes TxnState proto message into the underlying validation transaction
 class ValidationParseClient {
  public:
@@ -50,7 +48,5 @@ class ValidationParseClient {
   // even though validation transactions don't use randomness, need it for some constructors
   std::mt19937 rand;
 };
-
-} // namespace sintrstore
 
 #endif
