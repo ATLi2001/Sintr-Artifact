@@ -42,7 +42,7 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       bool fake_SMR, uint64_t SMR_mode, const std::string &PG_BFTSMART_config_path) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
     signMessages(signMessages), validateProofs(validateProofs), signClientProposals(signClientProposals), keyManager(keyManager), timeServer(timeserver),
-    fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path) {
+    fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path), txn_msg(nullptr) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -83,6 +83,10 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
     
     client_seq_num++;
 
+    // no need to call delete as moved into TryCommit message
+    UW_ASSERT(txn_msg == nullptr);
+    txn_msg = new TransactionMessage();
+
     Debug("BEGIN tx: ", client_seq_num);
 
     bcb(client_seq_num);
@@ -115,7 +119,18 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t 
     };
     
     Debug("Trying to commit txn: [%lu:%lu]", client_id, client_seq_num);
-    bclient[0]->Commit(client_id, client_seq_num, tccb, ctcb, timeout);
+
+    if (false) {
+      for (const auto &read : txn_msg->readset()) {
+        Debug("read key: %s", read.key().c_str());
+      }
+      for (const auto &write : txn_msg->writeset()) {
+        Debug("write key: %s", write.key().c_str());
+      }
+    }
+
+    bclient[0]->Commit(client_id, client_seq_num, std::move(txn_msg), tccb, ctcb, timeout);
+    txn_msg = nullptr;
   });
 }
 
@@ -134,7 +149,9 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
 
     Debug("Invoke SQL Request: %s", statement.c_str());
 
-    sql_rpc_callback srcb = [scb, statement, this](int status, const std::string& sql_res) {
+    sql_rpc_callback srcb = [scb, statement, this](
+      int status, const std::string& sql_res, TransactionMessage *txn_msg
+    ) {
       Debug("Received query response");
 
       // struct timespec ts_start;
@@ -147,6 +164,15 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
       if(status == REPLY_OK) {
         Debug("Statement execution SUCCESS. Return result");
         query_res = new sql::QueryResultProtoWrapper(sql_res);
+
+        for (auto &read : txn_msg->readset()) {
+          Debug("read key: %s", read.key().c_str());
+          *this->txn_msg->add_readset() = std::move(read);
+        }
+        for (auto &write : txn_msg->writeset()) {
+          Debug("write key: %s", write.key().c_str());
+          *this->txn_msg->add_writeset() = std::move(write);
+        }
       } else {
         Debug("Statement execution FAILURE.");
         //This is simply a hack to force all follower replicas to also abort in order to make them unlock any held locks.
@@ -159,6 +185,7 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
       Debug("Upcalling");
       scb(status, query_res);
 
+      delete txn_msg;
     };
     
     bclient[0]->Query(statement, client_id, client_seq_num, srcb, stcb, timeout);

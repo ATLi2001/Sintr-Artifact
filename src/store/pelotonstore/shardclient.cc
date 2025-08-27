@@ -209,7 +209,7 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
   }
 }
 
-void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, 
+void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
   try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout) {
 
   reqId++;
@@ -220,7 +220,8 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
   try_commit.set_req_id(reqId);
   try_commit.set_client_id(client_id);
   try_commit.set_txn_seq_num(client_seq_num);
-  
+  try_commit.set_allocated_txn_msg(txn_msg);
+
   //Register Reply Handler
   PendingTryCommit &ptc = pendingTryCommits[reqId];
   ptc.tccb = std::move(tccb);
@@ -389,7 +390,7 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote, const std::stri
 }
 
 
-void ShardClient::HandleSQL_RPCReply(const proto::SQL_RPCReply& reply, int replica_id) {
+void ShardClient::HandleSQL_RPCReply(proto::SQL_RPCReply& reply, int replica_id) {
   Debug("Handling a sql_rpc reply");
 
   const uint64_t &req_id = reply.req_id();
@@ -421,6 +422,7 @@ void ShardClient::HandleSQL_RPCReply(const proto::SQL_RPCReply& reply, int repli
       pendingSQL_RPC.hasLeaderReply=true;
       pendingSQL_RPC.status=reply.status();
       pendingSQL_RPC.leaderReply = reply.sql_res(); // this might be empty if status is failed
+      pendingSQL_RPC.txn_msg = reply.release_txn_msg();
 
       if(ONLY_WAIT_FOR_LEADER){
         SQL_RPCReplyHelper(pendingSQL_RPC, pendingSQL_RPC.leaderReply, req_id, pendingSQL_RPC.status);
@@ -449,13 +451,16 @@ void ShardClient::SQL_RPCReplyHelper(PendingSQL_RPC &pendingSQL_RPC, const std::
   }
 
   sql_rpc_callback srcb = pendingSQL_RPC.srcb;
+  // move txn_msg up to client
+  TransactionMessage *txn_msg = pendingSQL_RPC.txn_msg;
+  pendingSQL_RPC.txn_msg = nullptr;
   pendingSQL_RPCs.erase(req_id);
 
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // end_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
   // Notice("Shardclient inbound latency: %lu us", end_us - start_us);
-  srcb(status, sql_rpcReply);
+  srcb(status, sql_rpcReply, std::move(txn_msg));
 }
 
 //Note: This must only be called once per req_id.

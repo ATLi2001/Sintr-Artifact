@@ -84,6 +84,9 @@ void TransactionContext::Init(const size_t thread_id,
   gc_object_set_ = std::make_shared<GCObjectSet>();
 
   on_commit_triggers_.reset();
+
+  ///////////////////// sintr specific ///////////////////////////////////
+  has_read_set_mgr_ = false;
 }
 
 RWType TransactionContext::GetRWType(const ItemPointer &location) {

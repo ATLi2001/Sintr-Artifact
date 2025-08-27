@@ -123,6 +123,9 @@ class Client : public ::Client {
   uint64_t SMR_mode; //Control whether to run without replication (0), with Hotstuff (1) or BFTSmart (2)
   const std::string& PG_BFTSMART_config_path; //Path for BFTSmart (if in use)
 
+  // track overall readset and writeset of transaction
+  TransactionMessage *txn_msg;
+
 
   /* Debug State */
   std::unordered_map<std::string, uint32_t> statInts;

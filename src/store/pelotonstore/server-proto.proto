@@ -17,6 +17,8 @@ message TryCommit {
   required uint64 req_id = 1;
   required uint64 client_id = 3;
   required uint64 txn_seq_num = 4;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 5;
 }
 
 message UserAbort {
@@ -28,6 +30,8 @@ message SQL_RPCReply {
   required uint64 req_id = 1;
   required int32 status = 2;
   optional bytes sql_res = 3;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 4;
 }
 
 message TryCommitReply {

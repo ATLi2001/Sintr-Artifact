@@ -76,6 +76,24 @@ namespace pelotonstore {
     bool terminate;
   };
 
+struct QueryReadSetMgr {
+  QueryReadSetMgr(TransactionMessage *txn_msg) : txn_msg(txn_msg) {}
+  ~QueryReadSetMgr() {}
+
+  void AddToReadSet(const std::string &key) {
+    txn_msg->add_readset()->set_key(key);
+  }
+
+  void AddToWriteSet(const std::string &key) {
+    txn_msg->add_writeset()->set_key(key);
+  }
+
+  TransactionMessage *txn_msg;
+};
+
+// general sql id
+std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t client_seq_num, bool hashDigest);
+
 // client tells us if this is a client signature or not
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client=false);

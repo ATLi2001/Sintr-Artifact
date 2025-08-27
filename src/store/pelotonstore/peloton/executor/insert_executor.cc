@@ -74,6 +74,20 @@ bool InsertExecutor::DExecute() {
     return false;
   }
 
+  ///////////////////// sintr specific ///////////////////////////////////
+  std::shared_ptr<index::Index> primary_key_index = nullptr;
+  int index_count = target_table->GetIndexCount();
+  for (int index_itr = index_count - 1; index_itr >= 0; --index_itr) {
+    auto index = target_table->GetIndex(index_itr);
+    if (index == nullptr) continue;
+    if (index->GetIndexType() == IndexConstraintType::PRIMARY_KEY) {
+      primary_key_index = index;
+      break;
+    }
+  }
+  auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
+  ////////////////////////////////////////////////////////////////////////
+
   LOG_TRACE("Number of tuples in table before insert: %lu",
             target_table->GetTupleCount());
   auto executor_pool = executor_context_->GetPool();
@@ -116,6 +130,25 @@ bool InsertExecutor::DExecute() {
         type::Value val = (cur_tuple.GetValue(column_itr));
         tuple->SetValue(column_itr, val, executor_pool);
       }
+
+      ///////////////////// sintr specific ///////////////////////////////////
+      // unclear why sometimes INVALID_OID check may trigger, but the transaction will still continue
+      // so need to add writeset here
+      if (current_txn->GetHasReadSetMgr()) {
+        // for sintr need the primary key cols
+        std::vector<std::string> primary_key_cols;
+        auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+        for (auto col : primary_index_columns_) {
+          Debug("Primary key column: %d", col);
+          auto val = cur_tuple.GetValue(col);
+          primary_key_cols.push_back(val.ToString());
+        }
+
+        std::string &&encoded = EncodeTableRow(target_table->GetName(), primary_key_cols);
+        Debug("encoded write set key is: %s.", encoded.c_str());
+        query_read_set_mgr->AddToWriteSet(std::move(encoded));
+      }
+      ////////////////////////////////////////////////////////////////////////
 
       // insert tuple into the table.
       ItemPointer *index_entry_ptr = nullptr;
@@ -235,6 +268,23 @@ bool InsertExecutor::DExecute() {
         type::Value val = (new_tuple->GetValue(2));
         LOG_TRACE("value: %s", val.GetInfo().c_str());
       }
+
+      ///////////////////// sintr specific ///////////////////////////////////
+      if (current_txn->GetHasReadSetMgr()) {
+        // for sintr need the primary key cols
+        std::vector<std::string> primary_key_cols;
+        auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+        for (auto col : primary_index_columns_) {
+          Debug("Primary key column: %d", col);
+          auto val = new_tuple->GetValue(col);
+          primary_key_cols.push_back(val.ToString());
+        }
+
+        std::string &&encoded = EncodeTableRow(target_table->GetName(), primary_key_cols);
+        Debug("encoded write set key is: %s.", encoded.c_str());
+        query_read_set_mgr->AddToWriteSet(std::move(encoded));
+      }
+      ////////////////////////////////////////////////////////////////////////
 
       if (location.block == INVALID_OID) {
         LOG_TRACE("Failed to Insert. Set txn failure.");
