@@ -27,12 +27,13 @@
 #ifndef _VALIDATION_CLIENT_COMMON_H_
 #define _VALIDATION_CLIENT_COMMON_H_
 
+#include "store/common/frontend/client.h"
 #include <string>
 #include <thread>
 #include "tbb/concurrent_hash_map.h"
 
 
-class ValidationClientCommon {
+class ValidationClientCommon : public Client {
 public:
 
   ValidationClientCommon() {};

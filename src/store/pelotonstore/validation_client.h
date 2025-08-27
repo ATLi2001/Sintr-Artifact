@@ -28,7 +28,6 @@
 #define _PELOTONSTORE_VALIDATION_CLIENT_H_
 
 #include "lib/transport.h"
-#include "store/common/frontend/client.h"
 #include "store/common/sintring/validation_client_common.h"
 #include "store/common/sintring/params.h"
 #include "store/pelotonstore/common.h"
@@ -41,14 +40,7 @@
 
 namespace pelotonstore {
 
-// this acts as a dummy workload client for validation of one transaction at a time
-// validation transactions will invoke this through a SyncClient interface
-// note that this class is shared memory between threads
-// in particular, each thread where a validation transaction is being validated (client2client::ValidationThreadFunction)
-// will call Begin, Get, Put, Commit, Abort (these through SyncClient interface), 
-// SetThreadValTxnId, SetTxnTimestamp, GetCompletedTxn
-// on a different thread, client2client will call ProcessForwardReadResult upon receiving forwarded read results
-class ValidationClient : public ::Client, public ::ValidationClientCommon {
+class ValidationClient : public ::ValidationClientCommon {
  public:
   ValidationClient(Transport *transport, uint64_t client_id, SintrParameters sintr_params);
   virtual ~ValidationClient();

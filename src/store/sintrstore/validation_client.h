@@ -24,11 +24,10 @@
  *
  **********************************************************************/
 
-#ifndef _VALIDATION_CLIENT_API_H_
-#define _VALIDATION_CLIENT_API_H_
+#ifndef _SINTR_VALIDATION_CLIENT_H_
+#define _SINTR_VALIDATION_CLIENT_H_
 
 #include "lib/transport.h"
-#include "store/common/frontend/client.h"
 #include "store/common/promise.h"
 #include "store/common/timestamp.h"
 #include "store/common/partitioner.h"
@@ -58,7 +57,7 @@ typedef std::function<void(int, const std::string &)> validation_read_timeout_ca
 // will call Begin, Get, Put, Commit, Abort (these through SyncClient interface), 
 // SetThreadValTxnId, SetTxnTimestamp, GetCompletedTxn
 // on a different thread, client2client will call ProcessForwardReadResult upon receiving forwarded read results
-class ValidationClient : public ::Client, public ::ValidationClientCommon {
+class ValidationClient : public ::ValidationClientCommon {
  public:
   ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, Partitioner *part,
     std::string &table_registry, Parameters params);
@@ -286,4 +285,4 @@ class ValidationClient : public ::Client, public ::ValidationClientCommon {
 
 } // namespace sintrstore
 
-#endif /* _VALIDATION_CLIENT_API_H_ */
+#endif /* _SINTR_VALIDATION_CLIENT_H_ */
