@@ -54,14 +54,14 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
 
   Notice("Initializing PelotonSMR client with id [%lu] %lu", client_id, ngroups);
 
-  Notice("SignMessages: %d. ValidateProofs: %d", signMessages, validateProofs);
+  Notice("SignMessages: %d. ValidateProofs: %d. SignClientProposals: %d", signMessages, validateProofs, signClientProposals);
 
   if(ngroups > 1) Panic("Peloton store does not support sharding");
 
   /* Start a client for each shard. */
   for (uint64_t i = 0; i < ngroups; i++) {
     bclient[i] = new ShardClient(config, transport, client_id, i, closestReplicas,
-        signMessages, validateProofs, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path);
+        signMessages, validateProofs, signClientProposals, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path);
   }
 
   Notice("PelotonSMR client [%lu] created! %lu %lu", client_id, ngroups, bclient.size());

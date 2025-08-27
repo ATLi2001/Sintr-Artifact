@@ -76,17 +76,18 @@ namespace pelotonstore {
     bool terminate;
   };
 
+// client tells us if this is a client signature or not
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg);
+    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client=false);
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, std::string &data, std::string &type);
+    KeyManager *keyManager, std::string &data, std::string &type, bool client=false);
 
 bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, proto::PackedMessage &packedMessage);
+    KeyManager *keyManager, proto::PackedMessage &packedMessage, bool client=false);
 
 bool CheckSignature(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager);
+    KeyManager *keyManager, bool client=false);
 
 void SignMessage(const ::google::protobuf::Message &msg,
     crypto::PrivKey* privateKey, uint64_t processId,

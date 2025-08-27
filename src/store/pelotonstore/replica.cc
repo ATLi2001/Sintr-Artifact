@@ -190,7 +190,13 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
     else if(SMR_mode == 2){ //This path will be invoked if it comes from BFTSmart
        recvrequest.ParseFromString(data);
    
-      uint64_t client_id = recvrequest.client_id();
+      uint64_t client_id;
+      if (signClientProposals && recvrequest.has_signed_req()) {
+        client_id = recvrequest.signed_req().replica_id();
+      }
+      else {
+        client_id = recvrequest.req().client_id();
+      }
       std::unique_lock lock(client_cache_mutex);
       const TransportAddress* client = clientCache[client_id];
       Debug("handling the request here... ");
@@ -318,8 +324,22 @@ void Replica::HandleRequest_noHS(const TransportAddress &remote, const proto::Re
   //
   Debug("Received new Request");
 
-  const string &digest = request.digest();
-  const proto::PackedMessage &packedMsg = request.packed_msg();
+  proto::RequestInternal req_internal;
+  // if sql then no signatures expected
+  bool isSQL = request.has_req() && request.req().packed_msg().type() == sql_rpc_template.GetTypeName();
+  if (signClientProposals && !isSQL) {
+    if(!ValidateSignedMessage(request.signed_req(), keyManager, req_internal, true)) {
+      Debug("Failed to validate client signed message");
+      return;
+    }
+  }
+  else {
+    req_internal = request.req();
+  }
+
+  const string &digest = req_internal.digest();
+  const proto::PackedMessage &packedMsg = req_internal.packed_msg();
+  Debug("packedMsg type %s", packedMsg.type().c_str());
   TransportAddress* clientAddr = remote.clone(); //The return address to reply to
 
 
@@ -458,8 +478,20 @@ void Replica::HandleRequest(const TransportAddress &remote, const proto::Request
   //TODO: FIXME: Re-factor to get rid of packed message. It's a useless indirection that wastes costs.
 
   Debug("Handling request message");
+
+  proto::RequestInternal req_internal;
+  bool isSQL = request.has_req() && request.req().packed_msg().type() == sql_rpc_template.GetTypeName();
+  if (signClientProposals && !isSQL) {
+    if(!ValidateSignedMessage(request.signed_req(), keyManager, req_internal, true)) {
+      Debug("Failed to validate client signed message");
+      return;
+    }
+  }
+  else {
+    req_internal = request.req();
+  }
   
-  const string &digest = request.digest();
+  const string &digest = req_internal.digest();
   DebugHash(digest);
 
   //Do not process duplicates.
@@ -468,11 +500,11 @@ void Replica::HandleRequest(const TransportAddress &remote, const proto::Request
   requests_dup.insert(digest);
 
   //if we didn't find the request digest in the map. I.e this is the first time handling this request
-  Debug("new request: %s with digest: %s", request.packed_msg().type().c_str(), string_to_hex(digest).c_str());
+  Debug("new request: %s with digest: %s", req_internal.packed_msg().type().c_str(), string_to_hex(digest).c_str());
   stats->Increment("handle_new_count",1);
 
   TransportAddress* clientAddr = remote.clone(); //The return address to reply to
-  const proto::PackedMessage &packedMsg = request.packed_msg();
+  const proto::PackedMessage &packedMsg = req_internal.packed_msg();
 
   //Create a callback that will be called once the Request has been ordered by Hotstuff
   std::function<void(const std::string&, uint32_t seqnum)> execb = [this, digest, packedMsg, clientAddr](const std::string &digest_param, uint32_t seqnum) {

@@ -65,7 +65,7 @@ class ShardClient : public TransportReceiver {
   /* Constructor needs path to shard config. */
   ShardClient(const transport::Configuration& config, Transport *transport,
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-      bool signMessages, bool validateProofs,
+      bool signMessages, bool validateProofs, bool signClientProposals,
       KeyManager *keyManager, Stats* stats,
       bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
   ~ShardClient();
@@ -94,6 +94,7 @@ class ShardClient : public TransportReceiver {
   int group_idx; // which shard this client accesses
   bool signMessages;
   bool validateProofs;
+  bool signClientProposals;
   KeyManager *keyManager;
 
   // If this flag is set, then we are simulating a fake SMR in which we only care about the reply from a single replica ("leader").
