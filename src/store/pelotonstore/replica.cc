@@ -33,11 +33,12 @@ namespace pelotonstore {
 using namespace std;
 
 
-Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
+Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,App *app, int groupIdx, int idx, bool signMessages, bool signClientProposals, uint64_t maxBatchSize,
   uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuffpg_cpu, bool local_config, 
   int numShards, Transport *transport, bool fake_SMR, int dummyTO, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path)
     : config(config), keyManager(keyManager), app(app), groupIdx(groupIdx), idx(idx),
-      id(groupIdx * config.n + idx), signMessages(signMessages), maxBatchSize(maxBatchSize), batchTimeoutMS(batchTimeoutMS), EbatchSize(EbatchSize), EbatchTimeoutMS(EbatchTimeoutMS), 
+      id(groupIdx * config.n + idx), signMessages(signMessages), signClientProposals(signClientProposals),
+      maxBatchSize(maxBatchSize), batchTimeoutMS(batchTimeoutMS), EbatchSize(EbatchSize), EbatchTimeoutMS(EbatchTimeoutMS), 
       primaryCoordinator(primaryCoordinator), requestTx(requestTx), numShards(numShards), transport(transport), 
       fake_SMR(fake_SMR), dummyTO(dummyTO), SMR_mode(SMR_mode) {
     

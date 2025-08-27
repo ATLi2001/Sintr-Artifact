@@ -1943,6 +1943,7 @@ int main(int argc, char **argv) {
 																			  tport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+                                       FLAGS_indicus_sign_client_proposals,
                                        keyManager,
 																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
         break;
