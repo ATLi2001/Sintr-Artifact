@@ -32,10 +32,13 @@
 #include <pthread.h>
 
 Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configuration *clients_config, Transport *transport,
-    int group, SintrParameters sintr_params) :
+    int group, SintrParameters sintr_params, EndorsementClient *endorseClient, ClientSelector *valClientSelector, std::mt19937 &rand,
+    const std::vector<std::string> &keys) :
     client_id(client_id), clients_config(clients_config), transport(transport),
-    group(group), sintr_params(sintr_params), done(false) {
+    group(group), sintr_params(sintr_params), endorseClient(endorseClient), valClientSelector(valClientSelector), rand(rand),
+    keys(keys), done(false) {
 
+  valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
   transport->Register(this, *clients_config, group, client_id);
 
   // for hmac between clients
@@ -125,9 +128,109 @@ Client2ClientCommon::~Client2ClientCommon() {
     t->join();
     delete t;
   }
+  delete valParseClient;
 }
 
-void Client2ClientCommon::ValidationThreadFunction(ValidationClientCommon *valClient,
+std::set<uint64_t> Client2ClientCommon::ProcessClientValidationHeuristic(PolicyClient *policyClient) {
+  // for tracking purposes, must have self
+  beginValSent.insert(client_id);
+
+  std::set<uint64_t> out;
+  // send to all clients so no need to bother with estimated policy
+  if (sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::ALL) {
+    for (int i = 0; i < clients_config->n; i++) {
+      out.insert(i);
+    }
+  }
+  // other heuristics depend on actual policy that was estimated
+  else {
+    // precompute the order of clients to contact
+    if (valClientSelector != nullptr) {
+      // false = without replacement
+      valClientOrder = valClientSelector->GetClientIds(rand, clients_config->n, false);
+    }
+
+    // need to use DifferenceToSatisfied to account for self
+    ExtractFromPolicyClientsToContact(policyClient->DifferenceToSatisfied(beginValSent), out);
+
+    if (sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::EXACT) {
+    }
+    else if (sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::ONE_MORE) {
+      for (int i = 0; i < clients_config->n; i++) {
+        if (i != client_id && out.find(i) == out.end()) {
+          out.insert(i);
+        }
+      }
+    }
+    else {
+      Panic("Invalid clientValidationHeuristic value");
+    }
+  }
+
+  return out;
+}
+
+void Client2ClientCommon::ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients) {
+  const std::set<uint64_t> &blacklistedClients = endorseClient->GetBlacklistedClients();
+  
+  int offset = 1;
+  size_t order_index = 0;
+  for (const auto &i : policySatSet) {
+    if (i == client_id) {
+      continue;
+    }
+    // i < 0 means can choose any client
+    else if (i < 0) {
+      if (valClientSelector != nullptr) {
+        for (; order_index < valClientOrder.size(); order_index++) {
+          uint64_t target = valClientOrder[order_index];
+          if (blacklistedClients.find(target) != blacklistedClients.end()) {
+            continue;
+          }
+          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
+            clients.insert(target);
+            break;
+          }
+        }
+        if (order_index == valClientOrder.size()) {
+          Panic("Policy requires more endorsements than available clients");
+        }
+      }
+      // if no selector, then use offset for ring style selection
+      else {
+        for (; offset < clients_config->n; offset++) {
+          uint64_t target = (client_id + offset) % clients_config->n;
+          if (blacklistedClients.find(target) != blacklistedClients.end()) {
+            continue;
+          }
+          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
+            clients.insert(target);
+            break;
+          }
+        }
+        // if we reach the end of the loop, then we have exhausted all clients
+        if (offset == clients_config->n) {
+          Panic("Policy requires more endorsements than available clients");
+        }
+      }
+    }
+    // otherwise i is a specific client to contact
+    else {
+      if (blacklistedClients.find(i) != blacklistedClients.end()) {
+        Panic("Client %d is blacklisted but is in policySatSet", i);
+      }
+
+      if (beginValSent.find(i) == beginValSent.end()) {
+        clients.insert(i);
+      }
+      else {
+        Panic("Client %lu already sent beginValTxnMsg to client %d", client_id, i);
+      }
+    }
+  }
+}
+
+void Client2ClientCommon::ValidationThreadFunctionBase(ValidationClientCommon *valClient,
     std::function<void(void)> preValFunc, std::function<void(transaction_status_t)> postValFunc) {
   ::SyncClient syncClient(valClient);
 
@@ -140,7 +243,6 @@ void Client2ClientCommon::ValidationThreadFunction(ValidationClientCommon *valCl
     
     uint64_t curr_client_id = valInfo->txn_client_id;
     uint64_t curr_client_seq_num = valInfo->txn_client_seq_num;
-    // Timestamp curr_ts = valInfo->txn_ts;
     ValidationTransaction *valTxn = valInfo->valTxn;
 
     std::ostringstream oss;
@@ -153,9 +255,7 @@ void Client2ClientCommon::ValidationThreadFunction(ValidationClientCommon *valCl
     );
 
     valClient->SetThreadValTxnId(curr_client_id, curr_client_seq_num);
-
     preValFunc();
-    // valClient->SetTxnTimestamp(curr_client_id, curr_client_seq_num, curr_ts, valInfo->isPolicyTransaction, valInfo->hashed_ts);
 
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);

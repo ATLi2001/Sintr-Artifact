@@ -31,14 +31,24 @@
 #include "store/common/frontend/validation_transaction.h"
 #include "store/common/sintring/params.h"
 #include "store/common/sintring/validation_client_common.h"
+#include "store/common/sintring/endorsement_client.h"
+#include "store/common/sintring/validation_parse_client.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/policy_client.h"
 #include "tbb/concurrent_queue.h"
+#include <atomic>
+#include <vector>
+#include <string>
+#include <random>
 
 class ValidationInfoBase;
 
 class Client2ClientCommon : public TransportReceiver {
 public:
 
-  Client2ClientCommon(uint64_t client_id, transport::Configuration *clients_config, Transport *transport, int group, SintrParameters sintr_params);
+  Client2ClientCommon(uint64_t client_id, transport::Configuration *clients_config, Transport *transport, int group, SintrParameters sintr_params,
+    EndorsementClient *endorseClient, ClientSelector *valClientSelector, std::mt19937 &rand,
+    const std::vector<std::string> &keys = std::vector<std::string>());
   virtual ~Client2ClientCommon();
 
   // for sending/receiving messages from other clients
@@ -48,7 +58,12 @@ public:
   };
 
 protected:
-  void ValidationThreadFunction(ValidationClientCommon *valClient,
+  // return a set of client ids to contact for validation based on the heuristic in sintr_params
+  std::set<uint64_t> ProcessClientValidationHeuristic(PolicyClient *policyClient);
+  // extract client ids not currently in beginValSent from policy satisfying set
+  void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
+
+  void ValidationThreadFunctionBase(ValidationClientCommon *valClient,
     std::function<void(void)> preValFunc, std::function<void(transaction_status_t)> postValFunc);
   void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
 
@@ -57,6 +72,18 @@ protected:
   Transport *transport;
   const int group;
   SintrParameters sintr_params;
+  // endorsement client can inform client of received validations
+  EndorsementClient *endorseClient;
+  ClientSelector *valClientSelector;
+  std::mt19937 &rand;
+  // order of validation clients to contacts
+  std::vector<uint64_t> valClientOrder;
+  // for keySelector based benchmark validation, need copy of keys for validator as well
+  const std::vector<std::string> &keys;
+
+  // current set of transport ids begin validation message has been sent to
+  std::set<uint64_t> beginValSent;
+  ValidationParseClient *valParseClient;
 
   // for hmacs
   std::unordered_map<uint64_t, std::string> sessionKeys;
