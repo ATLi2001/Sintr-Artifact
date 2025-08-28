@@ -1,0 +1,106 @@
+/***********************************************************************
+ *
+ * Copyright 2024 Austin Li <atl63@cornell.edu>
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use, copy,
+ * modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ **********************************************************************/
+
+#ifndef _CLIENT2CLIENT_COMMON_H_
+#define _CLIENT2CLIENT_COMMON_H_
+
+#include "lib/transport.h"
+#include "store/common/frontend/validation_transaction.h"
+#include "store/common/sintring/params.h"
+#include "store/common/sintring/validation_client_common.h"
+#include "tbb/concurrent_queue.h"
+
+class ValidationInfoBase;
+
+class Client2ClientCommon : public TransportReceiver {
+public:
+
+  Client2ClientCommon(uint64_t client_id, transport::Configuration *clients_config, Transport *transport, int group, SintrParameters sintr_params);
+  virtual ~Client2ClientCommon();
+
+  // for sending/receiving messages from other clients
+  struct Client2ClientExecutor {
+    Client2ClientExecutor(std::function<void*(void)> f) : f(std::move(f)) {}
+    std::function<void*(void)> f;
+  };
+
+protected:
+  void ValidationThreadFunction(ValidationClientCommon *valClient,
+    std::function<void(void)> preValFunc, std::function<void(transaction_status_t)> postValFunc);
+  void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
+
+  const uint64_t client_id;
+  transport::Configuration *clients_config;
+  Transport *transport;
+  const int group;
+  SintrParameters sintr_params;
+
+  // for hmacs
+  std::unordered_map<uint64_t, std::string> sessionKeys;
+
+  // threads for validation
+  std::vector<std::thread *> valThreads;
+  std::atomic<bool> done;
+  // concurrent queue of transactions to be validated, has blocking semantics for pop
+  tbb::concurrent_bounded_queue<ValidationInfoBase *> validationQueue;
+  // separate thread for message sending, stays sequential
+  std::thread *c2cSendThread;
+  // concurrent queue of messages to be sent
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cSendQueue;
+  // separate thread for message receiving, stays sequential
+  std::thread *c2cReceiveThread;
+  // concurrent queue of messages to be received
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cReceiveQueue;
+
+  // for parallel signature checks
+  std::vector<std::thread *> parallelSigCheckThreads;
+  tbb::concurrent_bounded_queue<Client2ClientExecutor *> parallelSigCheckQueue;
+};
+
+class ValidationInfoBase {
+public:
+  ValidationInfoBase(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
+    ValidationTransaction *valTxn, TransportAddress *remote) : 
+    txn_client_id(txn_client_id), txn_client_seq_num(txn_client_seq_num), 
+    valTxn(valTxn), remote(remote) {};
+  virtual ~ValidationInfoBase() {
+    delete valTxn;
+    delete remote;
+  };
+
+  // client id that initiated this validation
+  uint64_t txn_client_id;
+  // sequence number of transaction on initiating client
+  uint64_t txn_client_seq_num;
+  // actual transaction that we can call Validate on
+  ValidationTransaction *valTxn;
+  // address of initiating client
+  TransportAddress *remote;
+};
+
+
+
+#endif /* _CLIENT2CLIENT_COMMON_H_ */
