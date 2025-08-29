@@ -173,7 +173,8 @@ impl Synchronizer {
                             }
                         }
                         self.pending.retain(|_, (r, _, _)| r > &mut gc_round);
-                    }
+                    },
+                    _ => {},
                 },
 
                 // Stream out the futures of the `FuturesUnordered` that completed.

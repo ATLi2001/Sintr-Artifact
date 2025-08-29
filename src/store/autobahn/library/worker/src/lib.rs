@@ -4,6 +4,7 @@ mod helper;
 mod primary_connector;
 mod processor;
 mod quorum_waiter;
+mod reply_sender;
 mod synchronizer;
 mod worker;
 

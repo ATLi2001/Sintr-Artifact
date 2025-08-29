@@ -81,13 +81,13 @@ async fn start_server_inner(
     // Channel for sending headers between DAG and Consensus
     let (tx_sailfish, _rx_sailfish) = channel(CHANNEL_CAPACITY);
 
-    let (tx_new_certificates, _rx_new_certificates) = channel(CHANNEL_CAPACITY);
-    let (_tx_feedback, rx_feedback) = channel(CHANNEL_CAPACITY);
-    let (tx_committer, rx_committer) = channel(CHANNEL_CAPACITY);
-    let (_tx_pushdown_cert, rx_pushdown_cert) = channel(CHANNEL_CAPACITY);
-    let (_tx_request_header_sync, rx_request_header_sync) = channel(CHANNEL_CAPACITY);
-
     if is_primary {
+        let (tx_new_certificates, _rx_new_certificates) = channel(CHANNEL_CAPACITY);
+        let (_tx_feedback, rx_feedback) = channel(CHANNEL_CAPACITY);
+        let (tx_committer, rx_committer) = channel(CHANNEL_CAPACITY);
+        let (_tx_pushdown_cert, rx_pushdown_cert) = channel(CHANNEL_CAPACITY);
+        let (_tx_request_header_sync, rx_request_header_sync) = channel(CHANNEL_CAPACITY);
+
         Primary::spawn(
             name,
             committee.clone(),
@@ -104,12 +104,25 @@ async fn start_server_inner(
             rx_request_header_sync,
             tx_output,
         );
-    } else {
-        Worker::spawn(keypair.name, worker_id, committee, parameters, store);
-    }
 
-    while let Some(header) = rx_output.recv().await {
-        autobahn_callback(handle, header.to_string());
+        while let Some(_header) = rx_output.recv().await {
+            // autobahn_callback(handle, header.to_string());
+        }
+    } else {
+        let (tx_slot_txn_reply, mut rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
+
+        Worker::spawn(
+            keypair.name,
+            worker_id,
+            committee,
+            parameters,
+            store,
+            tx_slot_txn_reply,
+        );
+
+        while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
+            autobahn_callback(handle, slot_txn_reply.slot.to_string());
+        }
     }
 
     debug_via_cpp("Server shutting down");

@@ -10,7 +10,10 @@ use crate::garbage_collector::GarbageCollector;
 use crate::header_waiter::HeaderWaiter;
 use crate::helper::Helper;
 use crate::leader::LeaderElector;
-use crate::messages::{Certificate, Header, Vote, Timeout, TC, Proposal, ConsensusMessage, ConsensusVote, ConsensusRequest};
+use crate::messages::{
+    Certificate, ConsensusMessage, ConsensusRequest, ConsensusVote, Header, Proposal, Timeout,
+    Vote, TC,
+};
 use crate::payload_receiver::PayloadReceiver;
 use crate::proposer::Proposer;
 use crate::synchronizer::Synchronizer;
@@ -61,6 +64,8 @@ pub enum PrimaryWorkerMessage {
     Synchronize(Vec<Digest>, /* target */ PublicKey),
     /// The primary indicates a round update.
     Cleanup(Height),
+    /// The primary indicates that a slot has been committed with batch digests.
+    SlotCommitted(Slot, Vec<Digest>),
 }
 
 /// The messages sent by the workers to their primary.
@@ -105,7 +110,6 @@ impl Primary {
         let (tx_header_waiter_instances, rx_header_waiter_instances) = channel(CHANNEL_CAPACITY);
         let (tx_commit, rx_commit) = channel(CHANNEL_CAPACITY);
         let (_tx_mempool, rx_mempool) = channel(CHANNEL_CAPACITY);
-
 
         // Write the parameters to the logs.
         // NOTE: These log entries are needed to compute performance.
@@ -165,9 +169,8 @@ impl Primary {
 
         let timeout_delay = 1000;
 
-
         // use_optimistic_tips: bool,     //default = true (TODO: implement non optimistic tip option)
-        
+
         // use_parallel_proposals: bool,  //default = true (TODO: implement sequential slot option)
         // let k = 1; //Max open conensus instances at a time.
 
@@ -208,7 +211,17 @@ impl Primary {
             parameters.asynchrony_duration,
         );
 
-        Committer::spawn(committee.clone(), store.clone(), parameters.gc_depth, rx_mempool, rx_committer, rx_commit, tx_output, synchronizer);
+        Committer::spawn(
+            name,
+            committee.clone(),
+            store.clone(),
+            parameters.gc_depth,
+            rx_mempool,
+            rx_committer,
+            rx_commit,
+            tx_output,
+            synchronizer,
+        );
 
         // Keeps track of the latest consensus round and allows other tasks to clean up their their internal state
         GarbageCollector::spawn(
@@ -262,7 +275,12 @@ impl Primary {
         );
 
         // The `Helper` is dedicated to reply to certificates requests from other primaries.
-        Helper::spawn(committee.clone(), store, rx_cert_requests, rx_header_requests);
+        Helper::spawn(
+            committee.clone(),
+            store,
+            rx_cert_requests,
+            rx_header_requests,
+        );
 
         // NOTE: This log entry is used to compute performance.
         info!(
@@ -305,11 +323,10 @@ impl MessageHandler for PrimaryReceiverHandler {
                 .expect("Failed to send primary message"),
             request => {
                 ////println!("Made it to dispatch");
-                self
-                .tx_primary_messages
-                .send(request)
-                .await
-                .expect("Failed to send certificate")
+                self.tx_primary_messages
+                    .send(request)
+                    .await
+                    .expect("Failed to send certificate")
             }
         }
         Ok(())
@@ -333,12 +350,12 @@ impl MessageHandler for WorkerReceiverHandler {
         // Deserialize and parse the message.
         match bincode::deserialize(&serialized).map_err(DagError::SerializationError)? {
             WorkerPrimaryMessage::OurBatch(digest, worker_id) => self
-                .tx_our_digests                                         //sender channel to Proposer
+                .tx_our_digests //sender channel to Proposer
                 .send((digest, worker_id))
                 .await
                 .expect("Failed to send workers' digests"),
             WorkerPrimaryMessage::OthersBatch(digest, worker_id) => self
-                .tx_others_digests                                      //sender channel to PayloadReceiver
+                .tx_others_digests //sender channel to PayloadReceiver
                 .send((digest, worker_id))
                 .await
                 .expect("Failed to send workers' digests"),

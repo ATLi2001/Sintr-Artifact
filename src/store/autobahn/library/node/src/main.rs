@@ -21,7 +21,7 @@ pub const CHANNEL_CAPACITY: usize = 1_000;
 #[tokio::main]
 async fn main() -> Result<()> {
     //std::env::set_var("RUST_BACKTRACE", "1");
-    
+
     let matches = App::new(crate_name!())
         .version(crate_version!())
         .about("A research implementation of Sailfish.")
@@ -119,7 +119,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
             let (tx_feedback, rx_feedback) = channel(CHANNEL_CAPACITY);
             let (tx_committer, rx_committer) = channel(CHANNEL_CAPACITY);
             let (tx_pushdown_cert, rx_pushdown_cert) = channel(CHANNEL_CAPACITY);
-            let(tx_request_header_sync, rx_request_header_sync) = channel(CHANNEL_CAPACITY);
+            let (tx_request_header_sync, rx_request_header_sync) = channel(CHANNEL_CAPACITY);
 
             Primary::spawn(
                 name,
@@ -162,7 +162,16 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
                 .unwrap()
                 .parse::<WorkerId>()
                 .context("The worker id must be a positive integer")?;
-            Worker::spawn(keypair.name, id, committee, parameters, store);
+
+            let (tx_slot_txn_reply, _rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
+            Worker::spawn(
+                keypair.name,
+                id,
+                committee,
+                parameters,
+                store,
+                tx_slot_txn_reply,
+            );
         }
         _ => unreachable!(),
     }

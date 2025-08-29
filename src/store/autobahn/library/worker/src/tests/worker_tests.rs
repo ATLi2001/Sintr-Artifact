@@ -21,7 +21,15 @@ async fn handle_clients_transactions() {
     let store = Store::new(path).unwrap();
 
     // Spawn a `Worker` instance.
-    Worker::spawn(name, id, committee.clone(), parameters, store);
+    let (tx_slot_txn_reply, _rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
+    Worker::spawn(
+        name,
+        id,
+        committee.clone(),
+        parameters,
+        store,
+        tx_slot_txn_reply,
+    );
 
     // Spawn a network listener to receive our batch's digest.
     let primary_address = committee.primary(&name).unwrap().worker_to_primary;
