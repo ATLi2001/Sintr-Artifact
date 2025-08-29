@@ -171,6 +171,8 @@ TCPTransport::TCPTransport(double dropRate, double reorderRate,
 
     lastTimerId = 0;
 
+    promise = nullptr;
+
     // Set up libevent
     evthread_use_pthreads();
     event_set_log_callback(LogCallback);
@@ -926,6 +928,12 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
 
     if (what & BEV_EVENT_CONNECTED) {
         Debug("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
+        transport->mtx.lock();
+        if(transport->promise != nullptr) {
+          transport->promise->set_value(true);
+          transport->promise = nullptr;
+        }
+        transport->mtx.unlock();
     } else if (what & BEV_EVENT_ERROR) {
         Warning("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
                 info->groupIdx, info->replicaIdx,
@@ -936,6 +944,10 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         auto it2 = transport->tcpOutgoing.find(std::make_pair(addr, info->receiver));
         transport->tcpOutgoing.erase(it2);
         transport->tcpAddresses.erase(bev);
+        if(transport->promise != nullptr) {
+          transport->promise->set_value(true);
+          transport->promise = nullptr;
+        }
         transport->mtx.unlock();
 
         return;
@@ -947,8 +959,22 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         auto it2 = transport->tcpOutgoing.find(std::make_pair(addr, info->receiver));
         transport->tcpOutgoing.erase(it2);
         transport->tcpAddresses.erase(bev);
+        if(transport->promise != nullptr) {
+          transport->promise->set_value(true);
+          transport->promise = nullptr;
+        }
         transport->mtx.unlock();
 
         return;
     }
+}
+
+bool
+TCPTransport::SendMessageToReplica(TransportReceiver *src,
+                                      int replicaIdx,
+                                      const Message &m,
+                                      std::promise<bool>* cb)
+{
+  promise = cb; // doesn't need to be thread safe because there should only be one thread accessing calling this method at a time
+  return TransportCommon::SendMessageToReplica(src, replicaIdx, m);
 }

@@ -61,6 +61,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   
   valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params); 
   valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
+  Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 
 
   // assume these are somehow secretly shared before hand
@@ -118,6 +119,15 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
+    //c2cTportThread = new std::thread(&Client2Client::Client2ClientRunTCPThreadFunction, this);
+    //if (params.sintr_params.clientPinCores) {
+      // don't pin cores for transport thread yet... ask if necessary
+      // set cpu affinity
+      // cpu_set_t cpuset;
+      // CPU_ZERO(&cpuset);
+      // CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      // pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+    //}
   }
   if (params.sintr_params.c2cReceiveThread) {
     Debug("Starting c2cReceiveThread");
@@ -375,7 +385,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
         continue;
       }
       beginValSent.insert(i);
-      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
+      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
     }
   }
   // other heuristics depend on actual policy that was estimated
@@ -414,7 +424,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
         continue;
       }
       beginValSent.insert(i);
-      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
+      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
     }
     // sanity check - policy should be satisfied by the clients we are sending to
     UW_ASSERT(policyClient->IsSatisfied(beginValSent));
@@ -913,7 +923,7 @@ void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
       auto ret = beginValSent.insert(i);
       // should be first time sending to this client
       UW_ASSERT(ret.second);
-      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
+      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
       for (const auto &sentFwdResultState : sentFwdResults) {
         Debug(
           "Sending to client %lu from client %lu seq num %lu in handle policy update",
@@ -1258,6 +1268,28 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     curr_client_id, curr_client_seq_num, fwdReadResult,
     dep, hasDep, addReadset, policyDep, hasPolicyDep
   );
+}
+
+void Client2Client::SendFirstTCPMsgToClient(int replicaIdx, const Message &m) {
+  if(params.sintr_params.c2cWaitTCP && clientsContacted.find(replicaIdx) == clientsContacted.end()) {
+    while(!EstablishC2C(replicaIdx, m)) {
+      Debug("Retrying TCP Connection to client %d from client %d", replicaIdx, client_id);
+    }
+    clientsContacted.insert(replicaIdx);
+  } else {
+    transport->SendMessageToReplica(this, replicaIdx, m);
+  }
+}
+
+bool Client2Client::EstablishC2C(int replicaIdx, const Message &m) {
+  // don't use this function unless using TCP
+  std::promise<bool> p;
+  std::future connection_future = p.get_future();
+  while(!transport->SendMessageToReplica(this, replicaIdx, m, &p)) {
+    Debug("Retrying sending msg to %d", replicaIdx);
+  }
+  Debug("WAITING FOR FUTURE RETURN");
+  return connection_future.get();
 }
 
 void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg) {
@@ -2159,6 +2191,11 @@ void Client2Client::Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_
     executor->f();
     delete executor;
   }
+}
+
+void Client2Client::Client2ClientRunTCPThreadFunction() {
+  Debug("running transport");
+  transport->Run();
 }
 
 bool Client2Client::ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data) {

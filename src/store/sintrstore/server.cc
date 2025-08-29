@@ -1104,7 +1104,9 @@ void Server::HandleRead(const TransportAddress &remote,
   proto::ReadReply* readReply = GetUnusedReadReply();
   readReply->set_req_id(msg.req_id());
   readReply->set_key(msg.key()); //technically don't need to send back.
-  readReply->mutable_write()->set_key(msg.key());
+  if(!params.sintr_params.serverSkipEndorsementCheck) {
+    readReply->mutable_write()->set_key(msg.key());
+  }
   if (committed_exists) {
     //if(tsVal.first > ts) Panic("Should not read committed value with larger TS than read");
     Debug("READ[%lu:%lu] Committed value of length %lu bytes with ts %lu.%lu.",
@@ -1166,7 +1168,6 @@ void Server::HandleRead(const TransportAddress &remote,
     if (params.maxDepDepth > -2) {
       Debug("Look for prepared value to READ[%lu:%lu]", msg.timestamp().id(), msg.req_id());
       const proto::Transaction *mostRecent = nullptr;
-      Timestamp mostRecentPreparedTS;
       std::string preparedPolicyId = policyIdFunction(msg.key(), "");
 
       //std::pair<std::shared_mutex,std::map<Timestamp, const proto::Transaction *>> &x = preparedWrites[write.key()];
@@ -1192,10 +1193,9 @@ void Server::HandleRead(const TransportAddress &remote,
           for (const auto &t : itr->second.second) {
             if(t.first > ts) break; //only consider it if it is smaller than TS (Map is ordered, so break should be fine here.)
             if(committed_exists && t.first <= tsVal.first) continue; //only consider it if bigger than committed value. 
-            if (mostRecent == nullptr || t.first > mostRecentPreparedTS) {
+            if (mostRecent == nullptr || t.first > Timestamp(mostRecent->timestamp())) {
               if (t.second->policy_type() == proto::Transaction::NONE) {
                 mostRecent = t.second;
-                mostRecentPreparedTS = t.first;
               }
             }
           }
@@ -1211,21 +1211,21 @@ void Server::HandleRead(const TransportAddress &remote,
             }
 
             Debug("Prepared write with most recent ts %lu.%lu.",
-                mostRecentPreparedTS.getTimestamp(), mostRecentPreparedTS.getID());
+                mostRecent->timestamp().timestamp(), mostRecent->timestamp().id());
             //std::cerr << "Dependency depth: " << (DependencyDepth(mostRecent)) << std::endl;
             if (params.maxDepDepth == -1 || DependencyDepth(mostRecent) <= params.maxDepDepth) {
               readReply->mutable_write()->set_prepared_value(preparedValue);
               if(params.sintr_params.hideTimestamps) {
-                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecentPreparedTS));
-                mostRecentPreparedTS.serialize(readReply->mutable_prepared_timestamp());
+                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(Timestamp(mostRecent->timestamp())));
+                *readReply->mutable_prepared_timestamp() = mostRecent->timestamp();
               } else {
-                mostRecentPreparedTS.serialize(readReply->mutable_write()->mutable_prepared_timestamp());
+                *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
               }
               std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest, params.sintr_params.hideTimestamps);
               if(params.sintr_params.hashEndorsements) {
                 tempDigest = EndorsedTxnDigest(tempDigest, *mostRecent, params.hashDigest);
               }
-              Debug("setting prepared value and digest for txn %s", BytesToHex(tempDigest,16).c_str());
+              //Debug("setting prepared value and digest for txn %s", BytesToHex(tempDigest,16).c_str());
               *readReply->mutable_write()->mutable_prepared_txn_digest() = tempDigest;
             }
           }

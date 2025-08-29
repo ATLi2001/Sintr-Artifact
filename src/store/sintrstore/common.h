@@ -886,6 +886,7 @@ typedef struct SintrParameters {
   const bool ignorePolicyUpdate; // ignore policy updates during a transaction
   const bool clientEstimatePolicy; // client estimates policy at start of transaction
   const bool hashQueryGenId; // hash query general id
+  const bool c2cWaitTCP; // wait for tcp connection between clients to be established before continuing
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -894,7 +895,7 @@ typedef struct SintrParameters {
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
-    bool clientEstimatePolicy, bool hashQueryGenId) :
+    bool clientEstimatePolicy, bool hashQueryGenId, bool c2cWaitTCP) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -922,7 +923,8 @@ typedef struct SintrParameters {
     optimisticReceiveEndorsement(optimisticReceiveEndorsement),
     ignorePolicyUpdate(ignorePolicyUpdate),
     clientEstimatePolicy(clientEstimatePolicy),
-    hashQueryGenId(hashQueryGenId) {
+    hashQueryGenId(hashQueryGenId),
+    c2cWaitTCP(c2cWaitTCP) {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message

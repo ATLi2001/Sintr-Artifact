@@ -485,6 +485,7 @@ DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of includin
 DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
+DEFINE_bool(sintr_c2c_wait_tcp, false, "wait for tcp connection between clients to be established before continuing");
 
 // given an estimated txn policy, how many other clients to contact?
 const std::string sintr_client_validation_args[] = {
@@ -1733,7 +1734,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_optimistic_receive_endorsement,
         FLAGS_sintr_client_ignore_policy_update,
         FLAGS_sintr_client_estimate_policy,
-        FLAGS_sintr_hash_query_gen_id
+        FLAGS_sintr_hash_query_gen_id,
+        FLAGS_sintr_c2c_wait_tcp
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,

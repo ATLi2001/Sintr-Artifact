@@ -38,6 +38,7 @@
 #include <list>
 #include <map>
 #include <unordered_map>
+#include <future>
 
 class TransportAddress
 {
@@ -93,6 +94,13 @@ public:
     virtual bool SendMessageToReplica(TransportReceiver *src,
                                       int replicaIdx,
                                       const Message &m) = 0;
+    virtual bool SendMessageToReplica(TransportReceiver *src,
+                                      int replicaIdx,
+                                      const Message &m,
+                                      std::promise<bool>* cb)
+    {
+        return false;
+    }
     /* Send message to a replica in a specific group */
     virtual bool SendMessageToReplica(TransportReceiver *src,
                                       int groupIdx,

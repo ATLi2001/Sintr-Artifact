@@ -268,6 +268,9 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   void SendBlindWriteMessageHelper();
 
+  bool EstablishC2C(int replicaIdx, const Message &m);
+  void SendFirstTCPMsgToClient(int replicaIdx, const Message &m);
+
   void HandlePolicyUpdateHelper(const Policy *policy);
 
   void ManageDispatchBeginValidateTxnMessage(const TransportAddress &remote, const std::string &data);
@@ -313,6 +316,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   void ValidationThreadFunction();
   void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
+  void Client2ClientRunTCPThreadFunction();
 
   bool ValidateHMACedMessage(const proto::SignedMessage &signedMessage, std::string &data);
   // create an hmac from msg and place into signature
@@ -352,6 +356,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   uint64_t client_seq_num;
   // current set of transport ids begin validation message has been sent to
   std::set<uint64_t> beginValSent;
+  std::set<uint64_t> clientsContacted;
   // track most recently sent begin validation message
   proto::BeginValidateTxnMessage sentBeginValTxnMsg;
   // track all sent forward read/query results for current transaction
@@ -373,6 +378,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   // separate thread for message sending, stays sequential
   std::thread *c2cSendThread;
+  // thread for running tport msg sending
+  std::thread *c2cTportThread;
   // concurrent queue of messages to be sent
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cSendQueue;
   // separate thread for message receiving, stays sequential

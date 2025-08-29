@@ -336,12 +336,13 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasPolicyDep) {
         *txn.add_deps() = policyDep;
       }
-
-      c2client->SendForwardReadResultMessage(
-        key, val, ts, proof, serializedWrite, 
-        serializedWriteTypeName, dep, hasDep, addReadSet,
-        policyDep, hasPolicyDep
-      );
+      if(!params.sintr_params.ignorePolicyUpdate) {
+        c2client->SendForwardReadResultMessage(
+          key, val, ts, proof, serializedWrite, 
+          serializedWriteTypeName, dep, hasDep, addReadSet,
+          policyDep, hasPolicyDep
+        );
+      }
 
       gcb(status, key, val, ts);
     };
