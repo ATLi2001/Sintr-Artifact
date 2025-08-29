@@ -927,7 +927,7 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
     transport->mtx.unlock_shared();
 
     if (what & BEV_EVENT_CONNECTED) {
-        Warning("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
+        Debug("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
         transport->mtx.lock();
         if(transport->promise != nullptr) {
           transport->promise->set_value(true);
