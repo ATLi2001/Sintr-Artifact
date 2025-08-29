@@ -927,7 +927,7 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
     transport->mtx.unlock_shared();
 
     if (what & BEV_EVENT_CONNECTED) {
-        Debug("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
+        Warning("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
         transport->mtx.lock();
         if(transport->promise != nullptr) {
           transport->promise->set_value(true);
@@ -945,7 +945,7 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         transport->tcpOutgoing.erase(it2);
         transport->tcpAddresses.erase(bev);
         if(transport->promise != nullptr) {
-          transport->promise->set_value(true);
+          transport->promise->set_value(false);
           transport->promise = nullptr;
         }
         transport->mtx.unlock();
@@ -960,7 +960,7 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         transport->tcpOutgoing.erase(it2);
         transport->tcpAddresses.erase(bev);
         if(transport->promise != nullptr) {
-          transport->promise->set_value(true);
+          transport->promise->set_value(false);
           transport->promise = nullptr;
         }
         transport->mtx.unlock();
