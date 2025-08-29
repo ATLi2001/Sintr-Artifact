@@ -26,6 +26,7 @@
 
 #include "store/common/sintring/client2client_common.h"
 #include "store/common/frontend/sync_client.h"
+#include "lib/assert.h"
 #include "lib/message.h"
 #include <sstream>
 #include <sched.h>
@@ -51,7 +52,39 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
       sessionKeys[i] = std::string(8, (char) i + 0x30) + std::string(8, (char) idx + 0x30);
     }
   }
+}
 
+Client2ClientCommon::~Client2ClientCommon() {
+  done = true;
+  // send a dummy message to unblock any waiting threads before joining
+  for (size_t i = 0; i < valThreads.size(); i++) {
+    validationQueue.push(nullptr);
+  }
+  for (auto t : valThreads) {
+    t->join();
+    delete t;
+  }
+  if (sintr_params.c2cSendThread) {
+    c2cSendQueue.push(nullptr);
+    c2cSendThread->join();
+    delete c2cSendThread;
+  }
+  if (sintr_params.c2cReceiveThread) {
+    c2cReceiveQueue.push(nullptr);
+    c2cReceiveThread->join();
+    delete c2cReceiveThread;
+  }
+  for (size_t i = 0; i < parallelSigCheckThreads.size(); i++) {
+    parallelSigCheckQueue.push(nullptr);
+  }
+  for (auto t : parallelSigCheckThreads) {
+    t->join();
+    delete t;
+  }
+  delete valParseClient;
+}
+
+void Client2ClientCommon::Init() {
   // each process gets 2 cpus, one for main client thread and one for all validation, send, receive, sig check threads 
   int num_cpus = std::thread::hardware_concurrency();
   size_t cpus_per_client = 2;
@@ -61,8 +94,18 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
   }
   int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
 
-  // derived Client2Client classes should instantiate the validation threads
-  // Debug("Starting %lu validation threads", sintr_params.maxValThreads);
+  // derived Client2Client classes should override ValidationThreadFunction
+  Debug("Starting %lu validation threads", sintr_params.maxValThreads);
+  for (size_t i = 0; i < sintr_params.maxValThreads; i++) {
+    valThreads.push_back(new std::thread(&Client2ClientCommon::ValidationThreadFunction, this));
+    if (sintr_params.clientPinCores) {
+      // set cpu affinity
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET((main_client_cpu + (1 + i) % cpus_per_client) % num_cpus, &cpuset);
+      pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
+    }
+  }
 
   if (sintr_params.c2cSendThread) {
     Debug("Starting c2cSendThread");
@@ -101,34 +144,73 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
   }
 }
 
-Client2ClientCommon::~Client2ClientCommon() {
-  done = true;
-  // send a dummy message to unblock any waiting threads before joining
-  for (size_t i = 0; i < valThreads.size(); i++) {
-    validationQueue.push(nullptr);
+void Client2ClientCommon::ResetTrackingState() {
+  std::unique_lock lock(sentFwdResultsMutex);
+  beginValSent.clear();
+  sentFwdResults.clear();
+  valClientOrder.clear();
+}
+
+void Client2ClientCommon::HandlePolicyUpdate(const Policy *policy) {
+  UW_ASSERT(policy != nullptr);
+  endorseClient->UpdateRequirement(policy);
+
+  if (!sintr_params.c2cSendThread) {
+    HandlePolicyUpdateHelper(policy);
   }
-  for (auto t : valThreads) {
-    t->join();
-    delete t;
+  else {
+    auto f = [=]() {
+      this->HandlePolicyUpdateHelper(policy);
+      return (void*) true;
+    };
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    c2cSendQueue.push(executor);
   }
-  if (sintr_params.c2cSendThread) {
-    c2cSendQueue.push(nullptr);
-    c2cSendThread->join();
-    delete c2cSendThread;
+}
+
+void Client2ClientCommon::HandlePolicyUpdateHelper(const Policy *policy) {
+  std::vector<int> diff = endorseClient->DifferenceToSatisfied(beginValSent);
+  // if after updating the policy, and the current set of validations is not enough, initiate more
+  if (diff.size() > 0) {
+    std::set<uint64_t> clients;
+    ExtractFromPolicyClientsToContact(diff, clients);
+    Debug("Initiating %ld more beginValTxnMsg", clients.size());
+    std::shared_lock lock(sentFwdResultsMutex);
+    for (const auto &i : clients) {
+      // do not send to self
+      if (i == client_id) {
+        continue;
+      }
+      auto ret = beginValSent.insert(i);
+      // should be first time sending to this client
+      UW_ASSERT(ret.second);
+      transport->SendMessageToReplica(this, i, *GetSentBeginValTxnMsg());
+      for (const auto &sentFwdResultState : sentFwdResults) {
+        Debug(
+          "Sending to client %lu from client %lu seq num %lu in handle policy update",
+          i,
+          client_id,
+          client_seq_num
+        );
+
+        if (sentFwdResultState->fwdMsgSigned != nullptr) {
+          // need to HMAC again since previous one did not include this client
+          if (sintr_params.signFwdReadResults && !sentFwdResultState->reHMACed) {
+            CreateHMACedMessage(
+              *sentFwdResultState->fwdMsgUnderlying,
+              *sentFwdResultState->fwdMsgSigned,
+              sentFwdResultState->signedTypeName
+            );
+          }
+          transport->SendMessageToReplica(this, i, *sentFwdResultState->fwdMsgSigned);
+        }
+        else {
+          Panic("No non-nullptr message to send");
+        }
+        sentFwdResultState->reHMACed = true;
+      }
+    }
   }
-  if (sintr_params.c2cReceiveThread) {
-    c2cReceiveQueue.push(nullptr);
-    c2cReceiveThread->join();
-    delete c2cReceiveThread;
-  }
-  for (size_t i = 0; i < parallelSigCheckThreads.size(); i++) {
-    parallelSigCheckQueue.push(nullptr);
-  }
-  for (auto t : parallelSigCheckThreads) {
-    t->join();
-    delete t;
-  }
-  delete valParseClient;
 }
 
 std::set<uint64_t> Client2ClientCommon::ProcessClientValidationHeuristic(PolicyClient *policyClient) {
@@ -231,7 +313,7 @@ void Client2ClientCommon::ExtractFromPolicyClientsToContact(const std::vector<in
 }
 
 void Client2ClientCommon::ValidationThreadFunctionBase(ValidationClientCommon *valClient,
-    std::function<void(void)> preValFunc, std::function<void(transaction_status_t)> postValFunc) {
+    std::function<void(void)> preValFunc, std::function<void(transaction_status_t, ValidationInfoBase*)> postValFunc) {
   ::SyncClient syncClient(valClient);
 
   while(!done) {
@@ -269,7 +351,7 @@ void Client2ClientCommon::ValidationThreadFunctionBase(ValidationClientCommon *v
     // auto duration = end - start;
     // validation_time_us.add(duration);
 
-    postValFunc(result);
+    postValFunc(result, valInfo);
 
     delete valInfo;
     Debug("thread exiting for validation for client id %lu, seq num %lu", curr_client_id, curr_client_seq_num);

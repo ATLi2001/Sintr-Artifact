@@ -94,6 +94,8 @@ struct QueryReadSetMgr {
 // general sql id
 std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t client_seq_num, bool hashDigest);
 
+std::string TransactionDigest(const TransactionMessage &txn_msg);
+
 // client tells us if this is a client signature or not
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client=false);
@@ -106,6 +108,10 @@ bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
 
 bool CheckSignature(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, bool client=false);
+
+void SignBytes(const std::string &data, 
+  crypto::PrivKey* privateKey, uint64_t processId, 
+  proto::SignedMessage &signedMessage);
 
 void SignMessage(const ::google::protobuf::Message &msg,
     crypto::PrivKey* privateKey, uint64_t processId,

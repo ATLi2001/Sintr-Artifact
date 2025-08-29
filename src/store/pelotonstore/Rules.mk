@@ -1,7 +1,7 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
 
 SRCS += $(addprefix $(d), app.cc replica.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc bftsmartagent.cc table_store.cc \
-			validation_client.cc)
+			validation_client.cc client2client.cc)
 
 PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto peloton-sintr-proto.proto)
 
@@ -27,4 +27,4 @@ LIB-peloton-store := $(o)common.o $(o)replica.o $(o)server.o $(o)table_store.o\
 LIB-peloton-client := $(o)common.o $(o)pbft-proto.o $(o)server-proto.o $(o)bftsmartagent.o $(o)shardclient.o \
 	$(o)client.o $(LIB-crypto) $(LIB-peloton-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
 	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-peloton-interface) \
-	$(LIB-common-sintring) $(o)peloton-sintr-proto.o $(o)validation_client.o
+	$(LIB-common-sintring) $(o)peloton-sintr-proto.o $(o)validation_client.o $(o)client2client.o

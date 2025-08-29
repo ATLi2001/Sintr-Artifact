@@ -32,6 +32,8 @@ message SQL_RPCReply {
   optional bytes sql_res = 3;
   // holds readset and writeset
   optional TransactionMessage txn_msg = 4;
+  // for sintr, a general sql id is needed
+  optional bytes sql_gen_id = 5;
 }
 
 message TryCommitReply {

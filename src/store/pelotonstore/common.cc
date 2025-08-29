@@ -49,6 +49,27 @@ std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t 
   }
 }
 
+std::string TransactionDigest(const TransactionMessage &txn_msg) {
+  CryptoPP::SHA256 hash;
+  std::string digest;
+
+  // hash read set
+  for (const auto &read : txn_msg.readset()) {
+    hash.Update((CryptoPP::byte*) &read.key()[0], read.key().length());
+  }
+
+  // hash write set
+  for (const auto &write : txn_msg.writeset()) {
+    hash.Update((CryptoPP::byte*) &write.key()[0], write.key().length());
+    hash.Update((CryptoPP::byte*) &write.value()[0], write.value().length());
+  }
+
+  digest.resize(hash.DigestSize());
+  hash.Final((CryptoPP::byte*) &digest[0]);
+
+  return digest;
+}
+
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
     KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client) {
   proto::PackedMessage packedMessage;
@@ -100,6 +121,15 @@ bool CheckSignature(const proto::SignedMessage &signedMessage,
     // this reply
     return crypto::IsMessageValid(replicaPublicKey, signedMessage.packed_msg(),
           &signedMessage);
+}
+
+void SignBytes(const std::string &data, 
+    crypto::PrivKey* privateKey, uint64_t processId, 
+    proto::SignedMessage &signedMessage) {
+  signedMessage.set_replica_id(processId);
+  signedMessage.set_packed_msg(data);
+  *signedMessage.mutable_signature() = crypto::Sign(privateKey,
+      signedMessage.packed_msg());
 }
 
 void SignMessage(const ::google::protobuf::Message &msg,

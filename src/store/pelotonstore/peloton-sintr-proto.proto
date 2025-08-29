@@ -35,8 +35,8 @@ message ForwardSQLResultMessage {
     ForwardSQLResult fwd_sql_result = 1;
     SignedMessage signed_fwd_sql_result = 2;
   }
-  // server signatures on query result and readset per group, should be f+1 exact matches
-  // map<uint64, SignedMessages> query_sigs = 3;
+  // server signature on sql result
+  optional SignedMessage server_sql_sig = 3;
 }
 
 message FinishValidateTxnMessage {
