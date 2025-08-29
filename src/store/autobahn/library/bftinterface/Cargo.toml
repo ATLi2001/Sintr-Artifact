@@ -25,6 +25,7 @@ store = { path = "../store" }
 crypto = { path = "../crypto" }
 primary = { path = "../primary" }
 worker = { path = "../worker" }
+bridge_debug = { path = "../bridge_debug" }
 #hotstuff = { path = "../hotstuff" }
 #sailfish = { path = "../sailfish" }
 

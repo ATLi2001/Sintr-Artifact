@@ -48,7 +48,7 @@ pub enum WorkerMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotTransactionReply {
     pub slot: u64,
-    pub committed_transactions: Vec<u64>,
+    pub committed_transaction: Transaction,
 }
 
 pub struct Worker {

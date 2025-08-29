@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bridge_debug::debug_via_cpp;
 use bytes::BufMut as _;
 use bytes::BytesMut;
 use futures::sink::SinkExt as _;
@@ -8,8 +9,6 @@ use tokio::net::TcpStream;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-
-use crate::ffi::debug_via_cpp;
 
 pub struct AutobahnClient {
     // keep tokio runtime alive

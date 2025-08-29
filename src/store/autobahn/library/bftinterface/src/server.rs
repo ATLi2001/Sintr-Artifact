@@ -1,3 +1,4 @@
+use bridge_debug::debug_via_cpp;
 use config::Import as _;
 use config::{Committee, KeyPair, Parameters};
 use crypto::SignatureService;
@@ -7,7 +8,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc::channel;
 use worker::Worker;
 
-use crate::ffi::{autobahn_callback, debug_via_cpp};
+use crate::ffi::autobahn_callback;
 
 pub struct AutobahnServer {
     // keep tokio runtime alive
@@ -106,6 +107,7 @@ async fn start_server_inner(
         );
 
         while let Some(_header) = rx_output.recv().await {
+            debug_via_cpp("Primary produced header");
             // autobahn_callback(handle, header.to_string());
         }
     } else {
@@ -121,7 +123,12 @@ async fn start_server_inner(
         );
 
         while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
-            autobahn_callback(handle, slot_txn_reply.slot.to_string());
+            debug_via_cpp("worker received slot transaction reply");
+            autobahn_callback(
+                handle,
+                slot_txn_reply.slot,
+                slot_txn_reply.committed_transaction.as_slice(),
+            );
         }
     }
 

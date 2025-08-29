@@ -1,0 +1,11 @@
+[package]
+name = "bridge_debug"
+version = "0.1.0"
+authors = ["Austin Li <atl63@cornell.edu>"]
+edition = "2018"
+
+[dependencies]
+cxx = "1.0"
+
+[build-dependencies]
+cxx-build = "1.0"

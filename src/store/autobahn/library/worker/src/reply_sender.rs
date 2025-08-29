@@ -1,9 +1,10 @@
 // Copyright(C) Facebook, Inc. and its affiliates.
-use crate::worker::{SlotTransactionReply, WorkerMessage};
+use crate::{
+    batch_maker::Transaction,
+    worker::{SlotTransactionReply, WorkerMessage},
+};
 use crypto::Digest;
 use log::debug;
-use std::collections::HashMap;
-use std::convert::TryInto;
 use store::Store;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -45,7 +46,7 @@ impl ReplySender {
             );
 
             // Group transactions by client_id
-            let mut client_transactions: HashMap<u8, Vec<u64>> = HashMap::new();
+            let mut client_transactions: Vec<Transaction> = Vec::new();
 
             // Read batches from store and extract transaction IDs
             for digest in batch_digests {
@@ -54,18 +55,8 @@ impl ReplySender {
                         // Deserialize the WorkerMessage
                         match bincode::deserialize::<WorkerMessage>(&serialized_batch) {
                             Ok(WorkerMessage::Batch(batch)) => {
-                                // Extract transaction IDs from each transaction in the batch
                                 for transaction in batch {
-                                    if transaction.len() >= 10 {
-                                        let client_id = transaction[1];
-                                        let counter = u64::from_be_bytes(
-                                            transaction[2..10].try_into().unwrap(),
-                                        );
-                                        client_transactions
-                                            .entry(client_id)
-                                            .or_insert_with(Vec::new)
-                                            .push(counter);
-                                    }
+                                    client_transactions.push(transaction);
                                 }
                             }
                             Ok(_) => {
@@ -92,14 +83,14 @@ impl ReplySender {
             }
 
             // Send batched replies to each client using persistent connections
-            for (client_id, counters) in client_transactions {
+            for transaction in client_transactions {
                 let reply = SlotTransactionReply {
                     slot,
-                    committed_transactions: counters,
+                    committed_transaction: transaction,
                 };
 
                 if let Err(e) = self.tx_slot_txn_reply.send(reply).await {
-                    debug!("Failed to send reply to client {}: {}", client_id, e);
+                    debug!("Failed to send reply: {}", e);
                 }
             }
         }

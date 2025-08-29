@@ -26,9 +26,7 @@ mod ffi {
         include!("autobahn_callback.h");
 
         #[namespace = "autobahn"]
-        fn autobahn_callback(handle: i64, message: String);
-        #[namespace = "autobahn"]
-        fn debug_via_cpp(message: &str);
+        fn autobahn_callback(handle: i64, slot_num: u64, buf: &[u8]);
     }
 }
 

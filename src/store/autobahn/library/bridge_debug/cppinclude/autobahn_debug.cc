@@ -23,16 +23,16 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef _AUTOBAHN_CALLBACK_H_
-#define _AUTOBAHN_CALLBACK_H_
 
-// rust/cxx.h for converted rust types
-#include "rust/cxx.h"
+#include "autobahn_debug.h"
+#include "lib/message.h"
+#include <string>
 
 namespace autobahn {
 
-void autobahn_callback(int64_t handle, uint64_t slot_num, rust::Slice<const std::uint8_t> buf);
+void debug_via_cpp(rust::Str message) {
+  std::string cpp_message(message.data(), message.size());
+  Debug("From rust: %s", cpp_message.c_str());
+}
 
 } // namespace autobahn
-
-#endif

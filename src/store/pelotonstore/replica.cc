@@ -194,7 +194,7 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       recvrequest.ParseFromString(data);
       HandleRequest(remote, recvrequest);
     }
-    else if(SMR_mode == 2){ //This path will be invoked if it comes from BFTSmart
+    else if(SMR_mode == 2 || SMR_mode == 3){ //This path will be invoked if it comes from BFTSmart or autobahn
        recvrequest.ParseFromString(data);
    
       uint64_t client_id = recvrequest.client_id();
@@ -211,7 +211,6 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       }
       Debug("finished handling requests");
     }
-
   } 
   else{
     Panic("Received invalid message type: %s", type.c_str());
