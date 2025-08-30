@@ -28,7 +28,7 @@
 namespace rwsync {
 
 RWBaseTransaction::RWBaseTransaction(KeySelector *keySelector, int numOps, bool readOnly,
-    std::mt19937 &rand) : keySelector(keySelector), numOps(numOps), readOnly(readOnly) {
+    std::mt19937 &rand) : keySelector(keySelector), keys(std::vector<std::string>()), numOps(numOps), readOnly(readOnly) {
   for (int i = 0; i < numOps; ++i) {
     uint64_t key;
     if (i % 2 == 0) {
@@ -61,13 +61,14 @@ transaction_status_t RWBaseTransaction::BaseExecute(SyncClient &client, uint32_t
   client.Begin(timeout, txnState);
 
   for (size_t op = 0; op < GetNumOps(); op++) {
+    std::string key = GetKey(op, serialize);
     if (readOnly || op % 2 == 0) {
       std::string str;
-      client.Get(GetKey(op, serialize), str, timeout);
-      readValues.insert(std::make_pair(GetKey(op, serialize), str));
+      client.Get(key, str, timeout);
+      readValues.insert(std::make_pair(key, str));
     }
     else {
-      auto strValueItr = readValues.find(GetKey(op, serialize));
+      auto strValueItr = readValues.find(key);
       UW_ASSERT(strValueItr != readValues.end());
       std::string strValue = strValueItr->second;
       std::string writeValue;
@@ -84,7 +85,7 @@ transaction_status_t RWBaseTransaction::BaseExecute(SyncClient &client, uint32_t
           writeValue += static_cast<char>((intValue >> (99 - i) * 8) & 0xFF);
         }
       }
-      client.Put(GetKey(op, serialize), writeValue, timeout);
+      client.Put(key, writeValue, timeout);
     }
   }
 
