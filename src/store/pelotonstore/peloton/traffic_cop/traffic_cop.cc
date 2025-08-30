@@ -165,7 +165,11 @@ ResultType TrafficCop::ExecuteStatementGetResult() {
 executor::ExecutionResult TrafficCop::ExecuteHelper(
     std::shared_ptr<planner::AbstractPlan> plan,
     const std::vector<type::Value> &params, std::vector<ResultValue> &result,
-    const std::vector<int> &result_format, size_t thread_id) {
+    const std::vector<int> &result_format,
+    ///////////////////// sintr specific ///////////////////////////////////
+    pelotonstore::QueryReadSetMgr *query_read_set_mgr,
+    ////////////////////////////////////////////////////////////////////////
+    size_t thread_id) {
   auto &curr_state = GetCurrentTxnState();
 
   concurrency::TransactionContext *txn;
@@ -180,6 +184,13 @@ executor::ExecutionResult TrafficCop::ExecuteHelper(
     txn = txn_manager.BeginTransaction(thread_id);
     tcop_txn_state_.emplace(txn, ResultType::SUCCESS);
   }
+
+  ///////////////////// sintr specific ///////////////////////////////////
+  if (query_read_set_mgr != nullptr) {
+    txn->SetQueryReadSetMgr(query_read_set_mgr);
+    txn->SetHasReadSetMgr(true);
+  }
+  ////////////////////////////////////////////////////////////////////////
 
   // skip if already aborted
   if (curr_state.second == ResultType::ABORTED) {
@@ -552,6 +563,9 @@ ResultType TrafficCop::ExecuteStatement(
     const std::vector<type::Value> &params, UNUSED_ATTRIBUTE bool unnamed,
     //std::shared_ptr<stats::QueryMetric::QueryParams> param_stats,
     const std::vector<int> &result_format, std::vector<ResultValue> &result,
+    ///////////////////// sintr specific ///////////////////////////////////
+    pelotonstore::QueryReadSetMgr *query_read_set_mgr,
+    ////////////////////////////////////////////////////////////////////////
     size_t thread_id) {
   // TODO(Tianyi) Further simplify this API
   /*if (static_cast<StatsType>(settings::SettingsManager::GetInt(
@@ -590,7 +604,8 @@ ResultType TrafficCop::ExecuteStatement(
           statement->SetNeedsReplan(true);
         }
 
-        ExecuteHelper(statement->GetPlanTree(), params, result, result_format, thread_id);
+        ExecuteHelper(statement->GetPlanTree(), params, result, result_format,
+                       query_read_set_mgr, thread_id);
         if (GetQueuing()) {
           return ResultType::QUEUING;
         } else {

@@ -51,8 +51,6 @@
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
 
 
-namespace sintrstore {
-  
 ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
   std::string txn_name(txnState.txn_name());
   
@@ -185,5 +183,3 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
     Panic("Received unexpected txn benchmark: %s", txn_bench.c_str());
   }
 };
-
-} // namespace sintrstore

@@ -180,7 +180,7 @@ private:
   ::google::protobuf::Message* HandleUserAbort(clientConnectionMap::accessor &c, std::shared_ptr<tao::pq::transaction> tx);*/
 
   ::google::protobuf::Message* HandleSQL_RPC(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id, const std::string &query);
-  ::google::protobuf::Message* HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id);
+  ::google::protobuf::Message* HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id, const proto::TryCommit &try_commit);
   ::google::protobuf::Message* HandleUserAbort(ClientStateMap::accessor &c, uint64_t client_id, uint64_t tx_id);
   
   std::string GenerateLoadStatement(const std::string &table_name, const std::vector<std::vector<std::string>> &row_segment, int segment_no);  

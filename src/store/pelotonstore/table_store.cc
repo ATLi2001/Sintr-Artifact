@@ -28,7 +28,6 @@
 #include <utility>
 
 #include "store/common/query_result/query_result.h"
-#include "store/pequinstore/sql_interpreter.h"
 
 namespace pelotonstore {
 
@@ -288,8 +287,9 @@ void TableStore::ExecSingle(const std::string &sql_statement, bool skip_cache) {
 
 
 //Execute SQL Statement on backend. Use the traffic cop associated with the client (and its ongoing transaction)
-std::string TableStore::ExecTransactional(const std::string &sql_statement, uint64_t client_id, uint64_t tx_id, peloton_peloton::ResultType &result_status, std::string &error_msg, bool skip_cache) {
- 
+std::string TableStore::ExecTransactional(const std::string &sql_statement, uint64_t client_id, uint64_t tx_id,
+    peloton_peloton::ResultType &result_status, std::string &error_msg, QueryReadSetMgr &query_read_set_mgr, bool skip_cache) {
+
   Debug("[CPU: %d] Beginning of tx [%d:%d] Statement: %s", sched_getcpu(), client_id, tx_id, sql_statement.c_str());
   std::pair<peloton_peloton::tcop::TrafficCop *, std::atomic_int *> cop_pair = GetClientCop(client_id, tx_id);
  
@@ -308,7 +308,7 @@ std::string TableStore::ExecTransactional(const std::string &sql_statement, uint
   uint64_t rows_affected;
 
   counter->store(1);
-  auto status = tcop->ExecuteStatement(statement, param_values, unamed, result_format, result); //status will be == Queuing (unless Txn already failed, then it might be Aborting)
+  auto status = tcop->ExecuteStatement(statement, param_values, unamed, result_format, result, &query_read_set_mgr); //status will be == Queuing (unless Txn already failed, then it might be Aborting)
 
   Debug("Made it after status");
   // GetResult(status);

@@ -9,10 +9,10 @@
  * modify, merge, publish, distribute, sublicense, and/or sell copies
  * of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -23,30 +23,36 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef _VALIDATION_PARSE_CLIENT_H_
-#define _VALIDATION_PARSE_CLIENT_H_
 
-#include "lib/assert.h"
-#include "store/common/common-proto.pb.h"
-#include "store/common/frontend/validation_transaction.h"
+#ifndef _VALIDATION_CLIENT_COMMON_H_
+#define _VALIDATION_CLIENT_COMMON_H_
 
-#include <vector>
+#include "store/common/frontend/client.h"
 #include <string>
+#include <thread>
+#include "tbb/concurrent_hash_map.h"
 
-// this class takes TxnState proto message into the underlying validation transaction
-class ValidationParseClient {
- public:
-  ValidationParseClient(uint32_t timeout,
-    const std::vector<std::string> &keys = std::vector<std::string>()): timeout(timeout), keys(keys) {}
-  ~ValidationParseClient(){}
 
-  ValidationTransaction *Parse(const TxnState& txnState);
+class ValidationClientCommon : public Client {
+public:
 
- private:
-  uint32_t timeout;
-  const std::vector<std::string> &keys;
-  // even though validation transactions don't use randomness, need it for some constructors
-  std::mt19937 rand;
+  ValidationClientCommon() {};
+  virtual ~ValidationClientCommon() {};
+
+  // Set the current transaction id (client that initiated and seq num)
+  // associate transaction id with current thread id
+  void SetThreadValTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+
+protected:
+  // read from threadValTxnIds and set the passed in references to the current threads txn id
+  void GetThreadValTxnId(uint64_t &txn_client_id, uint64_t &txn_client_seq_num);
+  std::string ToTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+
+private:
+  // map from thread id to (txn_client_id, txn_client_seq_num) tracks what each thread is doing
+  // TODO: Change to a regular map instead of a concurrent hash map because the keys are thread IDs
+  typedef tbb::concurrent_hash_map<std::thread::id, std::pair<uint64_t, uint64_t>> threadValTxnIdsMap;
+  threadValTxnIdsMap threadValTxnIds;
 };
 
-#endif
+#endif /* _VALIDATION_CLIENT_COMMON_H_ */

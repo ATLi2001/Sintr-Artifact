@@ -23,30 +23,27 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef _VALIDATION_PARSE_CLIENT_H_
-#define _VALIDATION_PARSE_CLIENT_H_
 
-#include "lib/assert.h"
-#include "store/common/common-proto.pb.h"
-#include "store/common/frontend/validation_transaction.h"
+#include "store/common/sintring/validation_client_common.h"
+#include "lib/message.h"
 
-#include <vector>
-#include <string>
 
-// this class takes TxnState proto message into the underlying validation transaction
-class ValidationParseClient {
- public:
-  ValidationParseClient(uint32_t timeout,
-    const std::vector<std::string> &keys = std::vector<std::string>()): timeout(timeout), keys(keys) {}
-  ~ValidationParseClient(){}
+void ValidationClientCommon::SetThreadValTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
+  threadValTxnIdsMap::accessor a;
+  threadValTxnIds.insert(a, std::this_thread::get_id());
+  a->second = std::make_pair(txn_client_id, txn_client_seq_num);
+}
 
-  ValidationTransaction *Parse(const TxnState& txnState);
+void ValidationClientCommon::GetThreadValTxnId(uint64_t &txn_client_id, uint64_t &txn_client_seq_num) {
+  threadValTxnIdsMap::const_accessor a;
+  if (!threadValTxnIds.find(a, std::this_thread::get_id())) {
+    Panic("Current thread does not validate transactions");
+  }
 
- private:
-  uint32_t timeout;
-  const std::vector<std::string> &keys;
-  // even though validation transactions don't use randomness, need it for some constructors
-  std::mt19937 rand;
-};
+  txn_client_id = a->second.first;
+  txn_client_seq_num = a->second.second;
+}
 
-#endif
+std::string ValidationClientCommon::ToTxnId(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
+  return std::to_string(txn_client_id) + "_" + std::to_string(txn_client_seq_num);
+}

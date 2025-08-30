@@ -46,6 +46,7 @@
 #include "store/common/policy/client_selector.h"
 #include "store/common/policy/uniform_client_selector.h"
 #include "store/common/policy/zipf_client_selector.h"
+#include "store/common/sintring/params.h"
 #include "store/strongstore/client.h"
 #include "store/weakstore/client.h"
 #include "store/tapirstore/client.h"
@@ -493,10 +494,10 @@ const std::string sintr_client_validation_args[] = {
   "client-validation-one-more",
   "client-validation-all"
 };
-const sintrstore::CLIENT_VALIDATION_HEURISTIC sintr_client_validations[] {
-  sintrstore::CLIENT_VALIDATION_HEURISTIC::EXACT,
-  sintrstore::CLIENT_VALIDATION_HEURISTIC::ONE_MORE,
-  sintrstore::CLIENT_VALIDATION_HEURISTIC::ALL
+const CLIENT_VALIDATION_HEURISTIC sintr_client_validations[] {
+  CLIENT_VALIDATION_HEURISTIC::EXACT,
+  CLIENT_VALIDATION_HEURISTIC::ONE_MORE,
+  CLIENT_VALIDATION_HEURISTIC::ALL
 };
 static bool ValidateSintrClientValidation(const char* flagname,
     const std::string &value) {
@@ -1114,7 +1115,7 @@ int main(int argc, char **argv) {
   }
 
   // parse sintr client validation setting
-  sintrstore::CLIENT_VALIDATION_HEURISTIC sintr_client_validation = sintrstore::CLIENT_VALIDATION_HEURISTIC::EXACT;
+  CLIENT_VALIDATION_HEURISTIC sintr_client_validation = CLIENT_VALIDATION_HEURISTIC::EXACT;
   int numSintrClientValidations = sizeof(sintr_client_validation_args);
   for (int i = 0; i < numSintrClientValidations; ++i) {
     if (FLAGS_sintr_client_validation == sintr_client_validation_args[i]) {
@@ -1708,7 +1709,7 @@ int main(int argc, char **argv) {
     }
     case PROTO_SINTR: {
       // non flag parameters are server only
-      sintrstore::SintrParameters sintr_params(
+      ::SintrParameters sintr_params(
         FLAGS_sintr_max_val_threads,
         FLAGS_sintr_sign_fwd_read_results,
         FLAGS_sintr_sign_finish_validation,
@@ -1945,6 +1946,7 @@ int main(int argc, char **argv) {
 																			  tport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+                                       FLAGS_indicus_sign_client_proposals,
                                        keyManager,
 																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
         break;

@@ -55,7 +55,7 @@ class Client : public ::Client {
       const std::vector<int> &closestReplicas,
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, KeyManager *keyManager,
+      bool validateProofs, bool signClientProposals, KeyManager *keyManager,
       TrueTime timeserver = TrueTime(0,0), bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "");
   ~Client();
 
@@ -111,6 +111,7 @@ class Client : public ::Client {
   uint64_t readQuorumSize;
   bool signMessages;
   bool validateProofs;
+  bool signClientProposals;
   KeyManager *keyManager;
   // TrueTime server.
   TrueTime timeServer;
@@ -121,6 +122,9 @@ class Client : public ::Client {
   bool fake_SMR;
   uint64_t SMR_mode; //Control whether to run without replication (0), with Hotstuff (1) or BFTSmart (2)
   const std::string& PG_BFTSMART_config_path; //Path for BFTSmart (if in use)
+
+  // track overall readset and writeset of transaction
+  TransactionMessage *txn_msg;
 
 
   /* Debug State */

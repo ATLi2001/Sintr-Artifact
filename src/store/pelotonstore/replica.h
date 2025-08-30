@@ -58,7 +58,7 @@ static bool TEST_WITHOUT_HOTSTUFF = true;
 class Replica : public TransportReceiver {
 public:
   Replica(const transport::Configuration &config, KeyManager *keyManager,
-    App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
+    App *app, int groupIdx, int idx, bool signMessages, bool signClientProposals, uint64_t maxBatchSize,
           uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuffpg_cpu, bool local_config, int numShards, Transport *transport,
           bool fake_SMR = false, int dummyTO = 100, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
   ~Replica();
@@ -94,6 +94,7 @@ public:
   int idx; // the replica index within the group
   int id; // unique replica id (across all shards)
   bool signMessages;
+  bool signClientProposals;
   uint64_t maxBatchSize;
   uint64_t batchTimeoutMS;
   uint64_t EbatchSize;

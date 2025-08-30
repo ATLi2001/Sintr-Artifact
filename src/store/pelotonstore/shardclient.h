@@ -51,7 +51,7 @@ namespace pelotonstore {
 
 // status, key, value
 
-typedef std::function<void(int, const std::string&)> sql_rpc_callback;
+typedef std::function<void(int, const std::string&, TransactionMessage*)> sql_rpc_callback;
 typedef std::function<void(int)> sql_rpc_timeout_callback;
 
 typedef std::function<void(int)> try_commit_callback;
@@ -65,7 +65,7 @@ class ShardClient : public TransportReceiver {
   /* Constructor needs path to shard config. */
   ShardClient(const transport::Configuration& config, Transport *transport,
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-      bool signMessages, bool validateProofs,
+      bool signMessages, bool validateProofs, bool signClientProposals,
       KeyManager *keyManager, Stats* stats,
       bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
   ~ShardClient();
@@ -74,7 +74,8 @@ class ShardClient : public TransportReceiver {
 
   void Query(const std::string &query, uint64_t client_id, uint64_t client_seq_num, sql_rpc_callback srcb, sql_rpc_timeout_callback srtcb,  uint32_t timeout);
 
-  void Commit(uint64_t client_id, uint64_t client_seq_num, try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout);
+  void Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
+    try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout);
 
   void Abort(uint64_t client_id, uint64_t client_seq_num);
 
@@ -94,6 +95,7 @@ class ShardClient : public TransportReceiver {
   int group_idx; // which shard this client accesses
   bool signMessages;
   bool validateProofs;
+  bool signClientProposals;
   KeyManager *keyManager;
 
   // If this flag is set, then we are simulating a fake SMR in which we only care about the reply from a single replica ("leader").
@@ -111,8 +113,13 @@ class ShardClient : public TransportReceiver {
   //REPLY HANDLING
 
   struct PendingSQL_RPC {
-    PendingSQL_RPC(): hasLeaderReply(false), leaderReply(""), status(REPLY_FAIL), numReceivedReplies(0){
+    PendingSQL_RPC(): hasLeaderReply(false), leaderReply(""), status(REPLY_FAIL), numReceivedReplies(0), txn_msg(nullptr) {
       receivedReplies.clear();
+    }
+    ~PendingSQL_RPC() {
+      if (txn_msg != nullptr) {
+        delete txn_msg;
+      }
     }
 
     // the current status of the reply (default to fail)
@@ -128,6 +135,8 @@ class ShardClient : public TransportReceiver {
 
     bool hasLeaderReply;
     std::string leaderReply;
+
+    TransactionMessage *txn_msg;
   };
   
   struct PendingTryCommit {
@@ -154,7 +163,8 @@ class ShardClient : public TransportReceiver {
 
   int ValidateAndExtractData(const std::string &t, const std::string &d, std::string &type, std::string &data);
 
-  void HandleSQL_RPCReply(const proto::SQL_RPCReply& reply, int replica_id);
+  // made reply not const so that we can release the readset/writeset efficiently
+  void HandleSQL_RPCReply(proto::SQL_RPCReply& reply, int replica_id);
     void SQL_RPCReplyHelper(PendingSQL_RPC &PendingSQL_RPC, const std::string sql_rpcReply, uint64_t req_id, uint64_t status);
 
   void HandleTryCommitReply(const proto::TryCommitReply& reply, int replica_id);

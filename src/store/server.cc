@@ -48,6 +48,7 @@
 
 #include "store/common/partitioner.h"
 #include "store/common/failures.h"
+#include "store/common/sintring/params.h"
 #include "store/server.h"
 #include "store/strongstore/server.h"
 #include "store/tapirstore/server.h"
@@ -842,12 +843,12 @@ int main(int argc, char **argv) {
       }
 
       // non flag parameters are client only
-      sintrstore::SintrParameters sintr_params(
+      ::SintrParameters sintr_params(
         0, false,
         FLAGS_sintr_sign_finish_validation,
         false, false,
         FLAGS_sintr_policy_function_name,
-        FLAGS_sintr_policy_config_path, 0, sintrstore::CLIENT_VALIDATION_HEURISTIC::EXACT,
+        FLAGS_sintr_policy_config_path, 0, CLIENT_VALIDATION_HEURISTIC::EXACT,
         FLAGS_sintr_check_policy_leak, false, 0, false, false,
         FLAGS_sintr_parallel_endorsement_check,
         FLAGS_sintr_use_occ_for_policies,
@@ -1099,6 +1100,7 @@ int main(int argc, char **argv) {
       replica = new pelotonstore::Replica(config, &keyManager,
                                        dynamic_cast<pelotonstore::App *>(server),
                                        FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
                                        FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx, protocol_cpu, FLAGS_local_config, FLAGS_num_shards, tport, 

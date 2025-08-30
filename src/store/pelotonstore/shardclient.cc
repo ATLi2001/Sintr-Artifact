@@ -35,10 +35,11 @@ static bool ONLY_WAIT_FOR_LEADER = true;
 
 ShardClient::ShardClient(const transport::Configuration& config, Transport *transport,
     uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-    bool signMessages, bool validateProofs, KeyManager *keyManager, Stats* stats, 
+    bool signMessages, bool validateProofs, bool signClientProposals,
+    KeyManager *keyManager, Stats* stats, 
     bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path) :
     config(config), transport(transport), group_idx(group_idx), signMessages(signMessages), validateProofs(validateProofs),
-    keyManager(keyManager), stats(stats), reqId(0UL), client_id(client_id),
+    signClientProposals(signClientProposals), keyManager(keyManager), stats(stats), reqId(0UL), client_id(client_id),
     fake_SMR(fake_SMR), SMR_mode(SMR_mode)  {
 
   transport->Register(this, config, -1, -1);
@@ -54,7 +55,7 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
     closestReplicas = closestReplicas_;
   }
 
-  Notice("SMR_mode: %d. SignMessages: %d", SMR_mode, signMessages);
+  Notice("SMR_mode: %d. SignMessages: %d. SignClientProposals: %d", SMR_mode, signMessages, signClientProposals);
   if(SMR_mode > 0) UW_ASSERT(signMessages); //Must sign messages with SMR mode: Otherwise fakeSMR is bugged in HandleSQL_RPC reply
 
   if(SMR_mode == 2){
@@ -90,7 +91,7 @@ void ShardClient::SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_
   // msg.mutable_client_address()->set_sin_port(addr.addr.sin_port);
   // msg.mutable_client_address()->set_sin_family(addr.addr.sin_family);
   // Debug("client addr: %d %d %d", addr.addr.sin_port, addr.addr.sin_addr.s_addr, addr.addr.sin_family);
-  msg.set_client_id(client_id);
+  // msg.set_client_id(client_id);
   Debug("sending to group with client id %d", client_id);
 
   // Serialize message
@@ -184,10 +185,12 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
   // return;
 
   //Wrap it in generic Request (this goes into Hotstuff)
+  // note that we don't sign client queries right now
   proto::Request request;
-  request.set_digest(crypto::Hash(sql_rpc.SerializeAsString()));
-  request.mutable_packed_msg()->set_msg(sql_rpc.SerializeAsString());
-  request.mutable_packed_msg()->set_type(sql_rpc.GetTypeName());
+  request.mutable_req()->set_digest(crypto::Hash(sql_rpc.SerializeAsString()));
+  request.mutable_req()->mutable_packed_msg()->set_msg(sql_rpc.SerializeAsString());
+  request.mutable_req()->mutable_packed_msg()->set_type(sql_rpc.GetTypeName());
+  request.mutable_req()->set_client_id(client_id);
 
   Debug("Sending Query. Cid: %d TxnSeq: %lu reqID: %lu", client_id, client_seq_num, reqId);
 
@@ -206,7 +209,7 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
   }
 }
 
-void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, 
+void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
   try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout) {
 
   reqId++;
@@ -217,7 +220,8 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
   try_commit.set_req_id(reqId);
   try_commit.set_client_id(client_id);
   try_commit.set_txn_seq_num(client_seq_num);
-  
+  try_commit.set_allocated_txn_msg(txn_msg);
+
   //Register Reply Handler
   PendingTryCommit &ptc = pendingTryCommits[reqId];
   ptc.tccb = std::move(tccb);
@@ -235,11 +239,19 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
   // return;
 
   //Wrap it in generic Request (this goes into Hotstuff)
+  proto::RequestInternal requestInternal;
+  requestInternal.set_digest(crypto::Hash(try_commit.SerializeAsString()));
+  requestInternal.mutable_packed_msg()->set_msg(try_commit.SerializeAsString());
+  requestInternal.mutable_packed_msg()->set_type(try_commit.GetTypeName());
+  requestInternal.set_client_id(client_id);
+
   proto::Request request;
-  request.set_digest(crypto::Hash(try_commit.SerializeAsString()));
-  request.mutable_packed_msg()->set_msg(try_commit.SerializeAsString());
-  request.mutable_packed_msg()->set_type(try_commit.GetTypeName());
-  
+  if (signClientProposals) {
+    SignMessage(requestInternal, keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), client_id, *request.mutable_signed_req());
+  }
+  else {
+    *request.mutable_req() = std::move(requestInternal);
+  }
 
   Debug("Sending TryCommit. Cid: %d TxId: %lu reqID: %lu", client_id, client_seq_num, reqId);
 
@@ -277,10 +289,19 @@ void ShardClient::Abort(uint64_t client_id, uint64_t client_seq_num) {
 
 
    //Wrap it in generic Request (this goes into Hotstuff)
+  proto::RequestInternal requestInternal;
+  requestInternal.set_digest(crypto::Hash(user_abort.SerializeAsString()));
+  requestInternal.mutable_packed_msg()->set_msg(user_abort.SerializeAsString());
+  requestInternal.mutable_packed_msg()->set_type(user_abort.GetTypeName());
+  requestInternal.set_client_id(client_id);
+
   proto::Request request;
-  request.set_digest(crypto::Hash(user_abort.SerializeAsString()));
-  request.mutable_packed_msg()->set_msg(user_abort.SerializeAsString());
-  request.mutable_packed_msg()->set_type(user_abort.GetTypeName());
+  if (signClientProposals) {
+    SignMessage(requestInternal, keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), client_id, *request.mutable_signed_req());
+  }
+  else {
+    *request.mutable_req() = std::move(requestInternal);
+  }
 
   Debug("Sending Abort. Cid: %d TxnSeq: %lu ", client_id, client_seq_num);
   if(SMR_mode == 0 || SEND_ONLY_TO_LEADER){
@@ -369,7 +390,7 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote, const std::stri
 }
 
 
-void ShardClient::HandleSQL_RPCReply(const proto::SQL_RPCReply& reply, int replica_id) {
+void ShardClient::HandleSQL_RPCReply(proto::SQL_RPCReply& reply, int replica_id) {
   Debug("Handling a sql_rpc reply");
 
   const uint64_t &req_id = reply.req_id();
@@ -401,6 +422,7 @@ void ShardClient::HandleSQL_RPCReply(const proto::SQL_RPCReply& reply, int repli
       pendingSQL_RPC.hasLeaderReply=true;
       pendingSQL_RPC.status=reply.status();
       pendingSQL_RPC.leaderReply = reply.sql_res(); // this might be empty if status is failed
+      pendingSQL_RPC.txn_msg = reply.release_txn_msg();
 
       if(ONLY_WAIT_FOR_LEADER){
         SQL_RPCReplyHelper(pendingSQL_RPC, pendingSQL_RPC.leaderReply, req_id, pendingSQL_RPC.status);
@@ -429,13 +451,16 @@ void ShardClient::SQL_RPCReplyHelper(PendingSQL_RPC &pendingSQL_RPC, const std::
   }
 
   sql_rpc_callback srcb = pendingSQL_RPC.srcb;
+  // move txn_msg up to client
+  TransactionMessage *txn_msg = pendingSQL_RPC.txn_msg;
+  pendingSQL_RPC.txn_msg = nullptr;
   pendingSQL_RPCs.erase(req_id);
 
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // end_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
   // Notice("Shardclient inbound latency: %lu us", end_us - start_us);
-  srcb(status, sql_rpcReply);
+  srcb(status, sql_rpcReply, std::move(txn_msg));
 }
 
 //Note: This must only be called once per req_id.

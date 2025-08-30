@@ -19,6 +19,7 @@
 // Libevent 2.0
 #include "event.h"
 
+#include "../../store/pelotonstore/common.h"
 #include "../catalog/column.h"
 #include "../common/internal_types.h"
 #include "../common/portal.h"
@@ -70,13 +71,20 @@ class TrafficCop {
       const std::vector<type::Value> &params, const bool unnamed,
       //std::shared_ptr<stats::QueryMetric::QueryParams> param_stats,
       const std::vector<int> &result_format, std::vector<ResultValue> &result,
+      ///////////////////// sintr specific ///////////////////////////////////
+      pelotonstore::QueryReadSetMgr *query_read_set_mgr = nullptr,
+      ////////////////////////////////////////////////////////////////////////
       size_t thread_id = 0);
 
   // Helper to handle txn-specifics for the plan-tree of a statement.
   executor::ExecutionResult ExecuteHelper(
       std::shared_ptr<planner::AbstractPlan> plan,
       const std::vector<type::Value> &params, std::vector<ResultValue> &result,
-      const std::vector<int> &result_format, size_t thread_id = 0);
+      const std::vector<int> &result_format,
+      ///////////////////// sintr specific ///////////////////////////////////
+      pelotonstore::QueryReadSetMgr *query_read_set_mgr = nullptr,
+      ////////////////////////////////////////////////////////////////////////
+      size_t thread_id = 0);
 
   // Prepare a statement using the parse tree
   std::shared_ptr<Statement> PrepareStatement(
