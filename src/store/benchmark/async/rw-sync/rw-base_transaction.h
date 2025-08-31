@@ -42,7 +42,6 @@ class RWBaseTransaction {
  public:
   RWBaseTransaction(KeySelector *keySelector, int numOps, bool readOnly, std::mt19937 &rand);
   RWBaseTransaction(const validation::proto::RWSync &msg, const std::vector<std::string> &keys);
-  RWBaseTransaction() {};
   virtual ~RWBaseTransaction();
 
   inline const std::vector<int> getKeyIdxs() const {
@@ -56,13 +55,13 @@ class RWBaseTransaction {
   inline const size_t GetNumOps() const { return numOps; }
 
   KeySelector *keySelector;
+  const std::vector<std::string> &keys; // need to init this in both constructors
   size_t numOps;
   bool readOnly;
   std::vector<int> keyIdxs;
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   void SerializeTxnState(std::string &txnState);
   std::map<std::string, std::string> readValues;
-  std::vector<std::string> keys;
 };
 
 }
