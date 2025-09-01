@@ -25,14 +25,14 @@
  **********************************************************************/
 
 #include "autobahn_debug.h"
-#include "lib/message.h"
+#include <iostream>
 #include <string>
 
 namespace autobahn {
 
 void debug_via_cpp(rust::Str message) {
   std::string cpp_message(message.data(), message.size());
-  Debug("From rust: %s", cpp_message.c_str());
+  std::cerr << "debug_via_cpp: " << cpp_message << std::endl;
 }
 
 } // namespace autobahn

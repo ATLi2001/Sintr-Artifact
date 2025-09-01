@@ -2,7 +2,6 @@ fn main() {
     cxx_build::bridge("src/lib.rs")
         .file("cppinclude/autobahn_debug.cc")
         .include("cppinclude")
-        .include("../../../..") // include the root directory src/ so we can include lib/...
         .flag_if_supported("-std=c++17")
         .compile("bridge_debug");
 

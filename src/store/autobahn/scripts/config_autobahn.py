@@ -119,6 +119,18 @@ if __name__ == "__main__":
         default=3000,
         help="Base port number for the Autobahn config files."
     )
+    parser.add_argument(
+        "-f", "--fault_tolerance",
+        type=int,
+        default=1,
+        help="Number of faults to withstand (n=3f+1)."
+    )
+    parser.add_argument(
+        "-w", "--workers",
+        type=int,
+        default=1,
+        help="Number of workers per primary."
+    )
 
     args = parser.parse_args()
 
@@ -128,8 +140,8 @@ if __name__ == "__main__":
     with open(f"{args.output_dir}/.parameters.json", "w") as f:
         json.dump(node_params, f, indent=2)
 
-    nodes = bench_params['nodes'][0]
-    workers = bench_params['workers']
+    nodes = 3 * args.fault_tolerance + 1
+    workers = args.workers
 
     if args.local:
         hosts = ["127.0.0.1"] * nodes
