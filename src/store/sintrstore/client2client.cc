@@ -168,12 +168,12 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     ping.set_salt(client_id);
     uint64_t target = (client_id + i) % clients_config->n;
     uint64_t reply_to = (client_id - i) % clients_config->n;
-    Warning("Client %lu sending ping to client %lu", client_id, target);
+    Debug("Client %lu sending ping to client %lu", client_id, target);
     if(target != client_id) {
       ping.set_send_msg(true);
       transport->SendMessageToReplica(this, target, ping);
     }
-    Warning("Client %lu sending another ping to client %lu", client_id, reply_to);
+    Debug("Client %lu sending another ping to client %lu", client_id, reply_to);
     if(reply_to != client_id) {
       ping.set_send_msg(false);
       transport->SendMessageToReplica(this, reply_to, ping);
@@ -188,7 +188,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     }
     lk.unlock();
   }
-  Warning("FINISHED SENDING AND RECEIVING PINGS");
+  Debug("FINISHED SENDING AND RECEIVING PINGS");
 }
 
 Client2Client::~Client2Client() {
@@ -203,7 +203,7 @@ Client2Client::~Client2Client() {
   }
   if (params.sintr_params.separateTransport) {
     c2cTportThread->join();
-    delete c2cSendThread;
+    delete c2cTportThread;
   }
   if (params.sintr_params.c2cSendThread) {
     c2cSendQueue.push(nullptr);
@@ -292,14 +292,19 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
   }
   else {
     // our own ping
+    Debug("Received own ping");
     if(ping.send_msg()) {
-      Debug("Received own ping for send");
-      sendDone = true;
-      cvSend.notify_one();
+      if(params.sintr_params.maxClientsConnect > 0) {
+        Debug("Received own ping for send");
+        sendDone = true;
+        cvSend.notify_one();
+      }
     } else {
-      Debug("Received own ping for receive");
-      replyDone = true;
-      cvReply.notify_one();
+      if(params.sintr_params.maxClientsConnect > 0) {
+        Debug("Received own ping for receive");
+        replyDone = true;
+        cvReply.notify_one();
+      }
     }
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);

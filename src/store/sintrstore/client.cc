@@ -114,7 +114,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
     table_registry, valClientSelector, rand, keys
   );
 
-  Warning("Sintr client [%lu] created! %lu %lu", client_id, nshards,
+  Debug("Sintr client [%lu] created! %lu %lu", client_id, nshards,
       bclient.size());
   _Latency_Init(&executeLatency, "execute");
   _Latency_Init(&getLatency, "get");

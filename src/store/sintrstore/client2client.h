@@ -380,7 +380,6 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cSendQueue;
   // separate thread for message receiving, stays sequential
   std::thread *c2cReceiveThread;
-  std::thread *tportThread;
   // concurrent queue of messages to be received
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cReceiveQueue;
 

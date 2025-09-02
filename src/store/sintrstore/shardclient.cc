@@ -1258,7 +1258,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
       std::string &prev_read = it->second;
       req->maxTs = Timestamp();
-      if(params.sintr_params.ignorePolicyUpdate) {
+      if(!params.sintr_params.ignorePolicyUpdate) {
         req->maxCommittedProof.Clear();
         req->maxSerializedWrite.clear();
         req->maxSerializedWriteTypeName.clear();
