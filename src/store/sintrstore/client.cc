@@ -51,7 +51,7 @@ using namespace std;
 //TODO: add argument for p1Timeout, pass down to Shardclient as well.
 Client::Client(transport::Configuration *config, uint64_t id, int nShards,
     int nGroups,
-    const std::vector<int> &closestReplicas, bool pingReplicas, Transport *transport,
+    const std::vector<int> &closestReplicas, bool pingReplicas, Transport *transport, Transport *c2cport,
     Partitioner *part, bool syncCommit, uint64_t readMessages,
     uint64_t readQuorumSize, Parameters params, std::string &table_registry,
     KeyManager *keyManager, uint64_t phase1DecisionTimeout, uint64_t warmup_secs, uint64_t consecutiveMax, bool sql_bench,
@@ -109,12 +109,12 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   // create client for other clients
   // right now group is always 0, maybe configure later
   c2client = new Client2Client(
-    config, clients_config, transport, client_id, nshards, ngroups, 0,
+    config, clients_config, params.sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
     pingReplicas, params, keyManager, verifier, part, endorseClient, &sql_interpreter,
     table_registry, valClientSelector, rand, keys
   );
 
-  Debug("Sintr client [%lu] created! %lu %lu", client_id, nshards,
+  Warning("Sintr client [%lu] created! %lu %lu", client_id, nshards,
       bclient.size());
   _Latency_Init(&executeLatency, "execute");
   _Latency_Init(&getLatency, "get");
@@ -321,6 +321,8 @@ void Client::Get(const std::string &key, get_callback gcb,
           read->set_hashed_readtime(TimestampDigest(ts));
         }
         ts.serialize(read->mutable_readtime());
+      } else {
+        Warning("Not adding key %s to read set because of bufferget", BytesToHex(key, 16).c_str());
       }
       // new policy can only come from server, which must correspond to addReadSet
       if (policyMsg.IsInitialized()) {

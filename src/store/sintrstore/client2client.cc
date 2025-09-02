@@ -63,6 +63,9 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
   Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 
+  if(params.sintr_params.maxClientsConnect > 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+  }
 
   // assume these are somehow secretly shared before hand
   uint64_t idx = client_id;
@@ -119,15 +122,17 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
-    //c2cTportThread = new std::thread(&Client2Client::Client2ClientRunTCPThreadFunction, this);
-    //if (params.sintr_params.clientPinCores) {
-      // don't pin cores for transport thread yet... ask if necessary
-      // set cpu affinity
-      // cpu_set_t cpuset;
-      // CPU_ZERO(&cpuset);
-      // CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
-      // pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
-    //}
+    if(params.sintr_params.separateTransport) {
+      c2cTportThread = new std::thread(&Client2Client::Client2ClientRunTCPThreadFunction, this);
+      // if (params.sintr_params.clientPinCores) {
+      //   // don't pin cores for transport thread yet... ask if necessary
+      //   // set cpu affinity
+      //   cpu_set_t cpuset;
+      //   CPU_ZERO(&cpuset);
+      //   CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      //   pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+      // }
+    }
   }
   if (params.sintr_params.c2cReceiveThread) {
     Debug("Starting c2cReceiveThread");
@@ -155,6 +160,35 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   }
 
   client_time_to_endorse_us.resize(clients_config->n);
+  //setup initial TCP connection in c2c constructor, requires that separate tcp object be enabled
+  for(int i = 1; i <= params.sintr_params.maxClientsConnect; i++) {
+    sendDone = false;
+    replyDone = false;
+    //TODO: Currently assumes selector is a ring selector
+    ping.set_salt(client_id);
+    uint64_t target = (client_id + i) % clients_config->n;
+    uint64_t reply_to = (client_id - i) % clients_config->n;
+    Warning("Client %lu sending ping to client %lu", client_id, target);
+    if(target != client_id) {
+      ping.set_send_msg(true);
+      SendFirstTCPMsgToClient(target, ping);
+    }
+    Warning("Client %lu sending another ping to client %lu", client_id, reply_to);
+    if(reply_to != client_id) {
+      ping.set_send_msg(false);
+      SendFirstTCPMsgToClient(reply_to, ping);
+    }
+    // need to wait for replies as well
+    std::unique_lock lk(tcpMutex);
+    if(!cvSend.wait_for(lk, std::chrono::seconds(5), [this]{return sendDone;})) {
+      Panic("Timeout: Sent ping not responded to");
+    }
+    if(!cvReply.wait_for(lk, std::chrono::seconds(5), [this]{return replyDone;})) {
+      Panic("Timeout: Reply ping not responded to");
+    }
+    lk.unlock();
+  }
+  Warning("FINISHED SENDING AND RECEIVING PINGS");
 }
 
 Client2Client::~Client2Client() {
@@ -166,6 +200,10 @@ Client2Client::~Client2Client() {
   for (auto t : valThreads) {
     t->join();
     delete t;
+  }
+  if (params.sintr_params.separateTransport) {
+    c2cTportThread->join();
+    delete c2cSendThread;
   }
   if (params.sintr_params.c2cSendThread) {
     c2cSendQueue.push(nullptr);
@@ -254,10 +292,18 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
   }
   else {
     // our own ping
-    Debug("Received own ping");
-    struct timespec ts_end;
-    clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    if(ping.send_msg()) {
+      Debug("Received own ping for send");
+      sendDone = true;
+      cvSend.notify_one();
+    } else {
+      Debug("Received own ping for receive");
+      replyDone = true;
+      cvReply.notify_one();
+    }
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
     // auto duration = end - send_begin_time_us;
 
     // if (num_pings >= time_to_begin_ack_n_us.size()) {
@@ -1272,9 +1318,11 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
 
 void Client2Client::SendFirstTCPMsgToClient(int replicaIdx, const Message &m) {
   if(params.sintr_params.c2cWaitTCP && clientsContacted.find(replicaIdx) == clientsContacted.end()) {
+    Debug("sending first tcp msg to client %d from client %d", replicaIdx, client_id);
     while(!EstablishC2C(replicaIdx, m)) {
       Debug("Retrying TCP Connection to client %d from client %d", replicaIdx, client_id);
     }
+    Debug("TCP Connection Established to client %d from client %d", replicaIdx, client_id);
     clientsContacted.insert(replicaIdx);
   } else {
     transport->SendMessageToReplica(this, replicaIdx, m);
@@ -1286,9 +1334,13 @@ bool Client2Client::EstablishC2C(int replicaIdx, const Message &m) {
   std::promise<bool> p;
   std::future connection_future = p.get_future();
   while(!transport->SendMessageToReplica(this, replicaIdx, m, &p)) {
-    Debug("Retrying sending msg to %d", replicaIdx);
+    Warning("Retrying sending msg to %d", replicaIdx);
   }
-  Debug("WAITING FOR FUTURE RETURN");
+  Warning("after sent first tcp msg, waiting for callback");
+  std::future_status status = connection_future.wait_for(std::chrono::seconds(5));
+  if(status != std::future_status::ready) {
+    Panic("establish C2C tcp connection timed out");
+  }
   return connection_future.get();
 }
 
@@ -2194,7 +2246,7 @@ void Client2Client::Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_
 }
 
 void Client2Client::Client2ClientRunTCPThreadFunction() {
-  Debug("running transport");
+  Warning("Running separate transport");
   transport->Run();
 }
 

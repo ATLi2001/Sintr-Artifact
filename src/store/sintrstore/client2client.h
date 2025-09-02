@@ -384,6 +384,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cSendQueue;
   // separate thread for message receiving, stays sequential
   std::thread *c2cReceiveThread;
+  std::thread *tportThread;
   // concurrent queue of messages to be received
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cReceiveQueue;
 
@@ -425,6 +426,11 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // track time to receive endorsement for each client
   std::vector<mean_tracker> client_time_to_endorse_us;
   std::vector<mean_tracker> time_to_begin_ack_n_us;
+  std::condition_variable cvSend;
+  std::condition_variable cvReply;
+  std::mutex tcpMutex;
+  bool sendDone;
+  bool replyDone;
 };
 
 } // namespace sintrstore

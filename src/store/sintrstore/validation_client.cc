@@ -718,9 +718,7 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     txn->set_client_seq_num(txn_client_seq_num);
     a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num, txn);
     editTxnStateCB(a->second);
-    if(addReadset) {
-      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
-    }
+    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
     return;
   }
 
@@ -736,9 +734,7 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
       txn_client_seq_num,
       BytesToHex(curr_key, 16).c_str()
     );
-    if(addReadset) {
-      a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
-    }
+    a->second->pendingForwardedRead.push_back(std::make_pair(curr_key, std::make_pair(curr_value, curr_ts)));
     editTxnStateCB(a->second);
     return;
   }
