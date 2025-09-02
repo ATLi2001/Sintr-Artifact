@@ -128,6 +128,10 @@ typedef struct SintrParameters {
                 Warning("Optimistic receive endorsement is enabled, but parallel endorsement check or signFinishValidation is not.");
             }
         }
+
+        if(maxClientsConnect > 0 && !separateTransport) {
+            Warning("Max clients connect parameter is greater than 0, but separate transport is not enabled");
+        }
     }
 
 } SintrParameters;
