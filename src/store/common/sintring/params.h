@@ -67,6 +67,8 @@ typedef struct SintrParameters {
   const bool ignorePolicyUpdate; // ignore policy updates during a transaction
   const bool clientEstimatePolicy; // client estimates policy at start of transaction
   const bool hashQueryGenId; // hash query general id
+  const bool separateTransport; // enable separate transport object for c2c communication
+  const uint32_t maxClientsConnect; // max number of clients that a single client connects to
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -75,7 +77,7 @@ typedef struct SintrParameters {
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
-    bool clientEstimatePolicy, bool hashQueryGenId) :
+    bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -103,7 +105,10 @@ typedef struct SintrParameters {
     optimisticReceiveEndorsement(optimisticReceiveEndorsement),
     ignorePolicyUpdate(ignorePolicyUpdate),
     clientEstimatePolicy(clientEstimatePolicy),
-    hashQueryGenId(hashQueryGenId) {
+    hashQueryGenId(hashQueryGenId),
+    separateTransport(separateTransport),
+    maxClientsConnect(maxClientsConnect)
+     {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
         // potential optimization: don't sort writeset unless there is a blind write message
@@ -122,6 +127,10 @@ typedef struct SintrParameters {
             if (!parallelEndorsementCheck || !signFinishValidation) {
                 Warning("Optimistic receive endorsement is enabled, but parallel endorsement check or signFinishValidation is not.");
             }
+        }
+
+        if(maxClientsConnect > 0 && !separateTransport) {
+            Warning("Max clients connect parameter is greater than 0, but separate transport is not enabled");
         }
     }
 

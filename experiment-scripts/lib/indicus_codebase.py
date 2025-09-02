@@ -205,6 +205,10 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_client_estimate_policy=%s' % str(config['sintr_protocol_settings']['sintr_client_estimate_policy']).lower()
             if 'sintr_hash_query_gen_id' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
+            if 'sintr_separate_transport' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_separate_transport=%s' % str(config['sintr_protocol_settings']['sintr_separate_transport']).lower()
+            if 'sintr_max_clients_connect' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_max_clients_connect=%s' % str(config['sintr_protocol_settings']['sintr_max_clients_connect']).lower()
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ##Sync protocol settings

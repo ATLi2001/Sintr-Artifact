@@ -1086,14 +1086,14 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     if (req->firstCommittedReply || req->maxTs < replyTs) {
       req->maxTs = replyTs;
       req->maxValue = write->committed_value();
-      if (reply.has_proof()) {
+      if (!params.sintr_params.ignorePolicyUpdate && reply.has_proof()) {
         req->maxCommittedProof = reply.proof();
       }
-      if (reply.has_signed_write()) {
+      if (!params.sintr_params.ignorePolicyUpdate && reply.has_signed_write()) {
         reply.signed_write().SerializeToString(&req->maxSerializedWrite);
         req->maxSerializedWriteTypeName = reply.signed_write().GetTypeName();
       }
-      else {
+      else if(!params.sintr_params.ignorePolicyUpdate) {
         // reply.write() must exist
         reply.write().SerializeToString(&req->maxSerializedWrite);
         req->maxSerializedWriteTypeName = reply.write().GetTypeName();
@@ -1210,23 +1210,25 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         }
       }
       // also do prepared policy map
-      for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
-          preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
-        if (preparedPolicyItr->first < req->maxPolicyTs) {
-          break;
-        }
-
-        if (preparedPolicyItr->second.second >= req->rds) {
-          req->maxPolicyTs = preparedPolicyItr->first;
-          if (preparedPolicyItr->second.first.has_prepared_policy()) {
-            req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
+      if(!params.sintr_params.useOCCForPolicies) {
+        for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
+            preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
+          if (preparedPolicyItr->first < req->maxPolicyTs) {
+            break;
           }
-          *req->policyDep.mutable_write() = preparedPolicyItr->second.first;
-          req->policyDep.set_involved_group(group);
-          // need to manually edit digest
-          req->policyDep.mutable_write()->set_prepared_txn_digest(preparedPolicyItr->second.first.prepared_policy_txn_digest());
-          req->hasPolicyDep = true;
-          break;
+
+          if (preparedPolicyItr->second.second >= req->rds) {
+            req->maxPolicyTs = preparedPolicyItr->first;
+            if (preparedPolicyItr->second.first.has_prepared_policy()) {
+              req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
+            }
+            *req->policyDep.mutable_write() = preparedPolicyItr->second.first;
+            req->policyDep.set_involved_group(group);
+            // need to manually edit digest
+            req->policyDep.mutable_write()->set_prepared_txn_digest(preparedPolicyItr->second.first.prepared_policy_txn_digest());
+            req->hasPolicyDep = true;
+            break;
+          }
         }
       }
     }
@@ -1256,10 +1258,12 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
       std::string &prev_read = it->second;
       req->maxTs = Timestamp();
-      req->maxCommittedProof.Clear();
-      req->maxSerializedWrite.clear();
-      req->maxSerializedWriteTypeName.clear();
-      req->maxPolicy.Clear();
+      if(!params.sintr_params.ignorePolicyUpdate) {
+        req->maxCommittedProof.Clear();
+        req->maxSerializedWrite.clear();
+        req->maxSerializedWriteTypeName.clear();
+        req->maxPolicy.Clear();
+      }
       req->gcb(REPLY_OK, req->key, prev_read, req->maxTs, req->dep, false, false, //Don't add to read set.
         req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
         req->policyDep, false); 

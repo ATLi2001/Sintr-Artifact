@@ -86,7 +86,7 @@ class Client : public ::Client {
  public:
   Client(transport::Configuration *config, uint64_t id, int nShards,
       int nGroups, const std::vector<int> &closestReplicas, bool pingReplicas,
-      Transport *transport, Partitioner *part, bool syncCommit,
+      Transport *transport, Transport *c2cport, Partitioner *part, bool syncCommit,
       uint64_t readMessages, uint64_t readQuorumSize,
       Parameters params, std::string &table_registry,
       KeyManager *keyManager, uint64_t phase1DecisionTimeout,

@@ -59,7 +59,7 @@ transaction_status_t RWSQLBasePolicyChange::BaseExecute(SyncClient &client, uint
   std::string policy_str;
   policy.SerializeToString(&policy_str);
 
-  std::string policy_id = fmt::format("p{}", table);
+  std::string policy_id = fmt::format("p#{}", table);
   client.Put(policy_id, policy_str, timeout);
 
   return client.Commit(timeout);

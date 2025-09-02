@@ -108,7 +108,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     else {
       // txn will have writes
       const Policy *temp_policy;
-      UW_ASSERT(policyCache.Get("p0", temp_policy));
+      UW_ASSERT(policyCache.Get("p#0", temp_policy));
       policyClient->AddPolicy(temp_policy);
     }
   }
@@ -173,7 +173,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         if (!valTxnData.read_only()) {
           // txn will have writes
           const Policy *temp_policy;
-          UW_ASSERT(policyCache.Get("p0", temp_policy));
+          UW_ASSERT(policyCache.Get("p#0", temp_policy));
           policyClient->AddPolicy(temp_policy);
         }
         break;
@@ -182,7 +182,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         const Policy *temp_policy;
-        UW_ASSERT(policyCache.Get("p0", temp_policy));
+        UW_ASSERT(policyCache.Get("p#0", temp_policy));
         policyClient->AddPolicy(temp_policy);
         break;
       }
@@ -191,7 +191,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
   else {
     // return default policy ID (policy ID 0)
     const Policy *temp_policy;
-    UW_ASSERT(policyCache.Get("p0", temp_policy));
+    UW_ASSERT(policyCache.Get("p#0", temp_policy));
     policyClient->AddPolicy(temp_policy);
   }
 }
@@ -201,27 +201,27 @@ std::string EstimatePolicy::TableToPolicyID(const int &t, const std::string &txn
     ::tpcc::Tables table = static_cast<::tpcc::Tables>(t);
     switch (table) {
     case ::tpcc::Tables::WAREHOUSE:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::DISTRICT:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::CUSTOMER:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::HISTORY:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::NEW_ORDER:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::ORDER:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::ORDER_LINE:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::ITEM:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::STOCK:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::ORDER_BY_CUSTOMER:
-      return "p0";
+      return "p#0";
     case ::tpcc::Tables::EARLIEST_NEW_ORDER:
-      return "p0";
+      return "p#0";
     default:
       Panic("Received unexpected table type for tpcc: %d", t);
     }
@@ -229,25 +229,25 @@ std::string EstimatePolicy::TableToPolicyID(const int &t, const std::string &txn
     ::tpcc_sql::TPCC_Table table = static_cast<::tpcc_sql::TPCC_Table>(t);
     switch (table) {
       case ::tpcc_sql::TPCC_Table::WAREHOUSE:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::DISTRICT:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::CUSTOMER:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::HISTORY:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::NEW_ORDER:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::ORDER:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::ORDER_LINE:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::ITEM:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::STOCK:
-        return "p0";
+        return "p#0";
       case ::tpcc_sql::TPCC_Table::EARLIEST_NEW_ORDER:
-        return "p0";
+        return "p#0";
       default:
         Panic("Received unexpected table type for tpcc sql: %d", t);
     }

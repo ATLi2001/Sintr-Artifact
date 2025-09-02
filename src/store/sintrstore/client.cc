@@ -51,7 +51,7 @@ using namespace std;
 //TODO: add argument for p1Timeout, pass down to Shardclient as well.
 Client::Client(transport::Configuration *config, uint64_t id, int nShards,
     int nGroups,
-    const std::vector<int> &closestReplicas, bool pingReplicas, Transport *transport,
+    const std::vector<int> &closestReplicas, bool pingReplicas, Transport *transport, Transport *c2cport,
     Partitioner *part, bool syncCommit, uint64_t readMessages,
     uint64_t readQuorumSize, Parameters params, std::string &table_registry,
     KeyManager *keyManager, uint64_t phase1DecisionTimeout, uint64_t warmup_secs, uint64_t consecutiveMax, bool sql_bench,
@@ -109,7 +109,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   // create client for other clients
   // right now group is always 0, maybe configure later
   c2client = new Client2Client(
-    config, clients_config, transport, client_id, nshards, ngroups, 0,
+    config, clients_config, params.sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
     pingReplicas, params, keyManager, verifier, part, endorseClient, &sql_interpreter,
     table_registry, valClientSelector, rand, keys
   );
@@ -272,7 +272,7 @@ void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *poli
   if (IsPolicyChangeTxn(protoTxnState)) {
     // policy change transaction could require separate handling
     const Policy *policy;
-    UW_ASSERT(policyCache.Get("p0", policy));
+    UW_ASSERT(policyCache.Get("p#0", policy));
     policyClient->AddPolicy(policy);
   } 
   else {
@@ -336,12 +336,13 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasPolicyDep) {
         *txn.add_deps() = policyDep;
       }
-
-      c2client->SendForwardReadResultMessage(
-        key, val, ts, proof, serializedWrite, 
-        serializedWriteTypeName, dep, hasDep, addReadSet,
-        policyDep, hasPolicyDep
-      );
+      if(!params.sintr_params.ignorePolicyUpdate) {
+        c2client->SendForwardReadResultMessage(
+          key, val, ts, proof, serializedWrite, 
+          serializedWriteTypeName, dep, hasDep, addReadSet,
+          policyDep, hasPolicyDep
+        );
+      }
 
       gcb(status, key, val, ts);
     };
@@ -421,7 +422,7 @@ void Client::Put(const std::string &key, const std::string &value,
         bool exists = policyCache.Get(policyIdFunction(key, value), policy);
         if (!exists) {
           // if not found, use default policy for now
-          UW_ASSERT(policyCache.Get("p0", policy));
+          UW_ASSERT(policyCache.Get("p#0", policy));
         }
         Debug("Sending policy update for put using c2client in regular transaction");
         c2client->HandlePolicyUpdate(policy);

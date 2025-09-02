@@ -486,7 +486,8 @@ DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of includin
 DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
-
+DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
+DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
 // given an estimated txn policy, how many other clients to contact?
 const std::string sintr_client_validation_args[] = {
 	"client-validation-exact",
@@ -917,6 +918,7 @@ std::vector<::OneShotClient *> oneShotClients;
 std::vector<::BenchmarkClient *> benchClients;
 std::vector<std::thread *> threads;
 Transport *tport;
+Transport *c2cport;
 transport::Configuration *config;
 transport::Configuration *clients_config;
 KeyManager *keyManager;
@@ -1184,9 +1186,15 @@ int main(int argc, char **argv) {
   switch (trans) {
     case TRANS_TCP:
       tport = new TCPTransport(0.0, 0.0, 0, false, 0, 1, FLAGS_indicus_hyper_threading, false, 0);
+      if(FLAGS_sintr_separate_transport) {
+        c2cport = new TCPTransport(0.0, 0.0, 0, false, 0, 1, FLAGS_indicus_hyper_threading, false, 0);
+      }
       break;
     case TRANS_UDP:
       tport = new UDPTransport(0.0, 0.0, 0, nullptr);
+      if(FLAGS_sintr_separate_transport) {
+        c2cport = new UDPTransport(0.0, 0.0, 0, nullptr);
+      }
       break;
     default:
       NOT_REACHABLE();
@@ -1342,6 +1350,9 @@ int main(int argc, char **argv) {
       }
 
       tport->Stop();
+      if(FLAGS_sintr_separate_transport) {
+        c2cport->Stop();
+      }
     }
   };
 
@@ -1734,7 +1745,9 @@ int main(int argc, char **argv) {
         FLAGS_sintr_optimistic_receive_endorsement,
         FLAGS_sintr_client_ignore_policy_update,
         FLAGS_sintr_client_estimate_policy,
-        FLAGS_sintr_hash_query_gen_id
+        FLAGS_sintr_hash_query_gen_id,
+        FLAGS_sintr_separate_transport,
+        FLAGS_sintr_max_clients_connect
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
@@ -1788,7 +1801,7 @@ int main(int argc, char **argv) {
         Notice("Warmup secs: %d", FLAGS_warmup_secs);
         client = new sintrstore::Client(config, clientId,
                                           FLAGS_num_shards,
-                                          FLAGS_num_groups, closestReplicas, FLAGS_ping_replicas, tport, part,
+                                          FLAGS_num_groups, closestReplicas, FLAGS_ping_replicas, tport, c2cport, part,
                                           FLAGS_tapir_sync_commit, 
                                           readMessages, readQuorumSize,
                                           params, 
@@ -2310,6 +2323,10 @@ void Cleanup(int signal) {
   }
   tport->Stop();
   delete tport;
+  if(FLAGS_sintr_separate_transport) {
+    c2cport->Stop();
+    delete c2cport;
+  }
   delete part;
 
   if(FLAGS_sql_bench && querySelector != nullptr) delete querySelector;
