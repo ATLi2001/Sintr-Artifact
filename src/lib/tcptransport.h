@@ -143,6 +143,7 @@ private:
         int replicaIdx;
         event *acceptEvent;
         std::list<struct bufferevent *> connectionEvents;
+        // sockaddr_in addr;
     };
     event_base *libeventBase;
     std::vector<event *> listenerEvents;

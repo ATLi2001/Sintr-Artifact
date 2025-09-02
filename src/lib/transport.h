@@ -99,6 +99,7 @@ public:
                                       const Message &m,
                                       std::promise<bool>* cb)
     {
+        std::cerr << "default method" << std::endl;
         return false;
     }
     /* Send message to a replica in a specific group */

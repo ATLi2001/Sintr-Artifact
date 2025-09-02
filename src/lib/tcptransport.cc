@@ -280,6 +280,7 @@ void TCPTransport::ConnectTCP(const std::pair<TCPTransportAddress, TransportRece
     info->receiver = dstSrc.second;
     info->replicaIdx = -1;
     info->acceptEvent = NULL;
+    // info->addr = dstSrc.first.addr;
 
     tcpListeners.push_back(info);
 
@@ -387,7 +388,7 @@ TCPTransport::Register(TransportReceiver *receiver,
     BindToPort(fd, host, port);
 
     // Listen for connections
-    if (listen(fd, 5) < 0) {
+    if (listen(fd, 100) < 0) {
         PPanic("Failed to listen for TCP connections");
     }
 
@@ -900,13 +901,13 @@ TCPTransport::TCPIncomingEventCallback(struct bufferevent *bev,
 {
     if (what & BEV_EVENT_ERROR) {
       fprintf(stderr,"tcp incoming error\n");
-        Debug("Error on incoming TCP connection: %s\n",
+        Warning("Error on incoming TCP connection: %s\n",
                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         bufferevent_free(bev);
         return;
     } else if (what & BEV_EVENT_ERROR) {
       fprintf(stderr,"tcp incoming eof\n");
-        Debug("EOF on incoming TCP connection\n");
+        Warning("EOF on incoming TCP connection\n");
         bufferevent_free(bev);
         return;
     }
@@ -938,6 +939,12 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         Warning("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
                 info->groupIdx, info->replicaIdx,
                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+        // Warning("Error on outgoing TCP connection to server [g:%d][r:%d]: address: %s port: %d reason: %s error code: %d",
+        //         info->groupIdx, info->replicaIdx,
+        //         inet_ntoa(info->addr.sin_addr),
+        //         htons(info->addr.sin_port),
+        //         evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()), EVUTIL_SOCKET_ERROR());
+
         bufferevent_free(bev);
 
         transport->mtx.lock();
@@ -953,6 +960,9 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
         return;
     } else if (what & BEV_EVENT_EOF) {
         Warning("EOF on outgoing TCP connection to server");
+        // Warning("EOF on outgoing TCP connection to server address: %s port: %d",
+        //   inet_ntoa(info->addr.sin_addr),
+        //   htons(info->addr.sin_port));
         bufferevent_free(bev);
 
         transport->mtx.lock();
@@ -975,6 +985,37 @@ TCPTransport::SendMessageToReplica(TransportReceiver *src,
                                       const Message &m,
                                       std::promise<bool>* cb)
 {
-  promise = cb; // doesn't need to be thread safe because there should only be one thread accessing calling this method at a time
-  return TransportCommon::SendMessageToReplica(src, replicaIdx, m);
+  UW_ASSERT(this->replicaGroups.find(src) != this->replicaGroups.end());
+  int groupIdx = this->replicaGroups[src] == -1 ? 0 : this->replicaGroups[src];
+  const transport::Configuration *cfg = configurations[src];
+  UW_ASSERT(cfg != NULL);
+  // mtx.lock();
+  if (!replicaAddressesInitialized) {
+    LookupAddresses();
+  }
+  // mtx.unlock();
+  auto kv = replicaAddresses[cfg][groupIdx].find(replicaIdx);
+  //UW_ASSERT(kv != replicaAddresses[cfg][groupIdx].end());
+  if(kv == replicaAddresses[cfg][groupIdx].end()){
+    for(auto &[grp, repl]: replicaAddresses[cfg]){
+      Notice("G[%d]", grp);
+      for(auto &[r, _]: repl){
+        Notice("  R[%d]", r);
+      }
+    }
+    Panic("replicaIdx: %d. groupIdx: %d", replicaIdx, groupIdx);
+  }
+
+  auto dstSrc = std::make_pair(kv->second, src);
+  Warning("BEFORE LOCK ACQURIED");
+  mtx.lock();
+  auto val = tcpOutgoing.find(dstSrc);
+  // See if we have a connection open
+  if (val == tcpOutgoing.end()) {
+    Warning("SETTING PRTOMISE");
+    promise = cb;
+  }
+  mtx.unlock();
+  Warning("AFTER LOCK RELEASED");
+  return SendMessageInternal(src, kv->second, m);
 }
