@@ -385,7 +385,7 @@ TCPTransport::Register(TransportReceiver *receiver,
     BindToPort(fd, host, port);
 
     // Listen for connections
-    if (listen(fd, 5) < 0) {
+    if (listen(fd, 100) < 0) {
         PPanic("Failed to listen for TCP connections");
     }
 
