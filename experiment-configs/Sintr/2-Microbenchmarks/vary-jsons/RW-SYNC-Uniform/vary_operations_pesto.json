@@ -1,0 +1,26 @@
+{
+  "operations2": {
+    "analysis_name": "pesto-rw-sync-uniform-operations2",
+    "client_total": [[36, 38, 40, 42, 44]],
+    "client_processes_per_client_node": [[4, 4, 4, 4, 4]],
+    "client_threads_per_process":  [[1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 2,
+    "rw_num_ops_txn": 2
+  },
+  "operations4": {
+    "analysis_name": "pesto-rw-sync-uniform-operations4",
+    "client_total": [[36, 38, 40, 42, 44]],
+    "client_processes_per_client_node": [[4, 4, 4, 4, 4]],
+    "client_threads_per_process":  [[1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 2,
+    "rw_num_ops_txn": 4
+  },
+  "operations6": {
+    "analysis_name": "pesto-rw-sync-uniform-operations6",
+    "client_total": [[36, 38, 40, 42, 44]],
+    "client_processes_per_client_node": [[4, 4, 4, 4, 4]],
+    "client_threads_per_process":  [[1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 2,
+    "rw_num_ops_txn": 6
+  }
+}
