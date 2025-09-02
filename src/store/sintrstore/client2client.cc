@@ -171,12 +171,12 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     Warning("Client %lu sending ping to client %lu", client_id, target);
     if(target != client_id) {
       ping.set_send_msg(true);
-      SendFirstTCPMsgToClient(target, ping);
+      transport->SendMessageToReplica(this, target, ping);
     }
     Warning("Client %lu sending another ping to client %lu", client_id, reply_to);
     if(reply_to != client_id) {
       ping.set_send_msg(false);
-      SendFirstTCPMsgToClient(reply_to, ping);
+      transport->SendMessageToReplica(this, reply_to, ping);
     }
     // need to wait for replies as well
     std::unique_lock lk(tcpMutex);
@@ -431,7 +431,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
         continue;
       }
       beginValSent.insert(i);
-      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
+      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
     }
   }
   // other heuristics depend on actual policy that was estimated
@@ -470,7 +470,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
         continue;
       }
       beginValSent.insert(i);
-      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
+      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
     }
     // sanity check - policy should be satisfied by the clients we are sending to
     UW_ASSERT(policyClient->IsSatisfied(beginValSent));
@@ -969,7 +969,7 @@ void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
       auto ret = beginValSent.insert(i);
       // should be first time sending to this client
       UW_ASSERT(ret.second);
-      SendFirstTCPMsgToClient(i, sentBeginValTxnMsg);
+      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
       for (const auto &sentFwdResultState : sentFwdResults) {
         Debug(
           "Sending to client %lu from client %lu seq num %lu in handle policy update",
@@ -1314,34 +1314,6 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     curr_client_id, curr_client_seq_num, fwdReadResult,
     dep, hasDep, addReadset, policyDep, hasPolicyDep
   );
-}
-
-void Client2Client::SendFirstTCPMsgToClient(int replicaIdx, const Message &m) {
-  if(params.sintr_params.c2cWaitTCP && clientsContacted.find(replicaIdx) == clientsContacted.end()) {
-    Debug("sending first tcp msg to client %d from client %d", replicaIdx, client_id);
-    while(!EstablishC2C(replicaIdx, m)) {
-      Debug("Retrying TCP Connection to client %d from client %d", replicaIdx, client_id);
-    }
-    Debug("TCP Connection Established to client %d from client %d", replicaIdx, client_id);
-    clientsContacted.insert(replicaIdx);
-  } else {
-    transport->SendMessageToReplica(this, replicaIdx, m);
-  }
-}
-
-bool Client2Client::EstablishC2C(int replicaIdx, const Message &m) {
-  // don't use this function unless using TCP
-  std::promise<bool> p;
-  std::future connection_future = p.get_future();
-  while(!transport->SendMessageToReplica(this, replicaIdx, m, &p)) {
-    Warning("Retrying sending msg to %d", replicaIdx);
-  }
-  Warning("after sent first tcp msg, waiting for callback");
-  std::future_status status = connection_future.wait_for(std::chrono::seconds(5));
-  if(status != std::future_status::ready) {
-    Panic("establish C2C tcp connection timed out");
-  }
-  return connection_future.get();
 }
 
 void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg) {

@@ -486,7 +486,6 @@ DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of includin
 DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");
 DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
-DEFINE_bool(sintr_c2c_wait_tcp, false, "wait for tcp connection between clients to be established before continuing");
 DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
 DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
 // given an estimated txn policy, how many other clients to contact?
@@ -1745,7 +1744,6 @@ int main(int argc, char **argv) {
         FLAGS_sintr_client_ignore_policy_update,
         FLAGS_sintr_client_estimate_policy,
         FLAGS_sintr_hash_query_gen_id,
-        FLAGS_sintr_c2c_wait_tcp,
         FLAGS_sintr_separate_transport,
         FLAGS_sintr_max_clients_connect
       );

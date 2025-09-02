@@ -94,10 +94,6 @@ public:
     //virtual void Flush() override;
 
     void DispatchTP(std::function<void*()> f, std::function<void(void*)> cb);
-    virtual bool SendMessageToReplica(TransportReceiver *src,
-                                      int replicaIdx,
-                                      const Message &m, 
-                                      std::promise<bool>* cb) override;
     void DispatchTP_local(std::function<void*()> f, std::function<void(void*)> cb);
     void DispatchTP_noCB(std::function<void*()> f);
     void DispatchTP_noCB_ptr(std::function<void*()> *f);
@@ -143,7 +139,6 @@ private:
         int replicaIdx;
         event *acceptEvent;
         std::list<struct bufferevent *> connectionEvents;
-        // sockaddr_in addr;
     };
     event_base *libeventBase;
     std::vector<event *> listenerEvents;
@@ -191,7 +186,6 @@ private:
                                          short what, void *arg);
     static void TCPOutgoingEventCallback(struct bufferevent *bev,
                                          short what, void *arg);
-    std::promise<bool>* promise;
 };
 
 #endif  // _LIB_TCPTRANSPORT_H_
