@@ -321,8 +321,6 @@ void Client::Get(const std::string &key, get_callback gcb,
           read->set_hashed_readtime(TimestampDigest(ts));
         }
         ts.serialize(read->mutable_readtime());
-      } else {
-        Warning("Not adding key %s to read set because of bufferget", BytesToHex(key, 16).c_str());
       }
       // new policy can only come from server, which must correspond to addReadSet
       if (policyMsg.IsInitialized()) {

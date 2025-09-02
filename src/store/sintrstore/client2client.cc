@@ -2223,7 +2223,7 @@ void Client2Client::Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_
 }
 
 void Client2Client::Client2ClientRunTCPThreadFunction() {
-  Warning("Running separate transport");
+  Debug("Running separate transport");
   transport->Run();
 }
 
