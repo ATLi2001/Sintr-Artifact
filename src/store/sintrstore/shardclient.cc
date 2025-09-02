@@ -1013,7 +1013,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
       if (!skip && !verifier->Verify(keyManager->GetPublicKey(reply.signed_write().process_id()),
               reply.signed_write().data(), reply.signed_write().signature())) {
-        Panic("[group %i] Failed to validate signature for write.", group);
+        Debug("[group %i] Failed to validate signature for write.", group);
         return;
       }
       // struct timespec ts_end;
@@ -1023,7 +1023,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       // verify_server_sig_ms.push_back(duration);
 
       if(!validatedPrepared.ParseFromString(reply.signed_write().data())) {
-        Panic("[group %i] Invalid serialization of write.", group);
+        Debug("[group %i] Invalid serialization of write.", group);
         return;
       }
 
@@ -1031,7 +1031,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
        //if(!write->has_committed_value() && write->has_prepared_value()) std::cerr << "Prepared write was signed on its own.\n";
     } else {
       if (reply.has_write() && reply.write().has_committed_value()) {       //TODO: For committed writes could use just authenticated channels (since committed writes come with a proof)
-        Panic("[group %i] Reply contains unsigned committed value.", group);
+        Debug("[group %i] Reply contains unsigned committed value.", group);
         return;
       }
 

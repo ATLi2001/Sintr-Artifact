@@ -1350,7 +1350,9 @@ int main(int argc, char **argv) {
       }
 
       tport->Stop();
-      c2cport->Stop();
+      if(FLAGS_sintr_separate_transport) {
+        c2cport->Stop();
+      }
     }
   };
 
@@ -2321,8 +2323,10 @@ void Cleanup(int signal) {
   }
   tport->Stop();
   delete tport;
-  c2cport->Stop();
-  delete c2cport;
+  if(FLAGS_sintr_separate_transport) {
+    c2cport->Stop();
+    delete c2cport;
+  }
   delete part;
 
   if(FLAGS_sql_bench && querySelector != nullptr) delete querySelector;
