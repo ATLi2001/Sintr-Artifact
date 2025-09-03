@@ -279,6 +279,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --pg_SMR_mode=%d' % config['replication_protocol_settings']['SMR_mode']
                 if config['replication_protocol_settings']['SMR_mode'] == 2:
                     client_command += " --bftsmart_codebase_dir=%s" % str(config['bftsmart_codebase_dir'])
+                elif config['replication_protocol_settings']['SMR_mode'] == 3:
+                    client_command += " --autobahn_config_dir=%s" % str(config['autobahn_config_dir'])
 
         if config['replication_protocol'] == 'morty':
             if 'send_writes' in config['replication_protocol_settings']:
@@ -706,6 +708,8 @@ class IndicusCodebase(ExperimentCodebase):
                 replica_command += ' --pg_SMR_mode=%d' % config['replication_protocol_settings']['SMR_mode']
                 if config['replication_protocol_settings']['SMR_mode'] == 2:
                     replica_command += " --bftsmart_codebase_dir=%s" % str(config['bftsmart_codebase_dir'])
+                elif config['replication_protocol_settings']['SMR_mode'] == 3:
+                    replica_command += " --autobahn_config_dir=%s" % str(config['autobahn_config_dir'])
 
         if config['replication_protocol'] == 'pg':
             replica_command += " --pg_replicated=%s" % (str(config['pg_replicated']).lower())

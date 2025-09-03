@@ -29,6 +29,7 @@
 // lib.rs.h cpp rust interface for autobahn
 #include "bftinterface/src/lib.rs.h"
 #include "lib/transport.h"
+#include "lib/tcptransport.h"
 
 namespace autobahn {
 
@@ -41,6 +42,10 @@ public:
 private:
   void CreateClientInterface();
   void CreateServerInterface(TransportReceiver *receiver);
+  // use tcp transport lookup address functionality
+  std::string GetSocketAddr(const std::string &host_port, TCPTransport &tcp_transport);
+
+  const std::string committee_hostname_filename = ".committee-hostname.json";
 
   size_t id;
   bool is_client;

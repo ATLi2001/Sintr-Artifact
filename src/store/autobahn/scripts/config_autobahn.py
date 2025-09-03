@@ -25,8 +25,10 @@
 import json
 import os
 import argparse
-import shutil
 import subprocess
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Autobahn parameters copied over
 bench_params = {
@@ -91,24 +93,6 @@ if __name__ == "__main__":
         help="Server hostnames file for the Autobahn config files."
     )
     parser.add_argument(
-        "-e", "--exp_name",
-        type=str,
-        default="sintr",
-        help="Name of the cloudlab experiment."
-    )
-    parser.add_argument(
-        "-j", "--project_name",
-        type=str,
-        default="pequin-pg0",
-        help="Name of the cloudlab project."
-    )
-    parser.add_argument(
-        "-c", "--cluster",
-        type=str,
-        default="utah",
-        help="Name of the cloudlab cluster."
-    )
-    parser.add_argument(
         "-l", "--local",
         action="store_true",
         help="Run the Autobahn nodes locally."
@@ -138,16 +122,19 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir)
 
     with open(f"{args.output_dir}/.parameters.json", "w") as f:
-        json.dump(node_params, f, indent=2)
+        json.dump(node_params, f, sort_keys=True, indent=2)
 
     nodes = 3 * args.fault_tolerance + 1
     workers = args.workers
 
     if args.local:
-        hosts = ["127.0.0.1"] * nodes
+        hosts = ["localhost"] * nodes
     else:
         # read in server host names
-        cloudlab_suffix = f"{args.exp_name}.{args.project_name}.{args.cluster}.cloudlab.us"
+        exp_name = os.getenv("CLOUDLAB_EXP_NAME")
+        project_name = os.getenv("CLOUDLAB_PROJECT_NAME")
+        cluster = os.getenv("CLOUDLAB_CLUSTER")
+        cloudlab_suffix = f"{exp_name}.{project_name}.{cluster}.cloudlab.us"
         with open(args.server_hosts, "r") as f:
             hosts = [f"{line.strip()}.{cloudlab_suffix}" for line in f.readlines()]
 
@@ -195,5 +182,5 @@ if __name__ == "__main__":
         authority["workers"] = workers_dict
         committee_json["authorities"][names[i]] = authority
 
-    with open(f"{args.output_dir}/.committee.json", "w") as f:
+    with open(f"{args.output_dir}/.committee-hostname.json", "w") as f:
         json.dump(committee_json, f, indent=2)

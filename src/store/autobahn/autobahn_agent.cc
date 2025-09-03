@@ -27,6 +27,7 @@
 #include "store/autobahn/autobahn_agent.h"
 #include "lib/assert.h"
 #include "lib/message.h"
+#include <arpa/inet.h>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -46,7 +47,7 @@ AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *recei
 
 void AutobahnAgent::CreateClientInterface() {
   std::filesystem::path committee_json_path = config_path;
-  committee_json_path /= ".committee.json";
+  committee_json_path /= committee_hostname_filename;
   std::ifstream f(committee_json_path);
   json committee_json = json::parse(f);
 
@@ -66,15 +67,36 @@ void AutobahnAgent::CreateClientInterface() {
   std::string target_worker_name = std::to_string(target_worker);
   std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
 
-  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(target_addr));
+  TCPTransport temp_tcp_transport;
+  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(GetSocketAddr(target_addr, temp_tcp_transport)));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   Debug("Starting autobahn server interface");
   std::filesystem::path committee_json_path = config_path;
-  committee_json_path /= ".committee.json";
+  committee_json_path /= committee_hostname_filename;
   std::ifstream f1(committee_json_path);
   json committee_json = json::parse(f1);
+
+  // modify hostname:port into socket addr because autobahn expects this
+  TCPTransport temp_tcp_transport;
+  for (auto& [key, value] : committee_json["authorities"].items()) {
+    value["consensus"]["consensus_to_consensus"] = GetSocketAddr(value["consensus"]["consensus_to_consensus"], temp_tcp_transport);
+    value["primary"]["primary_to_primary"] = GetSocketAddr(value["primary"]["primary_to_primary"], temp_tcp_transport);
+    value["primary"]["worker_to_primary"] = GetSocketAddr(value["primary"]["worker_to_primary"], temp_tcp_transport);
+
+    for (auto& [worker_name, worker_info] : value["workers"].items()) {
+      worker_info["primary_to_worker"] = GetSocketAddr(worker_info["primary_to_worker"], temp_tcp_transport);
+      worker_info["transactions"] = GetSocketAddr(worker_info["transactions"], temp_tcp_transport);
+      worker_info["worker_to_worker"] = GetSocketAddr(worker_info["worker_to_worker"], temp_tcp_transport);
+    }
+  }
+
+  std::filesystem::path committee_json_out_path = config_path;
+  committee_json_out_path /= ".committee.json";
+  std::ofstream committee_json_out(committee_json_out_path);
+  committee_json_out << committee_json.dump(2) << std::endl;
+  committee_json_out.close();
 
   std::string node_filename = ".node-" + std::to_string(id) + ".json";
   std::filesystem::path node_json_path = config_path;
@@ -96,7 +118,7 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   (*primary)->start_server(
     handle,
     node_json_path.string(),
-    committee_json_path.string(),
+    committee_json_out_path.string(),
     parameter_json_path.string(),
     primary_db_path.string(),
     true,
@@ -114,7 +136,7 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
     (*workers[i])->start_server(
       handle,
       node_json_path.string(),
-      committee_json_path.string(),
+      committee_json_out_path.string(),
       parameter_json_path.string(),
       worker_db_path.string(),
       false,
@@ -126,6 +148,22 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
 void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size) {
   UW_ASSERT(is_client);
   (*client)->send(rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size));
+}
+
+std::string AutobahnAgent::GetSocketAddr(const std::string &host_port, TCPTransport &tcp_transport) {
+  size_t split = host_port.find(":");
+  if (split == std::string::npos) {
+    throw std::invalid_argument("Invalid host:port format");
+  }
+  std::string host = host_port.substr(0, split);
+  std::string port = host_port.substr(split + 1);
+
+  transport::ReplicaAddress addr = transport::ReplicaAddress(host, port);
+  TCPTransportAddress socket_addr = tcp_transport.LookupAddress(addr);
+  std::string out(inet_ntoa(socket_addr.addr.sin_addr));
+  out.push_back(':');
+  out.append(std::to_string(ntohs(socket_addr.addr.sin_port)));
+  return out;
 }
 
 } // namespace autobahn
