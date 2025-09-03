@@ -35,8 +35,8 @@ using json = nlohmann::json;
 
 namespace autobahn {
 
-AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, const std::string &config_path)
-    : id(id), is_client(is_client), receiver(receiver), config_path(config_path) {
+AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport, const std::string &config_path)
+    : id(id), is_client(is_client), receiver(receiver), tcp_transport(tcp_transport), config_path(config_path) {
   if (is_client) {
     CreateClientInterface();
   }
@@ -67,8 +67,7 @@ void AutobahnAgent::CreateClientInterface() {
   std::string target_worker_name = std::to_string(target_worker);
   std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
 
-  TCPTransport temp_tcp_transport;
-  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(GetSocketAddr(target_addr, temp_tcp_transport)));
+  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(GetSocketAddr(target_addr)));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
@@ -79,16 +78,15 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   json committee_json = json::parse(f1);
 
   // modify hostname:port into socket addr because autobahn expects this
-  TCPTransport temp_tcp_transport;
   for (auto& [key, value] : committee_json["authorities"].items()) {
-    value["consensus"]["consensus_to_consensus"] = GetSocketAddr(value["consensus"]["consensus_to_consensus"], temp_tcp_transport);
-    value["primary"]["primary_to_primary"] = GetSocketAddr(value["primary"]["primary_to_primary"], temp_tcp_transport);
-    value["primary"]["worker_to_primary"] = GetSocketAddr(value["primary"]["worker_to_primary"], temp_tcp_transport);
+    value["consensus"]["consensus_to_consensus"] = GetSocketAddr(value["consensus"]["consensus_to_consensus"]);
+    value["primary"]["primary_to_primary"] = GetSocketAddr(value["primary"]["primary_to_primary"]);
+    value["primary"]["worker_to_primary"] = GetSocketAddr(value["primary"]["worker_to_primary"]);
 
     for (auto& [worker_name, worker_info] : value["workers"].items()) {
-      worker_info["primary_to_worker"] = GetSocketAddr(worker_info["primary_to_worker"], temp_tcp_transport);
-      worker_info["transactions"] = GetSocketAddr(worker_info["transactions"], temp_tcp_transport);
-      worker_info["worker_to_worker"] = GetSocketAddr(worker_info["worker_to_worker"], temp_tcp_transport);
+      worker_info["primary_to_worker"] = GetSocketAddr(worker_info["primary_to_worker"]);
+      worker_info["transactions"] = GetSocketAddr(worker_info["transactions"]);
+      worker_info["worker_to_worker"] = GetSocketAddr(worker_info["worker_to_worker"]);
     }
   }
 
@@ -150,7 +148,7 @@ void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size)
   (*client)->send(rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size));
 }
 
-std::string AutobahnAgent::GetSocketAddr(const std::string &host_port, TCPTransport &tcp_transport) {
+std::string AutobahnAgent::GetSocketAddr(const std::string &host_port) {
   size_t split = host_port.find(":");
   if (split == std::string::npos) {
     throw std::invalid_argument("Invalid host:port format");
@@ -159,7 +157,7 @@ std::string AutobahnAgent::GetSocketAddr(const std::string &host_port, TCPTransp
   std::string port = host_port.substr(split + 1);
 
   transport::ReplicaAddress addr = transport::ReplicaAddress(host, port);
-  TCPTransportAddress socket_addr = tcp_transport.LookupAddress(addr);
+  TCPTransportAddress socket_addr = tcp_transport->LookupAddress(addr);
   std::string out(inet_ntoa(socket_addr.addr.sin_addr));
   out.push_back(':');
   out.append(std::to_string(ntohs(socket_addr.addr.sin_port)));

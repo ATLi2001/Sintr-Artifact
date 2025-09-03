@@ -26,9 +26,6 @@ import json
 import os
 import argparse
 import subprocess
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # Autobahn parameters copied over
 bench_params = {
@@ -130,13 +127,8 @@ if __name__ == "__main__":
     if args.local:
         hosts = ["localhost"] * nodes
     else:
-        # read in server host names
-        exp_name = os.getenv("CLOUDLAB_EXP_NAME")
-        project_name = os.getenv("CLOUDLAB_PROJECT_NAME")
-        cluster = os.getenv("CLOUDLAB_CLUSTER")
-        cloudlab_suffix = f"{exp_name}.{project_name}.{cluster}.cloudlab.us"
         with open(args.server_hosts, "r") as f:
-            hosts = [f"{line.strip()}.{cloudlab_suffix}" for line in f.readlines()]
+            hosts = [line.strip() for line in f.readlines()]
 
     if len(hosts) != nodes:
         raise ValueError(f"Expected {nodes} server hosts, but found {len(hosts)}.")

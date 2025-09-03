@@ -4,45 +4,37 @@ use bytes::BufMut as _;
 use bytes::BytesMut;
 use futures::sink::SinkExt as _;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio::runtime::Runtime;
-use tokio::sync::Mutex;
+use tokio::runtime::{Builder, Runtime};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 pub struct AutobahnClient {
     // keep tokio runtime alive
     rt: Runtime,
     // only connects to a single node
-    transport: Arc<Mutex<Framed<TcpStream, LengthDelimitedCodec>>>,
+    transport: Framed<TcpStream, LengthDelimitedCodec>,
 }
 
 impl AutobahnClient {
     fn new(target: SocketAddr) -> Self {
-        let rt = Runtime::new().unwrap();
+        let rt = Builder::new_current_thread().enable_all().build().unwrap();
         let stream = rt
             .block_on(TcpStream::connect(target))
             .expect(&format!("failed to connect to {}", target));
         let transport = Framed::new(stream, LengthDelimitedCodec::new());
-        Self {
-            rt,
-            transport: Arc::new(Mutex::new(transport)),
-        }
+        Self { rt, transport }
     }
 
     pub fn send(&mut self, buf: &[u8]) -> Result<()> {
         let mut tx = BytesMut::with_capacity(buf.len());
-        tx.put_slice(&buf);
+        tx.put_slice(buf);
         let bytes = tx.split().freeze(); //split() moves byte content from tx to bytes (i.e. avoids copy). freeze() makes it const so it can be shared. (bytes can now be used/sent async)
 
-        let transport_clone = Arc::clone(&self.transport);
-
-        self.rt.spawn(async move {
+        let transport = &mut self.transport;
+        self.rt.block_on(async move {
             debug_via_cpp(&format!("Sending transaction of size: {}", bytes.len()));
-            let mut locked = transport_clone.lock().await;
-            let res = locked.send(bytes).await;
-            if res.is_err() {
-                debug_via_cpp(&format!("Error sending transaction: {:?}", res));
+            if let Err(e) = transport.send(bytes).await {
+                debug_via_cpp(&format!("Error sending transaction: {:?}", e));
             }
         });
         Ok(())

@@ -28,6 +28,7 @@
 #include "store/pelotonstore/pbft_batched_sigs.h"
 #include "store/pelotonstore/common.h"
 #include "store/common/util.h"
+#include "lib/tcptransport.h"
 
 namespace pelotonstore {
 
@@ -72,7 +73,7 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
   }
   else if (SMR_mode == 3) {
     Debug("created autobahn agent in shard client!");
-    autobahn_agent = new ::autobahn::AutobahnAgent(client_id, true, this, autobahn_config_path);
+    autobahn_agent = new ::autobahn::AutobahnAgent(client_id, true, this, dynamic_cast<TCPTransport*>(transport), autobahn_config_path);
     // similarly here notify servers about reply address because replica doesn't receive a return address when autobahn calls back to replica
     Debug("Sending connect messages! with client id %d, config n: %d", client_id, config.n);
     proto::Connect connect;

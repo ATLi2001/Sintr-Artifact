@@ -35,7 +35,7 @@ namespace autobahn {
 
 class AutobahnAgent{
 public:
-  AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, const std::string &config_path);
+  AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport,const std::string &config_path);
 
   void SendMessageToGroup(int group_idx, void *buffer, size_t size);
 
@@ -43,13 +43,14 @@ private:
   void CreateClientInterface();
   void CreateServerInterface(TransportReceiver *receiver);
   // use tcp transport lookup address functionality
-  std::string GetSocketAddr(const std::string &host_port, TCPTransport &tcp_transport);
+  std::string GetSocketAddr(const std::string &host_port);
 
   const std::string committee_hostname_filename = ".committee-hostname.json";
 
   size_t id;
   bool is_client;
   TransportReceiver *receiver;
+  TCPTransport *tcp_transport;
   std::string config_path;
 
   std::unique_ptr<rust::Box<AutobahnClient>> client;

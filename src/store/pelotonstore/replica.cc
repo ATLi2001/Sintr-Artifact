@@ -27,6 +27,7 @@
 #include "store/pelotonstore/replica.h"
 #include "store/pelotonstore/pbft_batched_sigs.h"
 #include "store/pelotonstore/common.h"
+#include "lib/tcptransport.h"
 
 namespace pelotonstore {
 
@@ -57,7 +58,7 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
   }
   else if (SMR_mode == 3) {
     Notice("autobahn config dir: %s", autobahn_config_dir.c_str());
-    autobahn_agent = new ::autobahn::AutobahnAgent(idx, false, this, autobahn_config_dir);
+    autobahn_agent = new ::autobahn::AutobahnAgent(idx, false, this, dynamic_cast<TCPTransport*>(transport), autobahn_config_dir);
   }
 
   transport->Register(this, config, groupIdx, idx);

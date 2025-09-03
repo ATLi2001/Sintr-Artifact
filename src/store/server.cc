@@ -1091,6 +1091,11 @@ int main(int argc, char **argv) {
        // Peloton SMR
   case PROTO_PELOTON_SMR: {
       Notice("Using [%s] server config", FLAGS_local_config ? "LOCAL" : "REMOTE");
+
+      // Autobahn assumes use of TCP
+      if (FLAGS_pg_SMR_mode == 3) {
+        UW_ASSERT(trans == TRANS_TCP);
+      }
    
       server = new pelotonstore::Server(config, &keyManager, FLAGS_data_file_path, 
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
