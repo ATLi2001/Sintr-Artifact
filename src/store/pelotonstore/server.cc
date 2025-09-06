@@ -27,6 +27,7 @@
 #include "store/pelotonstore/server.h"
 #include "store/pelotonstore/common.h"
 #include "store/common/transaction.h"
+#include "store/common/util.h"
 #include <iostream>
 #include <sys/time.h>
 #include <cstdlib>
@@ -42,12 +43,13 @@ using namespace std;
 
 Server::Server(const transport::Configuration& config, KeyManager *keyManager, std::string &table_registry_path,
   int groupIdx, int idx, int numShards, int numGroups, bool signMessages,
-  bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp, bool localConfig, int SMR_mode,
+  bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp, bool localConfig, int SMR_mode, SintrParameters sintr_params,
   TrueTime timeServer) : 
   config(config), keyManager(keyManager),
   groupIdx(groupIdx), idx(idx), id(groupIdx * config.n + idx),
   numShards(numShards), numGroups(numGroups), signMessages(signMessages),
-  validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp), localConfig(localConfig), timeServer(timeServer) {
+  validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp), localConfig(localConfig),
+  sintr_params(sintr_params), timeServer(timeServer) {
 
   int num_threads = std::thread::hardware_concurrency();
   if(num_threads > 8) {
@@ -71,12 +73,21 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager, s
     if(SMR_mode == 2) number_of_threads = 7;
   tp->AddIndexedThreads(number_of_threads);
 
+    // load policy store
+  Notice("Loading Policy Store from config file: %s. ", sintr_params.policyConfigPath.c_str());
+  LoadPolicyStore(sintr_params.policyConfigPath);
+
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
+  policyParseClient = new PolicyParseClient();
 
   Notice("Peloton Server Id: %d", idx);
 }
 
 Server::~Server() {
   delete table_store;
+  for (const auto &p : policiesToFree) {
+    delete p;
+  }
 }
 
 
@@ -274,7 +285,10 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg, query_read_set_mgr);
 
   bool terminate = true;
-
+  if(!sintr_params.serverSkipEndorsementCheck) {
+    reply->set_sql_gen_id(SQLGenId(query, client_id, tx_id, true));
+    Debug("sql gen ID is: %s for query %s client id %lu seq num %d", BytesToHex(reply->sql_gen_id(), 16).c_str(), query.c_str(), client_id, tx_id);
+  }
   if (result_status == peloton_peloton::ResultType::SUCCESS) {  //NOTE: If an INSERT failed it will still be treated as Success, but rows_affected will be 0
     Debug("Success! [%d:%d:%d]. Query: %s", client_id, tx_id, req_id, query.c_str());
     terminate = false;
@@ -330,6 +344,15 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
     }
     for (const auto &write : try_commit.txn_msg().writeset()) {
       Debug("write key: %s", write.key().c_str());
+    }
+  }
+  if(!sintr_params.serverSkipEndorsementCheck) {
+    //TODO: Parallelize the endorsement check
+    if(!EndorsementCheck(TransactionDigest(try_commit.txn_msg()), &try_commit)) {
+      //TODO: abort...
+      // for now just panic
+      Panic("Endorsement check failed for txn %s for client_id %lu seq num %lu ",
+        BytesToHex(TransactionDigest(try_commit.txn_msg()), 16).c_str(), client_id, tx_id);
     }
   }
  
@@ -614,8 +637,144 @@ void Server::LoadTableRows(const std::string &table_name, const std::vector<std:
     }
 }
 
+//TODO: Move to common folder
+void Server::LoadPolicyStore(const std::string &policyStorePath) {
+  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(policyStorePath);
+  for (const auto &p : policies) {
+    policyStore.put(p.first, p.second, Timestamp());
+    policiesToFree.push_back(p.second);
+  }
+}
+
+//TODO: Move to common folder
+//RETURNS True if endorsement check passed, otherwise false
+bool Server::EndorsementCheck(const std::string &txnDigest, const proto::TryCommit *try_commit) {
+
+  PolicyClient policyClient;
+  ExtractPolicy(&try_commit->txn_msg(), policyClient);
+  return ValidateEndorsements(policyClient, &try_commit->endorsements(), try_commit->client_id(), txnDigest);
+}
+
+//TODO: Move to common folder
+void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyClient) {
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  //TODO: Implement versioning for policy store
+  Timestamp ts = Timestamp();
+
+  for (const auto &write : txn->writeset()) {
+    if (write.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(write.key())) {
+    //   // skip if write key is not owned
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(write.key(), write.value());
+
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
+
+    std::pair<Timestamp, Policy*> tsPolicy;
+    policyStore.get(policyId, ts, tsPolicy);
+    policyClient.AddPolicy(tsPolicy.second);
+  }
+
+  if (sintr_params.checkPolicyLeak) {
+    // disallow readset to contain a policy that does not imply the write set policy
+    for (const auto &read : txn->readset()) {
+      if (read.is_table_col_version()) {
+        // skip table column versions
+        continue;
+      }
+      // Peloton doesn't support sharding, skipping IsKeyOwned check
+      // if (!IsKeyOwned(read.key())) {
+      //   continue;
+      // }
+  
+      std::string policyId = policyIdFunction(read.key(), "");
+      Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
+      // changing to use read key timestamp for reading policy
+      std::pair<Timestamp, Policy*> tsPolicy;
+      policyStore.get(policyId, ts, tsPolicy);
+
+      if (!policyClient.IsImpliedBy(tsPolicy.second)) {
+        Panic(
+          "Read policy (%s) does not imply write policy (%s)",
+          tsPolicy.second->ToString().c_str(),
+          policyClient.ToString().c_str()
+        );
+      }
+    }
+  }
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = end - start;
+  // extract_policy_us.add(duration);
+}
+
+bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest) {
+
+  // client initiating txn is always an endorser
+  std::set<uint64_t> endorsers;
+  endorsers.insert(client_id);
+
+  if (endorsements != nullptr) {
+    for (const auto &endorsement : endorsements->sig_msgs()) {
+      if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
+        Debug(
+          "Txn %s failed to validate endorsement from client %lu",
+          BytesToHex(txnDigest, 16).c_str(),
+          endorsement.replica_id()
+        );
+        continue;
+      }
+      endorsers.insert(endorsement.replica_id());
+    }
+  }
+
+  // check if endorsers satisfy policy
+  return policyClient.IsSatisfied(endorsers);
+}
 
 
+
+bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest) {
+  // cannot have empty data
+  if (endorsement.packed_msg().length() == 0) {
+    return false;
+  }
+  // then check that data is all same as well
+  if (txnDigest != endorsement.packed_msg()) {
+    return false;
+  }
+
+  // check signature
+  if (sintr_params.signFinishValidation) {
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    if (!pelotonstore::CheckSignature(endorsement, keyManager, true)) {
+      Warning(
+        "Txn %s failed to validate endorsement from client %lu",
+        BytesToHex(txnDigest, 16).c_str(),
+        endorsement.replica_id()
+      );
+      return false;
+    }
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
+    // validate_endorsements_us.add(duration);
+  }
+  return true;
+}
 
 
 

@@ -25,6 +25,7 @@
  *
  **********************************************************************/
 #include "store/pelotonstore/client.h"
+#include "store/common/util.h"
 
 #include "store/pelotonstore/common.h"
 #include "lib/cereal/archives/binary.hpp"
@@ -38,11 +39,14 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       const std::vector<int> &closestReplicas,
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, bool signClientProposals, KeyManager *keyManager,TrueTime timeserver, 
-      bool fake_SMR, uint64_t SMR_mode, const std::string &PG_BFTSMART_config_path) : config(config), nshards(nShards),
+      bool validateProofs, bool signClientProposals, KeyManager *keyManager, SintrParameters sintr_params,
+      TrueTime timeserver,transport::Configuration *clients_config, ClientSelector *valClientSelector,
+      bool fake_SMR, uint64_t SMR_mode, const std::string &PG_BFTSMART_config_path,
+      const std::vector<std::string> &keys) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
     signMessages(signMessages), validateProofs(validateProofs), signClientProposals(signClientProposals), keyManager(keyManager), timeServer(timeserver),
-    fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path), txn_msg(nullptr) {
+    sintr_params(sintr_params), fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path), txn_msg(nullptr),
+    clients_config(clients_config), valClientSelector(valClientSelector), rand(id), keys(keys) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -61,34 +65,73 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
   /* Start a client for each shard. */
   for (uint64_t i = 0; i < ngroups; i++) {
     bclient[i] = new ShardClient(config, transport, client_id, i, closestReplicas,
-        signMessages, validateProofs, signClientProposals, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path);
+        signMessages, validateProofs, signClientProposals, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path,
+        sintr_params.ignorePolicyUpdate); // ignore policy update is same as setting sintr to unsafe version
   }
 
+  policyParseClient = new PolicyParseClient();
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
+  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(sintr_params.policyConfigPath);
+
+  endorseClient = new EndorsementClient(client_id);
+  // endorseClient->SetDebugCheckFunction(DebugCheck); TODO: make debugcheck function
+  UW_ASSERT(policyCache.IsEmpty());
+  policyCache.Initialize(std::move(policies));
+
+  c2client = new Client2Client(clients_config, transport, client_id, nshards, ngroups, 0, signMessages, validateProofs,
+    sintr_params, keyManager, endorseClient, valClientSelector, rand, keys);
+  c2client->Init();
+  waitingForEndorsementsTimeout = nullptr;
   Notice("PelotonSMR client [%lu] created! %lu %lu", client_id, ngroups, bclient.size());
  
 }
 
 Client::~Client()
 {
+  endorsementsReceived.clear();
+  if(waitingForEndorsementsTimeout != nullptr) {
+    waitingForEndorsementsTimeout->Stop();
+    delete waitingForEndorsementsTimeout;
+    waitingForEndorsementsTimeout = nullptr; // sometimes this timeout still triggers despite deleting the object.
+  }
     for (auto b : bclient) {
         delete b;
     }
+    delete c2client;
+    delete endorseClient;
+    delete policyParseClient;
 
     if(SMR_mode == 2) BftSmartAgent::destroy_java_vm();
 }
 
 /* Begins a transaction. All subsequent operations before a commit() or abort() are part of this transaction. */
 void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t timeout, bool retry, const std::string &txnState) {
-  transport->Timer(0, [this, bcb, btcb, timeout]() {
+  transport->Timer(0, [this, bcb, btcb, timeout, &txnState]() {
+    if(waitingForEndorsementsTimeout != nullptr) {
+      waitingForEndorsementsTimeout->Stop();
+      delete waitingForEndorsementsTimeout;
+    }
     
     client_seq_num++;
+    if(!sintr_params.ignorePolicyUpdate) {
+      endorseClient->SetClientSeqNum(client_seq_num);
+    }
 
     // no need to call delete as moved into TryCommit message
     UW_ASSERT(txn_msg == nullptr);
     txn_msg = new TransactionMessage();
+    TxnState protoTxnState;
+    PolicyClient *policyClient = nullptr;
+    if (sintr_params.clientEstimatePolicy) {
+      policyClient = new PolicyClient();
+      protoTxnState.ParseFromString(txnState);
+      EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
+    }
 
     Debug("BEGIN tx: ", client_seq_num);
-
+    if(!sintr_params.ignorePolicyUpdate) {
+      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, std::move(policyClient));
+    }
     bcb(client_seq_num);
   });
 }
@@ -117,20 +160,57 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t 
         ccb(ABORTED_SYSTEM);
       }
     };
+
+    auto current_seq_num = client_seq_num;
     
     Debug("Trying to commit txn: [%lu:%lu]", client_id, client_seq_num);
 
     if (false) {
+      Debug("FOR TRANSACTION %s", BytesToHex(TransactionDigest(*txn_msg), 16).c_str());
       for (const auto &read : txn_msg->readset()) {
-        Debug("read key: %s", read.key().c_str());
+        Debug("Original read key: %s", read.key().c_str());
       }
       for (const auto &write : txn_msg->writeset()) {
-        Debug("write key: %s", write.key().c_str());
+        Debug("Original write key: %s", write.key().c_str());
       }
     }
+    if(!sintr_params.ignorePolicyUpdate) {
+      endorseClient->SetExpectedTxnDigest(TransactionDigest(*txn_msg));
+    }
 
-    bclient[0]->Commit(client_id, client_seq_num, std::move(txn_msg), tccb, ctcb, timeout);
-    txn_msg = nullptr;
+    if(sintr_params.ignorePolicyUpdate || endorseClient->IsSatisfied()) {
+      Warning("Endorsement client is already satisfied for client %d seq num %d", client_id, client_seq_num);
+      getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
+    } else {
+      Debug("SETTING ENDORSEMENT CALLBACK AND WAITING for client %d seq num %d", client_id, client_seq_num);
+      if(!sintr_params.sortWriteset) {
+        endorsement_callback ecb = [this, tccb, ctcb, timeout, current_seq_num]() {
+          // put this back on event loop if c2c receive thread is true
+          Debug("CALLING ENDORSEMENTS AND COMMIT FOR %d", current_seq_num);
+          if(sintr_params.c2cReceiveThread) {
+            transport->Timer(0, [this, tccb, ctcb, timeout, current_seq_num]() {
+              this->getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
+            });
+          } else {
+            this->getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
+          }
+        };
+        c2client->SetEndorsementCallback(ecb);
+      }
+      waitingForEndorsementsTimeout = new Timeout(transport, 5000, [this, current_seq_num]() {
+        Debug("WAITING FOR ENDORSEMENTS TIMEOUT TRIGGERED for client %d seq num %d", client_id, current_seq_num);
+        if (endorsementsReceived[current_seq_num]) {
+          // check size == 0 for workload finishing edge case
+          endorsementsReceived.erase(current_seq_num);
+          return;
+        }
+        Panic("Waiting for endorsements timed out for client %d seq num %d", client_id, current_seq_num);
+      });
+      waitingForEndorsementsTimeout->Reset();
+      if(sintr_params.sortWriteset) {
+        getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
+      }
+    }
   });
 }
 
@@ -149,8 +229,10 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
 
     Debug("Invoke SQL Request: %s", statement.c_str());
 
-    sql_rpc_callback srcb = [scb, statement, this](
-      int status, const std::string& sql_res, TransactionMessage *txn_msg
+    auto current_seq_id = client_seq_num;
+
+    sql_rpc_callback srcb = [scb, statement, current_seq_id, this](
+      int status, const std::string& sql_res, TransactionMessage *txn_msg, proto::SignedMessage *signedMessage
     ) {
       Debug("Received query response");
 
@@ -166,15 +248,20 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
         query_res = new sql::QueryResultProtoWrapper(sql_res);
 
         for (auto &read : txn_msg->readset()) {
-          Debug("read key: %s", read.key().c_str());
+          Debug("Client read key: %s", read.key().c_str());
           *this->txn_msg->add_readset() = std::move(read);
         }
         for (auto &write : txn_msg->writeset()) {
-          Debug("write key: %s", write.key().c_str());
+          Debug("Client write key: %s", write.key().c_str());
           *this->txn_msg->add_writeset() = std::move(write);
+          handlePolicyUpdateOnKey(write.key());
         }
+        //TODO: Import hashDigest as param
+        Debug("SQL GEN ID: %s for statement %s client ID: %lu seq num: %lu", BytesToHex(SQLGenId(statement, client_id, current_seq_id, true), 16).c_str(), statement.c_str(), client_id, current_seq_id);
+        Debug("SQL GEN ID: %s for seq num %lu", BytesToHex(SQLGenId(statement, client_id, client_seq_num, true), 16).c_str(), client_seq_num);
+        c2client->SendForwardSQLResultMessage(SQLGenId(statement, client_id, current_seq_id, true), sql_res, signedMessage, txn_msg);
       } else {
-        Debug("Statement execution FAILURE.");
+        Panic("Statement execution FAILURE."); // todo: revert later
         //This is simply a hack to force all follower replicas to also abort in order to make them unlock any held locks.
         //if(fake_SMR) bclient[0]->Abort(client_id, client_seq_num); 
         //TODO: Alternatively: Server could just abort current txn when it receives the next txn. 
@@ -186,6 +273,7 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
       scb(status, query_res);
 
       delete txn_msg;
+      txn_msg = nullptr;
     };
     
     bclient[0]->Query(statement, client_id, client_seq_num, srcb, stcb, timeout);
@@ -203,6 +291,36 @@ void Client::Query(const std::string &query, query_callback qcb, query_timeout_c
 void Client::Write(std::string &write_statement, write_callback wcb, write_timeout_callback wtcb, uint32_t timeout, bool blind_write){
     Debug("Processing Write Statement: %s", write_statement.c_str());
     this->SQLRequest(write_statement, wcb, wtcb, timeout);
+}
+
+void Client::getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num) {
+  if (sintr_params.sortWriteset && !endorseClient->IsSatisfied()) {
+    Debug("WAITING FOR ENDORSEMENTS HERE");
+    transport->Timer(0, [this, tccb, ctcb, timeout, seq_num]() {
+      getEndorsementsAndCommit(tccb, ctcb, timeout, seq_num);
+    });
+    return;
+  }
+  UW_ASSERT(seq_num == client_seq_num);
+  const auto &endorsements = sintr_params.ignorePolicyUpdate ? std::vector<std::shared_ptr<::google::protobuf::Message>>() : endorseClient->GetEndorsements();
+  if(!sintr_params.ignorePolicyUpdate) {
+    endorsementsReceived[seq_num] = true;
+    endorseClient->SetEndorsementsUsed();
+  }
+
+  bclient[0]->Commit(client_id, seq_num, std::move(txn_msg), tccb, ctcb, timeout, endorsements);
+  txn_msg = nullptr;
+}
+
+void Client::handlePolicyUpdateOnKey(std::string key) {
+  if(!sintr_params.ignorePolicyUpdate) {
+    // TODO: need to also handle policy change functions
+    std::string policyId = policyIdFunction(key, "");
+    const Policy *policy;
+    UW_ASSERT(policyCache.Get(policyId, policy));
+    Debug("handle policy update for policy id %lu in write", policyId);
+    c2client->HandlePolicyUpdate(policy);
+  }
 }
 
 }

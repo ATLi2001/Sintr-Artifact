@@ -19,6 +19,11 @@ message TryCommit {
   required uint64 txn_seq_num = 4;
   // holds readset and writeset
   optional TransactionMessage txn_msg = 5;
+  optional SignedMessages endorsements = 6;
+}
+
+message SignedMessages {
+  repeated SignedMessage sig_msgs = 1;
 }
 
 message UserAbort {

@@ -150,7 +150,7 @@ class IndicusCodebase(ExperimentCodebase):
             if 'all_to_all_fb' in config['replication_protocol_settings']:
                 client_command += ' --indicus_all_to_all_fb=%s' % str(config['replication_protocol_settings']['all_to_all_fb']).lower()
 
-        if config['replication_protocol'] == 'sintr':
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr':
             client_command += ' --clients_config_path %s' % client_config_path
             client_command += ' --sintr_policy_config_path %s' % policy_config_path
             if 'sintr_max_val_threads' in config['sintr_protocol_settings']:
@@ -607,7 +607,7 @@ class IndicusCodebase(ExperimentCodebase):
             if 'replica_gossip' in config['replication_protocol_settings']:
                 replica_command += ' --indicus_replica_gossip=%s' % str(config['replication_protocol_settings']['replica_gossip']).lower()
 
-        if config['replication_protocol'] == 'sintr':
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr':
             replica_command += ' --sintr_policy_config_path %s' % policy_config_path
             if 'sintr_sign_finish_validation' in config['sintr_protocol_settings']:
                 replica_command += ' --sintr_sign_finish_validation=%s' % str(config['sintr_protocol_settings']['sintr_sign_finish_validation']).lower()
@@ -833,7 +833,7 @@ class IndicusCodebase(ExperimentCodebase):
                         print('replica %s:%d' % (config['server_names'][server_idx],
                             config['server_port'] + process_idx), file=f)
 
-        if config['replication_protocol'] == 'sintr':
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr':
             client_config_file = os.path.join(local_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
             with open(client_config_file, 'w') as f:
                 print('f %d' % config['fault_tolerance'], file=f)

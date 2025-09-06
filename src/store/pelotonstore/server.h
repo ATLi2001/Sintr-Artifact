@@ -45,6 +45,13 @@
 #include "lib/transport.h"
 #include "store/common/query_result/query_result_proto_builder.h"
 #include "tbb/concurrent_hash_map.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/backend/versionstore_generic_safe.h"
+#include "store/common/sintring/params.h"
+#include "store/common/timestamp.h"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -63,7 +70,7 @@ class Server : public App, public ::Server {
 public:
   Server(const transport::Configuration& config, KeyManager *keyManager, std::string &table_registry_path, 
     int groupIdx, int idx, int numShards, int numGroups, bool signMessages, bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp,
-    bool localConfig, int SMR_mode, TrueTime timeServer = TrueTime(0, 0));
+    bool localConfig, int SMR_mode, SintrParameters sintr_params, TrueTime timeServer = TrueTime(0, 0));
   ~Server();
 
   void RegisterTables(std::string &table_registry);
@@ -169,6 +176,14 @@ private:
 
   std::shared_mutex atomicMutex;
   pelotonstore::TableStore *table_store;
+  VersionedKVStoreGeneric<std::string, Timestamp, Policy*> policyStore;
+  // not sure if VersionedKvStoreGeneric will actually free the policy pointers, so store separately and free on destruction
+  std::vector<Policy *> policiesToFree;
+  // policy_function policyFunction;
+  policy_id_function policyIdFunction;
+
+  PolicyParseClient *policyParseClient;
+  SintrParameters sintr_params;
 
      /////////////////// HELPER FUNCTIONS ///////////////////
   ::google::protobuf::Message* ParseMsg(const string& type, const string& msg, uint64_t &req_id, uint64_t &client_id, uint64_t &tx_id);
@@ -191,6 +206,12 @@ private:
     return static_cast<int>((*part)(key, numShards, groupIdx, txnGroups) % numGroups) == groupIdx;
   }
 
+  // policy stuff (for sintr)
+  void LoadPolicyStore(const std::string &policyStorePath);
+  bool EndorsementCheck(const std::string &txnDigest, const proto::TryCommit *try_commit);
+  void ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyClient);
+  bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, uint64_t client_id, const std::string &txnDigest);
+  bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
 };
 
 }

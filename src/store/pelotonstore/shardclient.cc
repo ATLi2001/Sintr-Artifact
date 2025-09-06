@@ -37,10 +37,10 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
     uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
     bool signMessages, bool validateProofs, bool signClientProposals,
     KeyManager *keyManager, Stats* stats, 
-    bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path) :
+    bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path, bool sintrUnsafe) :
     config(config), transport(transport), group_idx(group_idx), signMessages(signMessages), validateProofs(validateProofs),
     signClientProposals(signClientProposals), keyManager(keyManager), stats(stats), reqId(0UL), client_id(client_id),
-    fake_SMR(fake_SMR), SMR_mode(SMR_mode)  {
+    fake_SMR(fake_SMR), SMR_mode(SMR_mode), sintrUnsafe(sintrUnsafe)  {
 
   transport->Register(this, config, -1, -1);
   
@@ -210,7 +210,8 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
 }
 
 void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
-  try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout) {
+  try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout,
+  const std::vector<std::shared_ptr<::google::protobuf::Message>> &endorsements) {
 
   reqId++;
   Debug("Commit id: %lu", reqId);
@@ -221,6 +222,11 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num, Transactio
   try_commit.set_client_id(client_id);
   try_commit.set_txn_seq_num(client_seq_num);
   try_commit.set_allocated_txn_msg(txn_msg);
+  if (endorsements.size() > 0) {
+    for (auto &endorsement : endorsements) {
+      *try_commit.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
+    }
+  }
 
   //Register Reply Handler
   PendingTryCommit &ptc = pendingTryCommits[reqId];
@@ -354,7 +360,7 @@ int ShardClient::ValidateAndExtractData(const std::string &t, const std::string 
   } 
   else { //Message is not signed
     //if(signMessages) Panic("All replies are supposed to be signed");
-   
+   UW_ASSERT(!signMessages);
     type = t;
     data = d;
 
@@ -460,7 +466,12 @@ void ShardClient::SQL_RPCReplyHelper(PendingSQL_RPC &pendingSQL_RPC, const std::
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // end_us = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
   // Notice("Shardclient inbound latency: %lu us", end_us - start_us);
-  srcb(status, sql_rpcReply, std::move(txn_msg));
+  proto::SignedMessage *signedMessagePointer = nullptr;
+  if(validateProofs && !sintrUnsafe) {
+    //TODO: Maybe try to make more efficient by not copying
+    signedMessagePointer = new proto::SignedMessage(signedMessage);
+  }
+  srcb(status, sql_rpcReply, std::move(txn_msg), std::move(signedMessagePointer));
 }
 
 //Note: This must only be called once per req_id.

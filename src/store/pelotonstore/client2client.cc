@@ -38,15 +38,16 @@
 
 namespace pelotonstore {
 
-Client2Client::Client2Client(transport::Configuration *config, transport::Configuration *clients_config, Transport *transport,
+Client2Client::Client2Client(transport::Configuration *clients_config, Transport *transport,
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool signMessages, bool validateProofs,
       SintrParameters sintr_params, KeyManager *keyManager,
       EndorsementClient *endorseClient, ClientSelector *valClientSelector, std::mt19937 &rand,
       const std::vector<std::string> &keys) :
       Client2ClientCommon(client_id, clients_config, transport, group, sintr_params, endorseClient, valClientSelector, rand, keys),
-      config(config), nshards(nshards), ngroups(ngroups), signMessages(signMessages), validateProofs(validateProofs), keyManager(keyManager) {
+      nshards(nshards), ngroups(ngroups), signMessages(signMessages), validateProofs(validateProofs), keyManager(keyManager) {
 
   valClient = new ValidationClient(transport, client_id, sintr_params);
+  Warning("CLIENT2CLIENT PELOTON CREATED FOR CLIENT ID %d", client_id);
 }
 
 Client2Client::~Client2Client() {
@@ -143,19 +144,19 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
 }
 
 void Client2Client::SendForwardSQLResultMessage(const std::string &sql_gen_id, const std::string &sql_result,
-    proto::SignedMessage *signedMessage) {
+    proto::SignedMessage *signedMessage, TransactionMessage *txn_msg) {
 
   if (!sintr_params.c2cSendThread) {
     SendForwardSQLResultMessageHelper(
       sql_gen_id, sql_result,
-      *signedMessage
+      signedMessage, txn_msg
     );
   }
   else {
     std::function<void*(void)> f = [=]() {
       this->SendForwardSQLResultMessageHelper(
         sql_gen_id, sql_result,
-        *signedMessage
+        signedMessage, txn_msg
       );
       return (void*) true;
     };
@@ -166,7 +167,7 @@ void Client2Client::SendForwardSQLResultMessage(const std::string &sql_gen_id, c
 }
 
 void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen_id, const std::string &sql_result,
-      proto::SignedMessage &signedMessage) {
+      proto::SignedMessage *signedMessage, TransactionMessage *txn_msg) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardSQLResultMessage *fwdSQLResultMsgToSend = new proto::ForwardSQLResultMessage();
@@ -175,6 +176,7 @@ void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen
   fwdSQLResult->set_sql_result(sql_result);
   fwdSQLResult->set_client_id(client_id);
   fwdSQLResult->set_client_seq_num(client_seq_num);
+  fwdSQLResult->set_allocated_txn_msg(txn_msg); //TODO: Figure out a better way to move this than copying
 
   // copy into sentFwdResultState
   sentFwdResultState->fwdMsgUnderlying = fwdSQLResult;
@@ -191,7 +193,7 @@ void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen
   }
 
   if (validateProofs) {
-    *fwdSQLResultMsgToSend->mutable_signed_fwd_sql_result() = std::move(signedMessage);
+    fwdSQLResultMsgToSend->set_allocated_server_sql_sig(signedMessage);
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
@@ -320,6 +322,7 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   ValidationTransaction *valTxn = valParseClient->Parse(txnState);
   TransportAddress *remoteCopy = remote.clone();
   ValidationInfo *valInfo = new ValidationInfo(curr_client_id, curr_client_seq_num, std::move(valTxn), std::move(remoteCopy));
+  valClient->SetTxnTimestamp(curr_client_id, curr_client_seq_num);
   validationQueue.push(valInfo);
 }
 
@@ -475,6 +478,14 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   else {
     endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnDigest);
   }
+  if(!sintr_params.optimisticReceiveEndorsement && endorse_cb != nullptr && endorseClient->IsSatisfied()) {
+    // only call endorse cb if optimistic endorsement set to false and other conditions are met
+    Debug("CALLING ENDORSE CB FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
+    endorse_cb();
+    endorse_cb = nullptr;
+  } else {
+    Debug("endorse cb is null or endorsements not satisifed for client %d seq num %d", peer_client_id, val_txn_seq_num);
+  }
 }
 
 void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg,
@@ -507,6 +518,14 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
       peer_client_id,
       signedMsg
     );
+  }
+  if(endorse_cb != nullptr && endorseClient->IsSatisfied()) {
+    // should only be called if optimistic endorsement set to true
+    Debug("CALLING ENDORSE CB HERE FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
+    endorse_cb();
+    endorse_cb = nullptr;
+  } else {
+    Debug("ENDORSE CB IS NULL HERE FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
   }
 }
 
@@ -580,7 +599,7 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &signedMessag
 
   // next make sure that we have matches
   if (validated_result.sql_gen_id() != sql_gen_id) {
-    Debug("Mismatch in sql gen id for forwarded sql result");
+    Debug("Mismatch in sql gen id for forwarded sql result %s vs %s", BytesToHex(sql_gen_id, 16).c_str(), BytesToHex(validated_result.sql_gen_id(), 16).c_str());
     return false;
   }
 
@@ -636,6 +655,17 @@ void Client2Client::ValidationThreadFunction() {
     if (sintr_params.debugEndorseCheck) {
       finishValTxnMsg.set_allocated_val_txn_msg(txn_msg.release());
     }
+    if (false) {
+      Debug("Trying to send validation txn: [%lu:%lu]", curr_client_id, curr_client_seq_num);
+      for (const auto &read : txn_msg->readset()) {
+        Debug("Validation read key: %s", read.key().c_str());
+      }
+      for (const auto &write : txn_msg->writeset()) {
+        Debug("Validation write key: %s", write.key().c_str());
+        Debug("Validation write value: %s", write.value().c_str());
+
+      }
+    }
 
     transport->SendMessage(this, *valInfo->remote, finishValTxnMsg);
   };
@@ -690,6 +720,32 @@ void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, 
     (*hmacs.mutable_hmacs())[i] = crypto::HMAC(msgData, sessionKeys[i]);
   }
   signedMessage.set_signature(hmacs.SerializeAsString());
+}
+
+void Client2Client::SetEndorsementCallback(endorsement_callback endorse_cb) {
+  if (!sintr_params.c2cReceiveThread) {
+    SetEndorsementCallbackHelper(endorse_cb);
+  }
+  else {
+    std::function<void*(void)> f = [=]() {
+      this->SetEndorsementCallbackHelper(endorse_cb);
+      return (void*) true;
+    };
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    c2cReceiveQueue.push(executor);
+  }
+}
+
+void Client2Client::SetEndorsementCallbackHelper(endorsement_callback endorse_cb) {
+  // check if endorsements have been satisfied now 
+  // case where endorsements arrive after client tries to commit but before endorse_cb is set
+  if(endorseClient->IsSatisfied()) {
+    Warning("RUNNING ENDORSE CB HERE");
+    endorse_cb();
+  } else {
+    Debug("SET ENDORSE CB HERE");
+    this->endorse_cb = endorse_cb;
+  }
 }
 
 } // namespace pelotonstore

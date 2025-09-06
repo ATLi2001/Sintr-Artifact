@@ -223,11 +223,11 @@ void ValidationClient::ProcessForwardSQLResult(uint64_t txn_client_id, uint64_t 
   auto editTxnStateCB = [](AllValidationTxnState *allValTxnState, proto::ForwardSQLResult &&fwdSQLResult) {
     ++allValTxnState->numProcessedForwardQuery;
     for (auto &read : fwdSQLResult.mutable_txn_msg()->readset()) {
-      Debug("read key: %s", read.key().c_str());
+      Debug("process forward read key: %s", read.key().c_str());
       *allValTxnState->txn_msg->add_readset() = std::move(read);
     }
     for (auto &write : fwdSQLResult.mutable_txn_msg()->writeset()) {
-      Debug("write key: %s", write.key().c_str());
+      Debug("process forward write key: %s", write.key().c_str());
       *allValTxnState->txn_msg->add_writeset() = std::move(write);
     }
   };
@@ -324,6 +324,15 @@ std::unique_ptr<TransactionMessage> ValidationClient::GetCompletedTxnMsg(uint64_
 
   allValTxnStates.erase(a);
   return txn_msg;
+}
+
+void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
+  std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+  allValTxnStatesMap::accessor a;
+  const bool isNewKey = allValTxnStates.insert(a, txn_id);
+  if (isNewKey) {
+    a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num);
+  } 
 }
 
 } // namespace pelotonstore

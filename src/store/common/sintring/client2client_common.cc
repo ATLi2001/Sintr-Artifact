@@ -52,6 +52,8 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
       sessionKeys[i] = std::string(8, (char) i + 0x30) + std::string(8, (char) idx + 0x30);
     }
   }
+
+  done = false;
 }
 
 Client2ClientCommon::~Client2ClientCommon() {
