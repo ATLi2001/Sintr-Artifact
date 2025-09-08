@@ -38,7 +38,11 @@ impl AutobahnServer {
         let (tx_slot_txn_reply, mut rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
 
         self.rt.spawn(async move {
-            debug_via_cpp("Server started");
+            debug_via_cpp("Starting Autobahn server...");
+            debug_via_cpp(&format!(
+                "key_file: {}, committee_file: {}, parameters_file: {}, store_path: {}, is_primary: {}, worker_id: {}",
+                key_file, committee_file, parameters_file, store_path, is_primary, worker_id
+            ));
             start_server_inner(
                 key_file,
                 committee_file,

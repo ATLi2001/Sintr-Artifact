@@ -40,7 +40,7 @@ impl AutobahnClient {
 
         let transport = &mut self.transport;
         self.rt.block_on(async move {
-            debug_via_cpp(&format!("Sending transaction of size: {}", bytes.len()));
+            // debug_via_cpp(&format!("Sending transaction of size: {}", bytes.len()));
             if let Err(e) = transport.send(bytes).await {
                 debug_via_cpp(&format!("Error sending transaction: {:?}", e));
             }
