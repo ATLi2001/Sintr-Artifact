@@ -82,8 +82,26 @@ Client::~Client()
 
 /* Begins a transaction. All subsequent operations before a commit() or abort() are part of this transaction. */
 void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t timeout, bool retry, const std::string &txnState) {
-  transport->Timer(0, [this, bcb, btcb, timeout]() {
-    
+  transport->Timer(0, [this, bcb, btcb, timeout, &txnState]() {
+
+    if (SMR_mode == 3) {
+      bool allConnected = true;
+      for (auto b : bclient) {
+        if(!b->IsConnected()) {
+          Warning("Client not connected to all replicas yet, cannot begin txn");
+          allConnected = false;
+          break;
+        }
+      }
+      // queue up in event loop again to check 1ms later
+      if(!allConnected) {
+        transport->Timer(1, [this, bcb, btcb, timeout, txnState]() {
+          this->Begin(bcb, btcb, timeout, false, txnState);
+        });
+        return;
+      }
+    }
+
     client_seq_num++;
 
     Debug("BEGIN tx: ", client_seq_num);

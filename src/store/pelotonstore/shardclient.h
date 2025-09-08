@@ -80,6 +80,8 @@ class ShardClient : public TransportReceiver {
 
   void Abort(uint64_t client_id, uint64_t client_seq_num);
 
+  bool IsConnected() const;
+
  private:
   pelotonstore::BftSmartAgent* bftsmartagent;
   void SendMessageToGroup_viaBFTSMART(proto::Request& msg, int group_idx);
@@ -155,6 +157,10 @@ class ShardClient : public TransportReceiver {
 
     bool hasLeaderReply; 
   };
+
+  // force client to get server connect acks before starting
+  proto::Connect connect;
+  int numConnectAcks = 0;
 
   proto::SignedMessage signedMessage;
   proto::SQL_RPCReply sql_rpcReply;

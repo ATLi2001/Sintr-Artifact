@@ -44,11 +44,12 @@ pub enum WorkerMessage {
     BatchRequest(Vec<Digest>, /* origin */ PublicKey),
 }
 
-/// Transaction reply message sent from worker to client.
+/// Transaction reply message sent from worker to interface.
+/// Contains the slot number and the client request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotTransactionReply {
     pub slot: u64,
-    pub committed_transaction: Transaction,
+    pub committed_request: Vec<u8>,
 }
 
 pub struct Worker {

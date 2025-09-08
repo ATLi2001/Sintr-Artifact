@@ -27,6 +27,7 @@
 #include "store/pelotonstore/replica.h"
 #include "store/pelotonstore/pbft_batched_sigs.h"
 #include "store/pelotonstore/common.h"
+#include "store/common/util.h"
 #include "lib/tcptransport.h"
 
 namespace pelotonstore {
@@ -171,11 +172,21 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
     Debug("Registering client ID %d to the Connection cache!", client_id);
     //Handle any buffered requests   //NOTE: Doing so will technically violate the total order from consensus, but we are only simulating a fake SMR anyways.
     if (reqBuffer.find(client_id) != reqBuffer.end()){
+      if (SMR_mode == 3) {
+        Panic("Should not have buffered requests with autobahn for client id %lu", client_id);
+      }
       for (proto::Request request: reqBuffer[client_id]){
         Debug("fetching previous buffered requests because we get reads!");
         HandleRequest_noHS(*(clientCache[client_id]), request);
       }
       reqBuffer.erase(client_id);
+    }
+
+    if (SMR_mode == 3) {
+      // for autobahn need to send back connect ack
+      proto::Connect connect_ack;
+      connect_ack.set_client_id(client_id);
+      transport->SendMessage(this, remote, connect_ack);
     }
   }
 
@@ -196,10 +207,12 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       HandleRequest(remote, recvrequest);
     }
     else if(SMR_mode == 2 || SMR_mode == 3){ //This path will be invoked if it comes from BFTSmart or autobahn
+      Debug("received msg: %s", BytesToHex(data, 400).c_str());
        recvrequest.ParseFromString(data);
    
       uint64_t client_id = recvrequest.client_id();
       std::unique_lock lock(client_cache_mutex);
+      Debug("Parsed packed msg: %s", BytesToHex(recvrequest.packed_msg().msg().c_str(), 400).c_str());
       const TransportAddress* client = clientCache[client_id];
       Debug("handling the request here... ");
       if (client == nullptr){
@@ -208,7 +221,9 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       }
       else {
         Debug("handling the request for real!");
-        HandleRequest_noHS(*client, recvrequest);
+        uint64_t *slot_num_ptr = (uint64_t *)meta_data;
+        HandleRequest_noHS(*client, recvrequest, *slot_num_ptr);
+        delete slot_num_ptr;
       }
       Debug("finished handling requests");
     }
@@ -287,7 +302,7 @@ static bool USE_SYNC_INTERFACE = false; //NOTE: THIS MUST BE FALSE WITH > 1 clie
 static uint64_t counter = 0;
 //Directly call into Server (skip HS)
 //Note: BubbleTimer will never be called since we never call HandleRequest
-void Replica::HandleRequest_noHS(const TransportAddress &remote, const proto::Request &request){
+void Replica::HandleRequest_noHS(const TransportAddress &remote, const proto::Request &request, uint64_t slot_num){
 
   // //Reply immediately with a dummy result -- pay deserialization cost, but don't talk to postgres.
   // //1 Sql reply, 1 commit reply.
@@ -336,9 +351,21 @@ void Replica::HandleRequest_noHS(const TransportAddress &remote, const proto::Re
   //Count total number or ProcessReq invocations remote vs here.
   //If coordination is bottleneck, the number will be way larger. If postgres is bottleneck, they will be close.
   
-  auto f = [this, digest, packedMsg, clientAddr](){
+  auto f = [this, digest, packedMsg, clientAddr, slot_num](){
     Debug("Executing App interface");
     replyAddrs[digest] = clientAddr; // replyAddress is the address of the client wo sent this request, so we can answer
+
+    Debug("Scheduled onto main cpu %d, packed msg: %s", sched_getcpu(), BytesToHex(packedMsg.msg().c_str(), 400).c_str());
+    // slot num 0 means it came from req buffer, which is out of order overall but in order for this client
+    if (slot_num > 0) {
+      if (slot_num > highest_slot_num) {
+        highest_slot_num = slot_num;
+        Debug("Highest slot num updated to %lu", highest_slot_num);
+      }
+      else if (slot_num < highest_slot_num) {
+        Panic("Out-of-order slot num: %lu, highest slot num: %lu", slot_num, highest_slot_num);
+      }
+    }
 
     auto cb = [this, digest, packedMsg](const std::vector<::google::protobuf::Message*> &replies){
       Debug("Trigger reply callback");
@@ -376,6 +403,7 @@ void Replica::HandleRequest_noHS(const TransportAddress &remote, const proto::Re
   };
   Debug("Dispatching to main");
   transport->DispatchTP_main(f);
+  Debug("Dispatching to main from cpu %d, packed msg: %s", sched_getcpu(), BytesToHex(packedMsg.msg().c_str(), 400).c_str());
 }
 
 static uint64_t exec_start_us;

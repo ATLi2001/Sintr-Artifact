@@ -75,7 +75,7 @@ public:
                            const proto::Request &msg);
 
  private:
-  void HandleRequest_noHS(const TransportAddress &remote, const proto::Request &request);
+  void HandleRequest_noHS(const TransportAddress &remote, const proto::Request &request, uint64_t slot_num = 0);
   void HandleRequest_noPacked(const TransportAddress &remote, const std::string &type, const std::string &data);
 
   uint64_t SMR_mode;
@@ -110,6 +110,8 @@ public:
   int numShards;
   bool fake_SMR;
   int dummyTO;
+
+  uint64_t highest_slot_num = 0;
 
   // members to reduce alloc
   proto::Connect connect_msg;

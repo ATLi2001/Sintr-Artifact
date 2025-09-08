@@ -27,6 +27,7 @@
 #include "store/pelotonstore/server.h"
 #include "store/pelotonstore/common.h"
 #include "store/common/transaction.h"
+#include "store/common/util.h"
 #include <iostream>
 #include <sys/time.h>
 #include <cstdlib>
@@ -142,6 +143,7 @@ std::vector<::google::protobuf::Message*> Server::Execute(const string& type, co
 //Asynchronous Execution Interface -> Dispatch execution to a thread, and let it call callback when done
 void Server::Execute_Callback(const string& type, const string& msg, std::function<void(std::vector<google::protobuf::Message*>& )> ecb) {
   Debug("Execute with callback: %s", type.c_str());
+  Debug("msg: %s", BytesToHex(msg, 400).c_str());
 
 
   uint64_t req_id;

@@ -38,6 +38,7 @@ public:
   AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport,const std::string &config_path);
 
   void SendMessageToGroup(int group_idx, void *buffer, size_t size);
+  void SetClientSeqNum(uint64_t seq_num);
 
 private:
   void CreateClientInterface();
@@ -52,6 +53,7 @@ private:
   TransportReceiver *receiver;
   TCPTransport *tcp_transport;
   std::string config_path;
+  uint64_t client_seq_num;
 
   std::unique_ptr<rust::Box<AutobahnClient>> client;
   std::unique_ptr<rust::Box<AutobahnServer>> primary;

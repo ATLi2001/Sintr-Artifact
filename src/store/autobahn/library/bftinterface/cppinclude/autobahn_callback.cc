@@ -71,9 +71,11 @@ void autobahn_callback(int64_t handle, uint64_t slot_num, rust::Slice<const uint
   ptr += msgLen;
   Debug("start sending the message to the receiver!");
 
-  Debug("slot_num: %lu, msgType: %s", slot_num, msgType.c_str());
+  Debug("slot_num: %lu, msgType: %s, msg: %s", slot_num, msgType.c_str(), BytesToHex(msg, 400).c_str());
 
-  replica->ReceiveMessage(*repl_addr, msgType, msg, nullptr);
+  uint64_t *slot_num_ptr = new uint64_t(slot_num);
+
+  replica->ReceiveMessage(*repl_addr, msgType, msg, (void*)slot_num_ptr);
 }
 
 } // namespace autobahn

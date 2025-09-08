@@ -4,11 +4,15 @@ use config::{Committee, KeyPair, Parameters};
 use crypto::SignatureService;
 use primary::Primary;
 use store::Store;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc::channel;
-use worker::Worker;
+use tokio::task::LocalSet;
+use worker::{SlotTransactionReply, Worker};
 
 use crate::ffi::autobahn_callback;
+
+/// The default channel capacity.
+const CHANNEL_CAPACITY: usize = 1_000;
 
 pub struct AutobahnServer {
     // keep tokio runtime alive
@@ -31,35 +35,62 @@ impl AutobahnServer {
         is_primary: bool,
         worker_id: u32,
     ) {
+        let (tx_slot_txn_reply, mut rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
+
         self.rt.spawn(async move {
             debug_via_cpp("Server started");
             start_server_inner(
-                handle,
                 key_file,
                 committee_file,
                 parameters_file,
                 store_path,
                 is_primary,
                 worker_id,
+                tx_slot_txn_reply,
             )
             .await;
-            debug_via_cpp("after rt block_on");
+        });
+
+        // always process the slot transaction replies in a fixed thread
+        std::thread::spawn(move || {
+            let rt = Builder::new_current_thread().enable_all().build().unwrap();
+            let local = LocalSet::new();
+            local.block_on(&rt, async {
+                let mut highest_committed_slot: u64 = 0;
+                while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
+                    // debug_via_cpp(&format!(
+                    //     "Worker sending reply for slot {} with {:?} bytes",
+                    //     slot_txn_reply.slot, slot_txn_reply.committed_transaction
+                    // ));
+                    autobahn_callback(
+                        handle,
+                        slot_txn_reply.slot,
+                        &slot_txn_reply.committed_request,
+                    );
+
+                    if slot_txn_reply.slot > highest_committed_slot {
+                        highest_committed_slot = slot_txn_reply.slot;
+                    } else if slot_txn_reply.slot < highest_committed_slot {
+                        debug_via_cpp(&format!(
+                            "Warning: Worker committed slot {} but highest committed slot is {}",
+                            slot_txn_reply.slot, highest_committed_slot
+                        ));
+                    }
+                }
+            });
         });
     }
 }
 
 async fn start_server_inner(
-    handle: i64,
     key_file: String,
     committee_file: String,
     parameters_file: String,
     store_path: String,
     is_primary: bool,
     worker_id: u32,
+    tx_slot_txn_reply: tokio::sync::mpsc::Sender<SlotTransactionReply>,
 ) {
-    /// The default channel capacity.
-    const CHANNEL_CAPACITY: usize = 1_000;
-
     // Read the committee and node's keypair from file.
     let keypair = KeyPair::import(&key_file).expect("Failed to load the node's keypair");
     let name = keypair.name;
@@ -105,14 +136,7 @@ async fn start_server_inner(
             rx_request_header_sync,
             tx_output,
         );
-
-        while let Some(_header) = rx_output.recv().await {
-            debug_via_cpp("Primary produced header");
-            // autobahn_callback(handle, header.to_string());
-        }
     } else {
-        let (tx_slot_txn_reply, mut rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
-
         Worker::spawn(
             keypair.name,
             worker_id,
@@ -121,18 +145,12 @@ async fn start_server_inner(
             store,
             tx_slot_txn_reply,
         );
-
-        while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
-            debug_via_cpp("worker received slot transaction reply");
-            autobahn_callback(
-                handle,
-                slot_txn_reply.slot,
-                slot_txn_reply.committed_transaction.as_slice(),
-            );
-        }
     }
 
-    debug_via_cpp("Server shutting down");
+    while let Some(_header) = rx_output.recv().await {
+        // debug_via_cpp("Primary produced header");
+        // autobahn_callback(handle, header.to_string());
+    }
 }
 
 pub fn new_server() -> Box<AutobahnServer> {

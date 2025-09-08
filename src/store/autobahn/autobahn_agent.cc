@@ -67,7 +67,7 @@ void AutobahnAgent::CreateClientInterface() {
   std::string target_worker_name = std::to_string(target_worker);
   std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
 
-  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(GetSocketAddr(target_addr)));
+  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr)));
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
@@ -145,7 +145,15 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
 
 void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size) {
   UW_ASSERT(is_client);
-  (*client)->send(rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size));
+  (*client)->send(
+    client_seq_num,
+    rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
+  );
+}
+
+void AutobahnAgent::SetClientSeqNum(uint64_t seq_num) {
+  UW_ASSERT(is_client);
+  client_seq_num = seq_num;
 }
 
 std::string AutobahnAgent::GetSocketAddr(const std::string &host_port) {

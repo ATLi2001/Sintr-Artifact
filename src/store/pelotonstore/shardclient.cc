@@ -236,6 +236,7 @@ void ShardClient::Query(const std::string &query, uint64_t client_id, uint64_t c
       SendMessageToGroup_viaBFTSMART(request, group_idx);
     }
     else if (SMR_mode == 3) {
+      autobahn_agent->SetClientSeqNum(client_seq_num);
       SendMessageToGroup_viaAutobahn(request, group_idx);
     }
     else{
@@ -289,6 +290,7 @@ void ShardClient::Commit(uint64_t client_id, uint64_t client_seq_num,
       SendMessageToGroup_viaBFTSMART(request, group_idx);
     }
     else if (SMR_mode == 3) {
+      autobahn_agent->SetClientSeqNum(client_seq_num);
       SendMessageToGroup_viaAutobahn(request, group_idx);
     }
     else{
@@ -332,6 +334,7 @@ void ShardClient::Abort(uint64_t client_id, uint64_t client_seq_num) {
       SendMessageToGroup_viaBFTSMART(request, group_idx);
     }
     else if (SMR_mode == 3) {
+      autobahn_agent->SetClientSeqNum(client_seq_num);
       SendMessageToGroup_viaAutobahn(request, group_idx);
     }
     else{
@@ -340,6 +343,10 @@ void ShardClient::Abort(uint64_t client_id, uint64_t client_seq_num) {
   }
 }
 
+bool ShardClient::IsConnected() const {
+  Debug("numConnectAcks: %d, config n: %d", numConnectAcks, config.n);
+  return numConnectAcks == config.n;
+}
 
 // ================================
 // ======= MESSAGE HANDLERS =======
@@ -399,7 +406,16 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote, const std::stri
 
   int replica_id = ValidateAndExtractData(t, d, type, data);
 
-  if (type == sql_rpcReply.GetTypeName()) {
+  if (type == connect.GetTypeName()) {
+    connect.ParseFromString(data);
+    UW_ASSERT(connect.client_id() == client_id);
+    numConnectAcks++;
+    if (numConnectAcks == config.n) {
+      Notice("Received all connect acks from replicas, client is ready");
+    }
+    return;
+  }
+  else if (type == sql_rpcReply.GetTypeName()) {
     sql_rpcReply.ParseFromString(data);
     HandleSQL_RPCReply(sql_rpcReply, replica_id);
 

@@ -156,6 +156,9 @@ impl Committer {
                         "Currently executing slot {:?}",
                         state.last_executed_slot + 1
                     );
+
+                    let mut headers_to_send = Vec::new();
+
                     match current_commit_message {
                         ConsensusMessage::Commit {
                             slot: _,
@@ -199,18 +202,25 @@ impl Committer {
                                         );
                                     }
 
-                                    // Send SlotCommittedMessage to workers for this header's batches
-                                    let executed_slot = state.last_executed_slot + 1;
-                                    if let Err(e) = self
-                                        .send_slot_committed_message(executed_slot, &header)
-                                        .await
-                                    {
-                                        debug!("Failed to send slot committed message for header {}: {}", header.digest(), e);
-                                    }
+                                    // make sure to only send all headers for a slot together
+                                    headers_to_send.push(header);
 
                                     debug!("Finish upcall");
                                 }
                             }
+
+                            // Send SlotCommittedMessage to workers for this header's batches
+                            let executed_slot = state.last_executed_slot + 1;
+                            if let Err(e) = self
+                                .send_slot_committed_message(executed_slot, headers_to_send)
+                                .await
+                            {
+                                debug!(
+                                    "Failed to send slot committed message for slot {}: {}",
+                                    executed_slot, e
+                                );
+                            }
+
                             state.last_executed_slot += 1;
                         }
                         _ => {}
@@ -247,10 +257,13 @@ impl Committer {
     async fn send_slot_committed_message(
         &mut self,
         slot: Slot,
-        header: &Header,
+        headers: Vec<Header>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Collect all batch digests from the header
-        let all_batch_digests: Vec<Digest> = header.payload.keys().cloned().collect();
+        // Collect all batch digests from the headers
+        let all_batch_digests: Vec<Digest> = headers
+            .iter()
+            .flat_map(|header| header.payload.keys().cloned())
+            .collect();
 
         if all_batch_digests.is_empty() {
             return Ok(());
@@ -258,6 +271,12 @@ impl Committer {
 
         // Send SlotCommittedMessage to our first worker (worker 0) with all batches
         if let Ok(worker_info) = self.committee.worker(&self.name, &0) {
+            // debug_via_cpp(&format!(
+            //     "Primary {} sending SlotCommittedMessage for slot {} with {} batches to worker",
+            //     self.name,
+            //     slot,
+            //     all_batch_digests.len()
+            // ));
             let batch_count = all_batch_digests.len();
             let message = PrimaryWorkerMessage::SlotCommitted(slot, all_batch_digests);
             let bytes = bincode::serialize(&message)
