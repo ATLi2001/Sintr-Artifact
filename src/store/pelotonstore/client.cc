@@ -62,9 +62,9 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
 
   /* Start a client for each shard. */
   for (uint64_t i = 0; i < ngroups; i++) {
-    bclient[i] = new ShardClient(config, transport, client_id, i, closestReplicas,
+    bclient.push_back(new ShardClient(config, transport, client_id, i, closestReplicas,
         signMessages, validateProofs, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path,
-        autobahn_config_dir);
+        autobahn_config_dir));
   }
 
   Notice("PelotonSMR client [%lu] created! %lu %lu", client_id, ngroups, bclient.size());
