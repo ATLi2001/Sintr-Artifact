@@ -1277,6 +1277,7 @@ void Server::HandleRead(const TransportAddress &remote,
       }
     }
   } else if(isPolicyKey(msg.key())) {
+    Warning("IS POLICY KEY");
     Debug("Getting policy for %s", msg.key().c_str());
     const proto::Transaction *mostRecentPolicyTxn;
     std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;

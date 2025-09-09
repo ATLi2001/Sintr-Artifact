@@ -397,7 +397,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   proto::ForwardQueryResultMessage fwdQueryResultMsg;
   proto::BlindWriteMessage blindWriteMsg;
   proto::FinishValidateTxnMessage finishValTxnMsg;
-  PingMessage ping;
+  PingMessage sendPing;
+  PingMessage replyPing;
 
   uint64_t ping_begin_time_us;
   uint64_t send_begin_time_us;

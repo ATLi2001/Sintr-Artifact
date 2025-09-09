@@ -64,7 +64,12 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 
   if(params.sintr_params.maxClientsConnect > 0) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    sendPing.set_salt(client_id);
+    replyPing.set_salt(client_id);
+    sendPing.set_send_msg(true);
+    replyPing.set_send_msg(false);
+    Debug("AFTER SLEEP");
   }
 
   // assume these are somehow secretly shared before hand
@@ -99,6 +104,8 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     cpus_per_client = 4;
   }
   int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
+  Debug("CPUs per client is %lu main client cpu is %d num_cpus is %lu", cpus_per_client, main_client_cpu, num_cpus);
+
 
   Debug("Starting %lu validation threads", params.sintr_params.maxValThreads);
   for (size_t i = 0; i < params.sintr_params.maxValThreads; i++) {
@@ -121,17 +128,18 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       CPU_ZERO(&cpuset);
       CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+      Debug("C2C SEND THREAD PINNED TO CORE %lu", (main_client_cpu + 1) % num_cpus);
     }
     if(params.sintr_params.separateTransport) {
       c2cTportThread = new std::thread(&Client2Client::Client2ClientRunTCPThreadFunction, this);
-      // if (params.sintr_params.clientPinCores) {
-      //   // don't pin cores for transport thread yet... ask if necessary
-      //   // set cpu affinity
-      //   cpu_set_t cpuset;
-      //   CPU_ZERO(&cpuset);
-      //   CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
-      //   pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
-      // }
+      if (params.sintr_params.clientPinCores) {
+        // set cpu affinity
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+        pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+        Debug("C2C TRANSPORT PINNED TO CORE %lu", (main_client_cpu + 1) % num_cpus);
+      }
     }
   }
   if (params.sintr_params.c2cReceiveThread) {
@@ -143,6 +151,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       CPU_ZERO(&cpuset);
       CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       pthread_setaffinity_np(c2cReceiveThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+      Debug("C2C RECIEVE THREAD PINNED TO CORE %lu", (main_client_cpu + 1) % num_cpus);
     }
   }
 
@@ -161,22 +170,25 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
 
   client_time_to_endorse_us.resize(clients_config->n);
   //setup initial TCP connection in c2c constructor, requires that separate tcp object be enabled
+  UW_ASSERT(params.sintr_params.maxClientsConnect < clients_config->n);
+  // total number of clients should always be more than the max amount of clients to contact
   for(int i = 1; i <= params.sintr_params.maxClientsConnect; i++) {
     sendDone = false;
     replyDone = false;
     //TODO: Currently assumes selector is a ring selector
-    ping.set_salt(client_id);
     uint64_t target = (client_id + i) % clients_config->n;
-    uint64_t reply_to = (client_id - i) % clients_config->n;
+    uint64_t reply_to = (clients_config->n + client_id - i) % clients_config->n;
+    Debug("Target: %lu Reply to: %lu", target, reply_to);
     Debug("Client %lu sending ping to client %lu", client_id, target);
     if(target != client_id) {
-      ping.set_send_msg(true);
-      transport->SendMessageToReplica(this, target, ping);
+      Debug("PING SALT for target: %lu and is send true %d", sendPing.salt(), sendPing.send_msg());
+      transport->SendMessageToReplica(this, target, sendPing);
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
     Debug("Client %lu sending another ping to client %lu", client_id, reply_to);
-    if(reply_to != client_id) {
-      ping.set_send_msg(false);
-      transport->SendMessageToReplica(this, reply_to, ping);
+    if(reply_to != client_id && reply_to != target) {
+      Debug("PING SALT for replyTo: %lu and is send true %d", replyPing.salt(), replyPing.send_msg());
+      transport->SendMessageToReplica(this, reply_to, replyPing);
     }
     // need to wait for replies as well
     std::unique_lock lk(tcpMutex);
@@ -230,10 +242,12 @@ Client2Client::~Client2Client() {
 void Client2Client::ReceiveMessage(const TransportAddress &remote,
       const std::string &type, const std::string &data, void *meta_data) {
 
-  if (type == ping.GetTypeName()) {
+  if (type == sendPing.GetTypeName()) {
     Debug("ping received");
-    ping.ParseFromString(data);
-    HandlePingMessage(ping);
+    PingMessage receivePing;
+    receivePing.ParseFromString(data);
+    HandlePingMessage(receivePing);
+    Debug("AFTER PING HANDLED");
   }
   else if (type == beginValTxnMsg.GetTypeName()) {
     ManageDispatchBeginValidateTxnMessage(remote, data);
@@ -288,6 +302,7 @@ bool Client2Client::MySendPing(size_t replica, const PingMessage &ping, bool ini
 void Client2Client::HandlePingMessage(const PingMessage &ping) {
   // someone else's ping
   if (ping.salt() != client_id) {
+    Debug("client %lu RECEIVED ping from %lu", client_id, ping.salt());
     MySendPing(ping.salt(), ping, false);
   }
   else {
@@ -2223,7 +2238,7 @@ void Client2Client::Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_
 }
 
 void Client2Client::Client2ClientRunTCPThreadFunction() {
-  Debug("Running separate transport");
+  Debug("Running separate transport for client2client");
   transport->Run();
 }
 

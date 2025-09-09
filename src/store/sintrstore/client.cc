@@ -217,7 +217,9 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     uint64_t txnStartTime = timeServer.GetTime();
     
     // begin sintr validation
-    endorseClient->SetClientSeqNum(client_seq_num);
+    if(!params.sintr_params.ignorePolicyUpdate) {
+      endorseClient->SetClientSeqNum(client_seq_num);
+    }
     // using policy client with default policy set to weight 0 policy
     TxnState protoTxnState;
     PolicyClient *policyClient = nullptr;
@@ -226,7 +228,9 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
       protoTxnState.ParseFromString(txnState);
       EstimateTxnPolicy(protoTxnState, policyClient);
     }
-    c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
+    if(params.sintr_params.ignorePolicyUpdate) {
+      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
+    }
 
     txn.Clear(); //txn = proto::Transaction();
     txn.set_client_id(client_id);
@@ -333,7 +337,7 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasDep) {
         *txn.add_deps() = dep;
       }
-      if (hasPolicyDep) {
+      if (!params.sintr_params.useOCCForPolicies && hasPolicyDep) {
         *txn.add_deps() = policyDep;
       }
       if(!params.sintr_params.ignorePolicyUpdate) {
@@ -434,7 +438,7 @@ void Client::Put(const std::string &key, const std::string &value,
         txn.add_involved_groups(i);
         bclient[i]->Begin(client_seq_num);
       } 
-      if(bclient[i]->GetPolicyShardClient()) {
+      if(!params.sintr_params.ignorePolicyUpdate && bclient[i]->GetPolicyShardClient()) {
         // empty callback functions
         // This is a hack, but the downside is that it will add the key to the readset, 
         // which shouldn't happen during a blind write. It may also introduce unnecessary dependencies. 
@@ -1294,6 +1298,7 @@ void Client::AddWriteSetIdx(proto::Transaction &txn){
 void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     uint32_t timeout) {
   if (get_policy_done != 0) {
+    Warning("GET POLICY IS NOT 0");
     transport->Timer(0, [this, ccb, ctcb, timeout]() {
       Debug("Retrying commit because policy get on put not finished");
       Commit(ccb, ctcb, timeout);
@@ -1422,11 +1427,13 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       txn.set_hashed_timestamp(TimestampDigest(Timestamp(txn.timestamp())));
     }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
-    if (params.sintr_params.debugEndorseCheck) {
+    if (params.sintr_params.debugEndorseCheck && !params.sintr_params.ignorePolicyUpdate) {
       std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(txn);
       endorseClient->DebugSetExpectedTxn(std::move(debug_txn));
     }
-    endorseClient->SetExpectedTxnDigest(digest);
+    if(!params.sintr_params.ignorePolicyUpdate) {
+      endorseClient->SetExpectedTxnDigest(digest);
+    }
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;
@@ -1477,7 +1484,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
 void Client::Phase1(PendingRequest *req) {
   // if endorsement is not satisfied yet, add back to event loop
-  if (!endorseClient->IsSatisfied()) {
+  if (!params.sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied()) {
     transport->Timer(0, [this, req]() {
       Phase1(req);
     });
@@ -1488,7 +1495,7 @@ void Client::Phase1(PendingRequest *req) {
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
 
-  const auto &endorsements = endorseClient->GetEndorsements();
+  const auto &endorsements = params.sintr_params.ignorePolicyUpdate ? std::vector<std::shared_ptr<::google::protobuf::Message>>() : endorseClient->GetEndorsements();
 
   if(PROFILING_LAT){
     struct timespec ts_start;
@@ -1511,7 +1518,9 @@ void Client::Phase1(PendingRequest *req) {
       *txn.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
     }
   }
-  endorseClient->SetEndorsementsUsed();
+  if(!params.sintr_params.ignorePolicyUpdate) {
+    endorseClient->SetEndorsementsUsed();
+  }
 
   // copy into req
   req->txn = txn;
