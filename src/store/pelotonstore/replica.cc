@@ -206,13 +206,11 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       recvrequest.ParseFromString(data);
       HandleRequest(remote, recvrequest);
     }
-    else if(SMR_mode == 2 || SMR_mode == 3){ //This path will be invoked if it comes from BFTSmart or autobahn
-      Debug("received msg: %s", BytesToHex(data, 400).c_str());
+    else if(SMR_mode == 2){ //This path will be invoked if it comes from BFTSmart
        recvrequest.ParseFromString(data);
    
       uint64_t client_id = recvrequest.client_id();
       std::unique_lock lock(client_cache_mutex);
-      Debug("Parsed packed msg: %s", BytesToHex(recvrequest.packed_msg().msg().c_str(), 400).c_str());
       const TransportAddress* client = clientCache[client_id];
       Debug("handling the request here... ");
       if (client == nullptr){
@@ -221,11 +219,22 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &type,
       }
       else {
         Debug("handling the request for real!");
-        uint64_t *slot_num_ptr = (uint64_t *)meta_data;
-        HandleRequest_noHS(*client, recvrequest, *slot_num_ptr);
-        delete slot_num_ptr;
+        HandleRequest_noHS(*client, recvrequest);
       }
       Debug("finished handling requests");
+    }
+    else if (SMR_mode == 3) { // from autobahn
+      Debug("received msg: %s", BytesToHex(data, 400).c_str());
+      recvrequest.ParseFromString(data);
+   
+      uint64_t client_id = recvrequest.client_id();
+      // no need for mutex since callbacks are threaded through one channel on autobahn side
+      const TransportAddress* client = clientCache[client_id];
+      // should never be null since we always register client first with autobahn
+      UW_ASSERT(client != nullptr);
+      uint64_t *slot_num_ptr = (uint64_t *)meta_data;
+      HandleRequest_noHS(*client, recvrequest, *slot_num_ptr);
+      delete slot_num_ptr;
     }
   } 
   else{
