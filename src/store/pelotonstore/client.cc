@@ -90,9 +90,8 @@ Client::~Client()
 {
   endorsementsReceived.clear();
   if(waitingForEndorsementsTimeout != nullptr) {
-    waitingForEndorsementsTimeout->Stop();
     delete waitingForEndorsementsTimeout;
-    waitingForEndorsementsTimeout = nullptr; // sometimes this timeout still triggers despite deleting the object.
+    waitingForEndorsementsTimeout = nullptr;
   }
     for (auto b : bclient) {
         delete b;
@@ -107,10 +106,6 @@ Client::~Client()
 /* Begins a transaction. All subsequent operations before a commit() or abort() are part of this transaction. */
 void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t timeout, bool retry, const std::string &txnState) {
   transport->Timer(0, [this, bcb, btcb, timeout, &txnState]() {
-    if(waitingForEndorsementsTimeout != nullptr) {
-      waitingForEndorsementsTimeout->Stop();
-      delete waitingForEndorsementsTimeout;
-    }
     
     client_seq_num++;
     if(!sintr_params.ignorePolicyUpdate) {
@@ -118,7 +113,10 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
     }
 
     // no need to call delete as moved into TryCommit message
-    UW_ASSERT(txn_msg == nullptr);
+    if(txn_msg != nullptr) {
+      // handle case where txn is aborted and retried
+      delete txn_msg;
+    }
     txn_msg = new TransactionMessage();
     TxnState protoTxnState;
     PolicyClient *policyClient = nullptr;
@@ -179,24 +177,9 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t 
     }
 
     if(sintr_params.ignorePolicyUpdate || endorseClient->IsSatisfied()) {
-      Warning("Endorsement client is already satisfied for client %d seq num %d", client_id, client_seq_num);
+      Debug("Endorsement client is already satisfied for client %d seq num %d", client_id, client_seq_num);
       getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
     } else {
-      Debug("SETTING ENDORSEMENT CALLBACK AND WAITING for client %d seq num %d", client_id, client_seq_num);
-      if(!sintr_params.sortWriteset) {
-        endorsement_callback ecb = [this, tccb, ctcb, timeout, current_seq_num]() {
-          // put this back on event loop if c2c receive thread is true
-          Debug("CALLING ENDORSEMENTS AND COMMIT FOR %d", current_seq_num);
-          if(sintr_params.c2cReceiveThread) {
-            transport->Timer(0, [this, tccb, ctcb, timeout, current_seq_num]() {
-              this->getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
-            });
-          } else {
-            this->getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
-          }
-        };
-        c2client->SetEndorsementCallback(ecb);
-      }
       waitingForEndorsementsTimeout = new Timeout(transport, 5000, [this, current_seq_num]() {
         Debug("WAITING FOR ENDORSEMENTS TIMEOUT TRIGGERED for client %d seq num %d", client_id, current_seq_num);
         if (endorsementsReceived[current_seq_num]) {
@@ -207,9 +190,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t 
         Panic("Waiting for endorsements timed out for client %d seq num %d", client_id, current_seq_num);
       });
       waitingForEndorsementsTimeout->Reset();
-      if(sintr_params.sortWriteset) {
-        getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
-      }
+      getEndorsementsAndCommit(tccb, ctcb, timeout, current_seq_num);
     }
   });
 }
@@ -256,24 +237,25 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
           *this->txn_msg->add_writeset() = std::move(write);
           handlePolicyUpdateOnKey(write.key());
         }
-        //TODO: Import hashDigest as param
-        Debug("SQL GEN ID: %s for statement %s client ID: %lu seq num: %lu", BytesToHex(SQLGenId(statement, client_id, current_seq_id, true), 16).c_str(), statement.c_str(), client_id, current_seq_id);
-        Debug("SQL GEN ID: %s for seq num %lu", BytesToHex(SQLGenId(statement, client_id, client_seq_num, true), 16).c_str(), client_seq_num);
-        c2client->SendForwardSQLResultMessage(SQLGenId(statement, client_id, current_seq_id, true), sql_res, signedMessage, txn_msg);
       } else {
-        Panic("Statement execution FAILURE."); // todo: revert later
+        Debug("Statement execution FAILURE.");
         //This is simply a hack to force all follower replicas to also abort in order to make them unlock any held locks.
         //if(fake_SMR) bclient[0]->Abort(client_id, client_seq_num); 
         //TODO: Alternatively: Server could just abort current txn when it receives the next txn. 
         //Aborting here explicitly may release txn "earlier", but it can also introduce redundancy.
-        
         query_res = new sql::QueryResultProtoWrapper();
+        // send to validation client if
+      }
+      Debug("SQL GEN ID: %s for statement %s client ID: %lu seq num: %lu", BytesToHex(SQLGenId(statement, client_id, current_seq_id, sintr_params.hashQueryGenId), 16).c_str(), statement.c_str(), client_id, current_seq_id);
+      Debug("SQL GEN ID: %s for seq num %lu", BytesToHex(SQLGenId(statement, client_id, client_seq_num, sintr_params.hashQueryGenId), 16).c_str(), client_seq_num);
+      if(!sintr_params.ignorePolicyUpdate) {
+        c2client->SendForwardSQLResultMessage(SQLGenId(statement, client_id, current_seq_id, sintr_params.hashQueryGenId), sql_res, signedMessage, txn_msg);
+      } else {
+        delete txn_msg;
+        txn_msg = nullptr;
       }
       Debug("Upcalling");
       scb(status, query_res);
-
-      delete txn_msg;
-      txn_msg = nullptr;
     };
     
     bclient[0]->Query(statement, client_id, client_seq_num, srcb, stcb, timeout);
@@ -294,12 +276,16 @@ void Client::Write(std::string &write_statement, write_callback wcb, write_timeo
 }
 
 void Client::getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num) {
-  if (sintr_params.sortWriteset && !endorseClient->IsSatisfied()) {
+  if (sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied()) {
     Debug("WAITING FOR ENDORSEMENTS HERE");
     transport->Timer(0, [this, tccb, ctcb, timeout, seq_num]() {
       getEndorsementsAndCommit(tccb, ctcb, timeout, seq_num);
     });
     return;
+  }
+  if(waitingForEndorsementsTimeout != nullptr) {
+    delete waitingForEndorsementsTimeout;
+    waitingForEndorsementsTimeout = nullptr;
   }
   UW_ASSERT(seq_num == client_seq_num);
   const auto &endorsements = sintr_params.ignorePolicyUpdate ? std::vector<std::shared_ptr<::google::protobuf::Message>>() : endorseClient->GetEndorsements();

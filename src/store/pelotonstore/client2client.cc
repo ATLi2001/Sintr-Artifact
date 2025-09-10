@@ -478,14 +478,6 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   else {
     endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnDigest);
   }
-  if(!sintr_params.optimisticReceiveEndorsement && endorse_cb != nullptr && endorseClient->IsSatisfied()) {
-    // only call endorse cb if optimistic endorsement set to false and other conditions are met
-    Debug("CALLING ENDORSE CB FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
-    endorse_cb();
-    endorse_cb = nullptr;
-  } else {
-    Debug("endorse cb is null or endorsements not satisifed for client %d seq num %d", peer_client_id, val_txn_seq_num);
-  }
 }
 
 void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::FinishValidateTxnMessage &finishValTxnMsg,
@@ -519,14 +511,6 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
       signedMsg
     );
   }
-  if(endorse_cb != nullptr && endorseClient->IsSatisfied()) {
-    // should only be called if optimistic endorsement set to true
-    Debug("CALLING ENDORSE CB HERE FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
-    endorse_cb();
-    endorse_cb = nullptr;
-  } else {
-    Debug("ENDORSE CB IS NULL HERE FOR CLIENT %d SEQ NUM %d", peer_client_id, val_txn_seq_num);
-  }
 }
 
 bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult &fwdSQLResult,
@@ -540,7 +524,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
 
   if (validateProofs && signMessages) {
     if (!sintr_params.parallelQuerySigsCheck) {
-      if (!CheckQuerySigHelper(fwdSQLResultMsg.server_sql_sig(), sql_gen_id, sql_result, sql_txn_msg)) {
+      if (sql_result != "" && !CheckQuerySigHelper(fwdSQLResultMsg.server_sql_sig(), sql_gen_id, sql_result, sql_txn_msg)) {
+        // if the sql result is empty most likely the server aborted the sql request
         Debug(
           "Invalid server signature on forwarded sql result from client id %lu, seq num %lu",
           curr_client_id,
@@ -555,7 +540,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
         this, curr_client_id, curr_client_seq_num, signedMessage=fwdSQLResultMsg.server_sql_sig(),
         sql_gen_id, sql_result, sql_txn_msg
       ]() {
-        bool is_valid = CheckQuerySigHelper(signedMessage, sql_gen_id, sql_result, sql_txn_msg);
+        bool is_valid = sql_result == "" || CheckQuerySigHelper(signedMessage, sql_gen_id, sql_result, sql_txn_msg);
+        // dont check validity if sql result is empty, most likely means query was aborted
         if (!is_valid) {
           Debug(
             "Invalid server signature on forwarded sql result from client id %lu, seq num %lu",
@@ -564,8 +550,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
           );
           return (void*) false;
         }
-
-        valClient->NotifyForwardQueryResultValid(curr_client_id, curr_client_seq_num);
+        if(sql_result != "") valClient->NotifyForwardQueryResultValid(curr_client_id, curr_client_seq_num);
+        // only notify and commit if sql result isn't empty?
         return (void*) true;
       };
 
@@ -720,32 +706,6 @@ void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, 
     (*hmacs.mutable_hmacs())[i] = crypto::HMAC(msgData, sessionKeys[i]);
   }
   signedMessage.set_signature(hmacs.SerializeAsString());
-}
-
-void Client2Client::SetEndorsementCallback(endorsement_callback endorse_cb) {
-  if (!sintr_params.c2cReceiveThread) {
-    SetEndorsementCallbackHelper(endorse_cb);
-  }
-  else {
-    std::function<void*(void)> f = [=]() {
-      this->SetEndorsementCallbackHelper(endorse_cb);
-      return (void*) true;
-    };
-    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
-    c2cReceiveQueue.push(executor);
-  }
-}
-
-void Client2Client::SetEndorsementCallbackHelper(endorsement_callback endorse_cb) {
-  // check if endorsements have been satisfied now 
-  // case where endorsements arrive after client tries to commit but before endorse_cb is set
-  if(endorseClient->IsSatisfied()) {
-    Warning("RUNNING ENDORSE CB HERE");
-    endorse_cb();
-  } else {
-    Debug("SET ENDORSE CB HERE");
-    this->endorse_cb = endorse_cb;
-  }
 }
 
 } // namespace pelotonstore

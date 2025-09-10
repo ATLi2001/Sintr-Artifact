@@ -344,8 +344,15 @@ void Client2ClientCommon::ValidationThreadFunctionBase(ValidationClientCommon *v
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    transaction_status_t result;
+    try {
+      result = valTxn->Validate(syncClient);
+    } catch (const std::exception& e) {
+      // std::cerr << "Caught an exception: " << e.what() << std::endl;
+      Notice("catch abort. Will retry last TX");
+      result = ABORTED_SYSTEM; //ABORTED_USER;
+    }
 
-    transaction_status_t result = valTxn->Validate(syncClient);
 
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);

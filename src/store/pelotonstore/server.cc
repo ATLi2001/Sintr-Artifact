@@ -286,7 +286,7 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
 
   bool terminate = true;
   if(!sintr_params.serverSkipEndorsementCheck) {
-    reply->set_sql_gen_id(SQLGenId(query, client_id, tx_id, true));
+    reply->set_sql_gen_id(SQLGenId(query, client_id, tx_id, sintr_params.hashQueryGenId));
     Debug("sql gen ID is: %s for query %s client id %lu seq num %d", BytesToHex(reply->sql_gen_id(), 16).c_str(), query.c_str(), client_id, tx_id);
   }
   if (result_status == peloton_peloton::ResultType::SUCCESS) {  //NOTE: If an INSERT failed it will still be treated as Success, but rows_affected will be 0

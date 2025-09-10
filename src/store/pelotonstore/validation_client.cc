@@ -93,7 +93,13 @@ void ValidationClient::SQLRequest(std::string &statement, sql_callback scb,
   );
   if(itr != a->second->pendingForwardedSQLResults.end()) {
     sql::QueryResultProtoWrapper* res = new sql::QueryResultProtoWrapper(itr->second);
-    scb(REPLY_OK, res);
+    if(itr->second != "") {
+      scb(REPLY_OK, res);
+    } else {
+      Debug("RETURNING REPLY FAIL FOR QUERY %s HERE", BytesToHex(pendingSQLReq->sql_gen_id, 16).c_str());
+      Debug("txn %s should abort", txn_id.c_str());
+      scb(REPLY_FAIL, res);
+    }
     delete pendingSQLReq;
     a->second->pendingForwardedSQLResults.erase(itr);
     return;
@@ -279,7 +285,13 @@ void ValidationClient::ProcessForwardSQLResult(uint64_t txn_client_id, uint64_t 
 
   sql::QueryResultProtoWrapper *q_result = new sql::QueryResultProtoWrapper(curr_sql_result);
   editTxnStateCB(a->second, std::move(fwdSQLResult));
-  req->vscb(REPLY_OK, q_result);
+  if(curr_sql_result != "") {
+    req->vscb(REPLY_OK, q_result);
+  } else {
+    Debug("RETURNING REPLY FAIL FOR QUERY %s", BytesToHex(curr_sql_gen_id, 16).c_str());
+    Debug("txn %s should abort", curr_txn_id.c_str());
+    req->vscb(REPLY_FAIL, q_result);
+  }
   // no need to delete q_result since the query callback will take care of it
 
   // remove from vector
@@ -292,7 +304,9 @@ void ValidationClient::NotifyForwardQueryResultValid(uint64_t txn_client_id, uin
   std::string curr_txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, curr_txn_id)) {
-    Panic("cannot find transaction %s in allValTxnStates", curr_txn_id.c_str());
+    Debug("cannot find transaction %s in allValTxnStates, transaction may have been aborted", curr_txn_id.c_str());
+    // Just debug because it's possible txn aborts before query sigs are all validated...
+    return;
   }
   ++a->second->numValidForwardQuery;
   Debug(
