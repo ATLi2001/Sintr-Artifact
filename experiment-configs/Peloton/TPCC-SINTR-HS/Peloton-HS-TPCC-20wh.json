@@ -109,7 +109,7 @@
     "sintr_hash_endorsements": false,
     "sintr_use_occ_for_policies": false,
     "sintr_blind_write_message": false,
-    "sintr_sort_writeset": true,
+    "sintr_sort_writeset": false,
     "sintr_max_client_sig_check_threads": 0,
     "sintr_profile_one_client_load": false,
     "sintr_val_client_selector": "ring",
