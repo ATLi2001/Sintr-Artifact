@@ -276,7 +276,7 @@ void Client::Write(std::string &write_statement, write_callback wcb, write_timeo
 }
 
 void Client::getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num) {
-  if (sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied()) {
+  if (!sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied()) {
     Debug("WAITING FOR ENDORSEMENTS HERE");
     transport->Timer(0, [this, tccb, ctcb, timeout, seq_num]() {
       getEndorsementsAndCommit(tccb, ctcb, timeout, seq_num);
