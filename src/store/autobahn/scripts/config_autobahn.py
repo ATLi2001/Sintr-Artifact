@@ -112,6 +112,12 @@ if __name__ == "__main__":
         default=1,
         help="Number of workers per primary."
     )
+    parser.add_argument(
+        "-b", "--batch_size",
+        type=int,
+        nargs="*",
+        help="Autobahn batch size in bytes (default: 500000). Can specify multiple sizes to create multiple params files."
+    )
 
     args = parser.parse_args()
 
@@ -120,6 +126,12 @@ if __name__ == "__main__":
 
     with open(f"{args.output_dir}/.parameters.json", "w") as f:
         json.dump(node_params, f, sort_keys=True, indent=2)
+
+    if args.batch_size:
+        for size in args.batch_size:
+            node_params["batch_size"] = size
+            with open(f"{args.output_dir}/.parameters-batch-{size}.json", "w") as f:
+                json.dump(node_params, f, sort_keys=True, indent=2)
 
     nodes = 3 * args.fault_tolerance + 1
     workers = args.workers

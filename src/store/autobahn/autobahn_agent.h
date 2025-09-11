@@ -35,14 +35,15 @@ namespace autobahn {
 
 class AutobahnAgent{
 public:
-  AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport,const std::string &config_path);
+  AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport,
+    const std::string &config_path, const std::string &params_file = "");
 
   void SendMessageToGroup(int group_idx, void *buffer, size_t size);
   void SetClientSeqNum(uint64_t seq_num);
 
 private:
   void CreateClientInterface();
-  void CreateServerInterface(TransportReceiver *receiver);
+  void CreateServerInterface(TransportReceiver *receiver, const std::string &params_file);
   // use tcp transport lookup address functionality
   std::string GetSocketAddr(const std::string &host_port);
 

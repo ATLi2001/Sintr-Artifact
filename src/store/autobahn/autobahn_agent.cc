@@ -35,13 +35,14 @@ using json = nlohmann::json;
 
 namespace autobahn {
 
-AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport, const std::string &config_path)
+AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport, const std::string &config_path, 
+  const std::string &params_file)
     : id(id), is_client(is_client), receiver(receiver), tcp_transport(tcp_transport), config_path(config_path) {
   if (is_client) {
     CreateClientInterface();
   }
   else {
-    CreateServerInterface(receiver);
+    CreateServerInterface(receiver, params_file);
   }
 }
 
@@ -70,7 +71,7 @@ void AutobahnAgent::CreateClientInterface() {
   client = std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr)));
 }
 
-void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
+void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std::string &params_file) {
   Debug("Starting autobahn server interface");
   std::filesystem::path committee_json_path = config_path;
   committee_json_path /= committee_hostname_filename;
@@ -103,7 +104,7 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver) {
   json node_json = json::parse(f2);
 
   std::filesystem::path parameter_json_path = config_path;
-  parameter_json_path /= ".parameters.json";
+  parameter_json_path /= params_file;
 
   int64_t handle = reinterpret_cast<int64_t>(receiver);
 

@@ -710,6 +710,8 @@ class IndicusCodebase(ExperimentCodebase):
                     replica_command += " --bftsmart_codebase_dir=%s" % str(config['bftsmart_codebase_dir'])
                 elif config['replication_protocol_settings']['SMR_mode'] == 3:
                     replica_command += " --autobahn_config_dir=%s" % str(config['autobahn_config_dir'])
+                    if 'autobahn_params_file' in config:
+                        replica_command += " --autobahn_params_file=\"%s\"" % str(config['autobahn_params_file'])
 
         if config['replication_protocol'] == 'pg':
             replica_command += " --pg_replicated=%s" % (str(config['pg_replicated']).lower())

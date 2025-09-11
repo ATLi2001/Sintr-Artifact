@@ -64,7 +64,7 @@ public:
     App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
           uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuffpg_cpu, bool local_config, int numShards, Transport *transport,
           bool fake_SMR = false, int dummyTO = 100, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "",
-          const std::string& autobahn_config_dir = "");
+          const std::string &autobahn_config_dir = "", const std::string &autobahn_params_file = "");
   ~Replica();
 
   // Message handlers.
