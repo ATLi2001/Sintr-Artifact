@@ -238,7 +238,7 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
           handlePolicyUpdateOnKey(write.key());
         }
       } else {
-        Debug("Statement execution FAILURE.");
+        Debug("Statement execution FAILURE for statement %s client ID: %lu seq num: %lu", statement.c_str(), client_id, current_seq_id);
         //This is simply a hack to force all follower replicas to also abort in order to make them unlock any held locks.
         //if(fake_SMR) bclient[0]->Abort(client_id, client_seq_num); 
         //TODO: Alternatively: Server could just abort current txn when it receives the next txn. 

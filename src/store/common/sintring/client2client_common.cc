@@ -349,7 +349,7 @@ void Client2ClientCommon::ValidationThreadFunctionBase(ValidationClientCommon *v
       result = valTxn->Validate(syncClient);
     } catch (const std::exception& e) {
       // std::cerr << "Caught an exception: " << e.what() << std::endl;
-      Notice("catch abort for validated txn.");
+      Notice("catch abort for validated txn for client %lu : %lu.", curr_client_id, curr_client_seq_num);
       result = ABORTED_SYSTEM; //ABORTED_USER;
     }
 
