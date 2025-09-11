@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unused_imports)]
-use crate::messages::ConsensusMessage;
+use crate::messages::{ConsensusMessage, Proposal};
 use crate::primary::{PrimaryWorkerMessage, Slot, CHANNEL_CAPACITY};
 use crate::synchronizer::Synchronizer;
 use crate::{Certificate, Header, Height};
@@ -157,8 +157,6 @@ impl Committer {
                         state.last_executed_slot + 1
                     );
 
-                    let mut headers_to_send = Vec::new();
-
                     match current_commit_message {
                         ConsensusMessage::Commit {
                             slot: _,
@@ -166,7 +164,11 @@ impl Committer {
                             qc: _,
                             proposals,
                         } => {
-                            for (pk, proposal) in proposals {
+                            // sort proposals by pk
+                            let mut sorted_proposals: Vec<(&PublicKey, &Proposal)> =
+                                proposals.iter().collect();
+                            sorted_proposals.sort_by_key(|&(pk, _)| pk);
+                            for (pk, proposal) in sorted_proposals {
                                 let stop_height = *state.last_executed_heights.get(pk).unwrap();
                                 // Don't execute proposals which are too old
                                 if proposal.height <= stop_height {
@@ -185,6 +187,7 @@ impl Committer {
                                     state.last_executed_heights.insert(*pk, proposal.height);
                                 }
 
+                                let mut headers_to_send = Vec::new();
                                 // Commit all of the headers
                                 for header in headers {
                                     info!("Committed {}", header);
@@ -207,18 +210,18 @@ impl Committer {
 
                                     debug!("Finish upcall");
                                 }
-                            }
 
-                            // Send SlotCommittedMessage to workers for this header's batches
-                            let executed_slot = state.last_executed_slot + 1;
-                            if let Err(e) = self
-                                .send_slot_committed_message(executed_slot, headers_to_send)
-                                .await
-                            {
-                                debug!(
-                                    "Failed to send slot committed message for slot {}: {}",
-                                    executed_slot, e
-                                );
+                                // Send SlotCommittedMessage to workers for this header's batches
+                                let executed_slot = state.last_executed_slot + 1;
+                                if let Err(e) = self
+                                    .send_slot_committed_message(executed_slot, headers_to_send)
+                                    .await
+                                {
+                                    debug!(
+                                        "Failed to send slot committed message for slot {}: {}",
+                                        executed_slot, e
+                                    );
+                                }
                             }
 
                             state.last_executed_slot += 1;
