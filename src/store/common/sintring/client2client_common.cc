@@ -41,6 +41,10 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
 
   valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
   transport->Register(this, *clients_config, group, client_id);
+  if(sintr_params.maxClientsConnect > 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  }
+
 
   // for hmac between clients
   // assume these are somehow secretly shared before hand
@@ -144,6 +148,56 @@ void Client2ClientCommon::Init() {
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
+  if(sintr_params.separateTransport) {
+    c2cTportThread = new std::thread(&Client2ClientCommon::Client2ClientRunTCPThreadFunction, this);
+    if (sintr_params.clientPinCores) {
+      // don't pin cores for transport thread yet... ask if necessary
+      // set cpu affinity
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      pthread_setaffinity_np(c2cTportThread->native_handle(), sizeof(cpu_set_t), &cpuset);
+    }
+  }
+  UW_ASSERT(sintr_params.maxClientsConnect < clients_config->n);
+  // total number of clients should always be more than the max amount of clients to contact
+  if(sintr_params.maxClientsConnect) {
+    sendPing.set_salt(client_id);
+    replyPing.set_salt(client_id);
+    sendPing.set_send_msg(true);
+    replyPing.set_send_msg(false);
+  }
+  for(int i = 1; i <= sintr_params.maxClientsConnect; i++) {
+    sendDone = false;
+    replyDone = false;
+    //TODO: Currently assumes selector is a ring selector
+    uint64_t target = (client_id + i) % clients_config->n;
+    uint64_t reply_to = (clients_config->n + client_id - i) % clients_config->n;
+    Debug("Target: %lu Reply to: %lu", target, reply_to);
+    Debug("Client %lu sending ping to client %lu", client_id, target);
+    if(target != client_id) {
+      Debug("PING SALT for target: %lu and is send true %d", sendPing.salt(), sendPing.send_msg());
+      transport->SendMessageToReplica(this, target, sendPing);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    Debug("Client %lu sending another ping to client %lu", client_id, reply_to);
+    if(reply_to != client_id && reply_to != target) {
+      Debug("PING SALT for replyTo: %lu and is send true %d", replyPing.salt(), replyPing.send_msg());
+      transport->SendMessageToReplica(this, reply_to, replyPing);
+    }
+    // need to wait for replies as well
+    std::unique_lock lk(tcpMutex);
+    if(!cvSend.wait_for(lk, std::chrono::seconds(5), [this]{return sendDone;})) {
+      Panic("Timeout: Sent ping not responded to");
+    }
+    if(!cvReply.wait_for(lk, std::chrono::seconds(5), [this]{return replyDone;})) {
+      Panic("Timeout: Reply ping not responded to");
+    }
+    lk.unlock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  }
+  Debug("FINISHED SENDING AND RECEIVING PINGS");
+
 }
 
 void Client2ClientCommon::ResetTrackingState() {
@@ -168,6 +222,10 @@ void Client2ClientCommon::HandlePolicyUpdate(const Policy *policy) {
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
     c2cSendQueue.push(executor);
   }
+}
+
+void Client2ClientCommon::Client2ClientRunTCPThreadFunction() {
+  transport->Run();
 }
 
 void Client2ClientCommon::HandlePolicyUpdateHelper(const Policy *policy) {
@@ -378,4 +436,28 @@ void Client2ClientCommon::Client2ClientExecutorThreadFunction(tbb::concurrent_bo
     executor->f();
     delete executor;
   }
+}
+
+void Client2ClientCommon::HandlePingMessage(const PingMessage &ping) {
+  if (ping.salt() != client_id) {
+    Debug("Sending ping from client %lu to client %lu", client_id, ping.salt());
+    transport->SendMessageToReplica(this, ping.salt(), ping);
+  }
+  else {
+    Debug("Received own ping");
+    if(ping.send_msg()) {
+      if(sintr_params.maxClientsConnect > 0) {
+        Debug("Received own ping for send");
+        sendDone = true;
+        cvSend.notify_one();
+      }
+    } else {
+      if(sintr_params.maxClientsConnect > 0) {
+        Debug("Received own ping for receive");
+        replyDone = true;
+        cvReply.notify_one();
+      }
+    }
+  }
+
 }

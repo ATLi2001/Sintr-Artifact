@@ -37,7 +37,7 @@ using namespace std;
 
 Client::Client(const transport::Configuration& config, uint64_t id, int nShards, int nGroups,
       const std::vector<int> &closestReplicas,
-      Transport *transport, Partitioner *part,
+      Transport *transport, Transport *c2cport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
       bool validateProofs, bool signClientProposals, KeyManager *keyManager, SintrParameters sintr_params,
       TrueTime timeserver,transport::Configuration *clients_config, ClientSelector *valClientSelector,
@@ -78,12 +78,12 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
   UW_ASSERT(policyCache.IsEmpty());
   policyCache.Initialize(std::move(policies));
 
-  c2client = new Client2Client(clients_config, transport, client_id, nshards, ngroups, 0, signMessages, validateProofs,
-    sintr_params, keyManager, endorseClient, valClientSelector, rand, keys);
+  c2client = new Client2Client(clients_config, sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
+    signMessages, validateProofs, sintr_params, keyManager, endorseClient, valClientSelector, rand, keys);
   c2client->Init();
   waitingForEndorsementsTimeout = nullptr;
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   Notice("PelotonSMR client [%lu] created! %lu %lu", client_id, ngroups, bclient.size());
- 
 }
 
 Client::~Client()

@@ -62,7 +62,7 @@ class Client : public ::Client {
  public:
   Client(const transport::Configuration& config, uint64_t id, int nShards, int nGroups,
       const std::vector<int> &closestReplicas,
-      Transport *transport, Partitioner *part,
+      Transport *transport, Transport *c2cport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
       bool validateProofs, bool signClientProposals, KeyManager *keyManager,
       SintrParameters sintr_params, TrueTime timeserver = TrueTime(0,0),

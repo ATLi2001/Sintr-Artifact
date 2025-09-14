@@ -56,8 +56,13 @@ Client2Client::~Client2Client() {
 
 void Client2Client::ReceiveMessage(const TransportAddress &remote,
       const std::string &type, const std::string &data, void *meta_data) {
-
-  if (type == beginValTxnMsg.GetTypeName()) {
+  if (type == sendPing.GetTypeName()) {
+    PingMessage ping;
+    Debug("Ping received");
+    ping.ParseFromString(data);
+    HandlePingMessage(ping);
+  }
+  else if (type == beginValTxnMsg.GetTypeName()) {
     ManageDispatchBeginValidateTxnMessage(remote, data);
   }
   else if (type == fwdSQLResultMsg.GetTypeName()) {

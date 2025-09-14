@@ -1997,7 +1997,7 @@ int main(int argc, char **argv) {
           );
         client = new pelotonstore::Client(*config, clientId, FLAGS_num_shards,
                                        FLAGS_num_groups, closestReplicas,
-																			  tport, part,
+																			  tport, c2cport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
                                        FLAGS_indicus_sign_client_proposals,

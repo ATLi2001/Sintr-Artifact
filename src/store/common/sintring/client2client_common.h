@@ -88,6 +88,9 @@ protected:
   void ValidationThreadFunctionBase(ValidationClientCommon *valClient,
     std::function<void(void)> preValFunc, std::function<void(transaction_status_t, ValidationInfoBase*)> postValFunc);
   void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
+  void Client2ClientRunTCPThreadFunction();
+
+  void HandlePingMessage(const PingMessage &ping);
 
   // this represents a resizing buffer but does not eagerly delete everything on clear
   // instead it will delete buffer elements as they are replaced
@@ -195,6 +198,17 @@ protected:
   std::thread *c2cReceiveThread;
   // concurrent queue of messages to be received
   tbb::concurrent_bounded_queue<Client2ClientExecutor *> c2cReceiveQueue;
+  // separate thread for separate transport
+  std::thread *c2cTportThread;
+
+  // for establishing tcp connections before running experiment
+  std::condition_variable cvSend;
+  std::condition_variable cvReply;
+  bool sendDone;
+  bool replyDone;
+  std::mutex tcpMutex;
+  PingMessage sendPing;
+  PingMessage replyPing;
 
   // for parallel signature checks
   std::vector<std::thread *> parallelSigCheckThreads;
