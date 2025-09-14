@@ -15,11 +15,11 @@
   
   "benchmark_type": "sql_bench",  
   "_analysis_name is just for convenience of naming in later analysis": 0,
-  "analysis_name": "peloton-HS-tpcc-sql-policy1",
+  "analysis_name": "peloton-smart-tpcc-sql-policy2",
   
   "benchmark_name": "tpcc-sql",
   "benchmark_schema_file_path": "/users/dhl001/benchmark_data/sql-tpcc-tables-schema.json",
-  
+  "bftsmart_codebase_dir" : "/users/dhl001",
   
    "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN":false,
    "__server_load_time": 150,
@@ -61,11 +61,11 @@
    
     {
     
-    	"_batch_size (set by hs config)": "upper bound 200",
+    	"_batch_size (set by hs config)": "16",
     	
     	"local_config": "false",
  	"fake_SMR": "true",
- 	"SMR_mode": 1,
+ 	"SMR_mode": 2,
   
         "message_transport_type": "tcp",
 	"watermark_time_delta": 30000,
@@ -99,7 +99,7 @@
     "sintr_debug_endorse_check": false,
     "sintr_client_check_evidence": true,
     "sintr_policy_function_name": "basic_id",
-    "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+    "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
     "sintr_read_include_policy": 0,
     "sintr_client_validation": "client-validation-exact",
     "sintr_check_policy_leak": true,
@@ -124,7 +124,8 @@
     "sintr_client_ignore_policy_update": false,
     "sintr_client_estimate_policy": true,
     "sintr_hash_query_gen_id": true,
-    "sintr_separate_transport": false
+    "sintr_separate_transport": true,
+    "sintr_max_clients_connect": 2
   },
   "experiment_name": "sintr-rw",
   "codebase_name": "indicus",
@@ -134,27 +135,27 @@
   
   "_note: HS without batch timer cannot run with 1 client": 0,
   "_client_total": [
-    [30]
+    [40]
   ],
   "_client_processes_per_client_node": [
-    [4]
+    [2]
   ],
   "_client_threads_per_process": [
     [1]
   ],
 "client_total": [
     [
-      10, 20, 30, 40, 50, 60, 72, 80
+      5,10,20,30,40,60
     ]
   ],
   "client_processes_per_client_node": [
     [
-      4,4,4,4,4,4,4,4
+      4,4,4,4,4,4
     ]
   ],
   "client_threads_per_process": [
     [
-      1,1,1,1,1,1,1,1
+      1,1,1,1,1,1
     ]
   ],
   "client_nodes_per_server": 5,
