@@ -89,6 +89,9 @@ ShardClient::~ShardClient() {
     Debug("delete bftsmart agent in shard client!");
     delete bftsmartagent;
   }
+  if (SMR_mode == 3) {
+    delete autobahn_agent;
+  }
 }
 
 // ================================
