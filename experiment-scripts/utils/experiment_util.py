@@ -372,7 +372,11 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
 
                 #cmd7 = 'sudo /usr/local/etc/postgres_service.sh -c;'
                 #cmd = cmd7  +cmd
-
+            
+            # clean up autobahn db
+            if config['replication_protocol'] == 'peloton-smr' and config['replication_protocol_settings']['SMR_mode'] == 3:
+                cmd_autobahn = f'rm -rf {config["autobahn_config_dir"]}/.db-*'
+                run_remote_command_sync(cmd_autobahn, config['emulab_user'], server_host)
 
 
             ##

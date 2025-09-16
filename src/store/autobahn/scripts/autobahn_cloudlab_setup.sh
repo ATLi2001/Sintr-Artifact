@@ -37,13 +37,16 @@ while IFS= read -r host || [[ -n "$host" ]]; do
     FULL_USER_HOST=$CLOUDLAB_USER@$host.$CLOUDLAB_EXP_NAME.$CLOUDLAB_PROJECT_NAME.$CLOUDLAB_CLUSTER.cloudlab.us
     (
         ssh $FULL_USER_HOST "bash -s" < $SCRIPT_DIR/setup_autobahn_tmpfs.sh $CLOUDLAB_REMOTE_DIR && \
-        rsync -r -e ssh $CONFIG_DIR $FULL_USER_HOST:$CLOUDLAB_REMOTE_DIR
+        rsync -e ssh $CONFIG_DIR/\.*.json $FULL_USER_HOST:$CLOUDLAB_REMOTE_DIR
     ) &
 
     for ((i=0; i<$CLIENTS_PER_SERVER; i++)); do
         echo "Uploading Autobahn config to client-$SERVER_IDX-$i"
         FULL_USER_HOST=$CLOUDLAB_USER@client-$SERVER_IDX-$i.$CLOUDLAB_EXP_NAME.$CLOUDLAB_PROJECT_NAME.$CLOUDLAB_CLUSTER.cloudlab.us
-        rsync -r -e ssh --delete $CONFIG_DIR $FULL_USER_HOST:$CLOUDLAB_REMOTE_DIR &
+        (
+            ssh $FULL_USER_HOST "rm -rf $CLOUDLAB_REMOTE_DIR && mkdir -p $CLOUDLAB_REMOTE_DIR" && \
+            rsync -e ssh $CONFIG_DIR/\.*.json $FULL_USER_HOST:$CLOUDLAB_REMOTE_DIR
+        ) &
     done
     SERVER_IDX=$((SERVER_IDX + 1))
 done < $CONFIG_DIR/server-hosts.txt
