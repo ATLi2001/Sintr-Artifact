@@ -29,6 +29,7 @@
 #include "store/pelotonstore/common.h"
 #include "store/common/util.h"
 #include "lib/tcptransport.h"
+#include <chrono>
 
 namespace pelotonstore {
 
@@ -501,6 +502,38 @@ void Replica::HandleRequest_noPacked(const TransportAddress &remote, const std::
 void Replica::HandleRequest(const TransportAddress &remote, const proto::Request &request) {
   //TODO: FIXME: Re-factor to get rid of packed message. It's a useless indirection that wastes costs.
 
+  uint64_t client_id = 0;
+  uint64_t tx_id = 0;
+  uint64_t req_id = 0;
+  // if (request.packed_msg().type() == sql_rpc_template.GetTypeName()) {
+  //   proto::SQL_RPC sql_rpc;
+  //   sql_rpc.ParseFromString(request.packed_msg().msg());
+  //   client_id = sql_rpc.client_id();
+  //   tx_id = sql_rpc.txn_seq_num();
+  //   req_id = sql_rpc.req_id();
+  // } 
+  // else if (request.packed_msg().type() == try_commit_template.GetTypeName()) {
+  //   proto::TryCommit try_commit;
+  //   try_commit.ParseFromString(request.packed_msg().msg());
+  //   client_id = try_commit.client_id();
+  //   tx_id = try_commit.txn_seq_num();
+  //   req_id = try_commit.req_id();
+  // } 
+  // else if (request.packed_msg().type() == user_abort_template.GetTypeName()) {
+  //   proto::UserAbort user_abort;
+  //   user_abort.ParseFromString(request.packed_msg().msg());
+  //   client_id = user_abort.client_id();
+  //   tx_id = user_abort.txn_seq_num();
+  // }
+
+  // if (client_id == 0) {
+  //   std::lock_guard<std::mutex> lock(debug_mutex);
+  //   auto now = std::chrono::system_clock::now();
+  //   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+  //   long long timestamp = ms.count();
+  //   std::cerr << timestamp << "," << req_id << ",begin" << std::endl;
+  // }
+
   Debug("Handling request message");
   
   const string &digest = request.digest();
@@ -519,7 +552,7 @@ void Replica::HandleRequest(const TransportAddress &remote, const proto::Request
   const proto::PackedMessage &packedMsg = request.packed_msg();
 
   //Create a callback that will be called once the Request has been ordered by Hotstuff
-  std::function<void(const std::string&, uint32_t seqnum)> execb = [this, digest, packedMsg, clientAddr](const std::string &digest_param, uint32_t seqnum) {
+  std::function<void(const std::string&, uint32_t seqnum)> execb = [this, digest, packedMsg, clientAddr, client_id, req_id](const std::string &digest_param, uint32_t seqnum) {
       //Debug("[CPU:%d] Completing execb for digest: %s. Seqnum: %d", sched_getcpu(), string_to_hex(digest).c_str(), seqnum);
        Debug(" Completing execb for digest. Seqnum: %d",  seqnum);
 
@@ -529,8 +562,16 @@ void Replica::HandleRequest(const TransportAddress &remote, const proto::Request
       // }
 
       //The execb callback will be called from some thread that HS is running => we dispatch it back to our main processing thread (to guarantee sequential processing)
-      auto f = [this, digest, packedMsg, clientAddr, digest_param, seqnum](){
+      auto f = [this, digest, packedMsg, clientAddr, digest_param, seqnum, client_id, req_id](){
         Debug(" Completing execb for digest. Seqnum: %d",  seqnum);
+        // if (client_id == 0) {
+        //   std::lock_guard<std::mutex> lock(debug_mutex);
+        //   auto now = std::chrono::system_clock::now();
+        //   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+        //   long long timestamp = ms.count();
+        //   std::cerr << timestamp << "," << req_id << ",end" << std::endl;
+        // }
+        // return (void*) true;
 
          // Debug("[CPU:%d] Callback: %d, digest: %s seq: %lu", sched_getcpu(), idx, string_to_hex(digest_param).c_str(), seqnum);  // This is called once per server
           stats->Increment("hotstuffpg_exec_callback",1);
@@ -555,6 +596,7 @@ void Replica::HandleRequest(const TransportAddress &remote, const proto::Request
   hotstuffpg_interface->propose(digest, execb);
   proposedCounter++;
   Debug("Execb proposed");
+  // HandleRequest_noHS(remote, request);
 
   //TODO: TESTING: NO BUBBLES, use batch timer.
   // proposeBubble();

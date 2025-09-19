@@ -88,6 +88,7 @@ public:
     std::unordered_map<uint64_t, std::vector<proto::Request>> reqBuffer;
 
   autobahn::AutobahnAgent* autobahn_agent;
+  std::mutex debug_mutex;
 
   std::unordered_set<std::string> requests_dup;
 
