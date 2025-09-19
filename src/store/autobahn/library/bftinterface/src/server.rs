@@ -3,6 +3,7 @@ use config::Import as _;
 use config::{Committee, KeyPair, Parameters};
 use crypto::SignatureService;
 use primary::Primary;
+// use std::collections::HashSet;
 use store::Store;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc::channel;
@@ -61,7 +62,26 @@ impl AutobahnServer {
             let local = LocalSet::new();
             local.block_on(&rt, async {
                 let mut highest_committed_slot: u64 = 0;
+                // let mut request_set = HashSet::new();
                 while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
+                    // if client is sending to all nodes, need to deduplicate requests
+                    // // deduplicate requests
+                    // if request_set.contains(&slot_txn_reply.committed_request) {
+                    //     continue;
+                    // }
+                    // request_set.insert(slot_txn_reply.committed_request.clone());
+
+                    // if slot_txn_reply.client_id == 0 {
+                    //     // log for performance measurement
+                    //     let now = std::time::SystemTime::now()
+                    //         .duration_since(std::time::UNIX_EPOCH)
+                    //         .unwrap();
+                    //     debug_via_cpp(&format!(
+                    //         "{},{},end",
+                    //         now.as_millis(),
+                    //         slot_txn_reply.client_seq_num
+                    //     ));
+                    // }
                     // debug_via_cpp(&format!(
                     //     "Worker sending reply for slot {} with {:?} bytes",
                     //     slot_txn_reply.slot, slot_txn_reply.committed_transaction

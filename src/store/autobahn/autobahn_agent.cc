@@ -58,6 +58,13 @@ void AutobahnAgent::CreateClientInterface() {
     authorities.push_back(key);
     num_workers_per_authority.push_back(value["workers"].size());
     Debug("Authority: %s", key.c_str());
+
+    // if we want to connect to all nodes
+    // size_t target_worker = (id / authorities.size()) % value["workers"].size();
+    // std::string target_worker_name = std::to_string(target_worker);
+    // std::string target_addr = value["workers"][target_worker_name]["transactions"];
+
+    // clients.push_back(std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr))));
   }
 
   // distribute clients evenly across authorities
@@ -150,6 +157,13 @@ void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size)
     client_seq_num,
     rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
   );
+  // if we want to connect to all nodes
+  // for (auto& c : clients) {
+  //   (*c)->send(
+  //     client_seq_num,
+  //     rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
+  //   );
+  // }
 }
 
 void AutobahnAgent::SetClientSeqNum(uint64_t seq_num) {

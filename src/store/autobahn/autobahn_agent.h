@@ -57,6 +57,7 @@ private:
   uint64_t client_seq_num;
 
   std::unique_ptr<rust::Box<AutobahnClient>> client;
+  std::vector<std::unique_ptr<rust::Box<AutobahnClient>>> clients;
   std::unique_ptr<rust::Box<AutobahnServer>> primary;
   std::vector<std::unique_ptr<rust::Box<AutobahnServer>>> workers;
 };

@@ -3,6 +3,7 @@
 // Copyright(C) Facebook, Inc. and its affiliates.
 use crate::quorum_waiter::QuorumWaiterMessage;
 use crate::worker::WorkerMessage;
+// use bridge_debug::debug_via_cpp;
 use bytes::Bytes;
 #[cfg(feature = "benchmark")]
 use crypto::Digest;
@@ -86,6 +87,13 @@ impl BatchMaker {
             tokio::select! {
                 // Assemble client transactions into batches of preset size.
                 Some(transaction) = self.rx_transaction.recv() => {
+                    // if transaction[0] == 0 {
+                    //     let seq_num = u64::from_be_bytes(transaction[1..9].try_into().unwrap());
+                    //     // log for performance measurement
+                    //     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
+                    //     debug_via_cpp(&format!("{},{},begin", now.as_millis(), seq_num));
+                    // }
+
                     self.current_batch_size += transaction.len();
                     self.current_batch.push(transaction);
                     if self.current_batch_size >= self.batch_size {

@@ -49,6 +49,8 @@ pub enum WorkerMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotTransactionReply {
     pub slot: u64,
+    pub client_id: u8,
+    pub client_seq_num: u64,
     pub committed_request: Vec<u8>,
 }
 

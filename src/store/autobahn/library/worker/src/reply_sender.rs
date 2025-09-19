@@ -89,8 +89,8 @@ impl ReplySender {
             }
 
             // send replies so that each client gets seq_nums in ascending order
-            for (_client_id, curr_client_transactions) in client_transactions {
-                for (_client_seq_num, requests) in curr_client_transactions {
+            for (client_id, curr_client_transactions) in client_transactions {
+                for (client_seq_num, requests) in curr_client_transactions {
                     for request in requests {
                         // debug_via_cpp(&format!(
                         //     "ReplySender: sending reply for slot {} for client id {}, seq num {} with {} bytes",
@@ -98,6 +98,8 @@ impl ReplySender {
                         // ));
                         let reply = SlotTransactionReply {
                             slot,
+                            client_id,
+                            client_seq_num,
                             committed_request: request.clone(),
                         };
 

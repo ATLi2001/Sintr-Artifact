@@ -20,6 +20,7 @@ store = { path = "../store" }
 config = { path = "../config" }
 network = { path = "../network" }
 primary = { path = "../primary" }
+bridge_debug = { path = "../bridge_debug" }
 
 [dev-dependencies]
 rand = "0.7.3"

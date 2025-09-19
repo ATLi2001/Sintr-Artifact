@@ -27,10 +27,13 @@
 #include "autobahn_debug.h"
 #include <iostream>
 #include <string>
+#include <mutex>
 
 namespace autobahn {
 
+static std::mutex debug_mutex;
 void debug_via_cpp(rust::Str message) {
+  std::lock_guard<std::mutex> lock(debug_mutex);
   std::string cpp_message(message.data(), message.size());
   std::cerr << "debug_via_cpp: " << cpp_message << std::endl;
 }
