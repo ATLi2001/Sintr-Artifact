@@ -1,0 +1,44 @@
+{
+  "batch-500": {
+    "autobahn_params_file": ".parameters-batch-500.json",
+    "client_total": [[10]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 1
+  },
+  "batch-1000": {
+    "autobahn_params_file": ".parameters-batch-1000.json",
+    "client_total": [[20]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 1
+  },
+  "batch-1500": {
+    "autobahn_params_file": ".parameters-batch-1500.json",
+    "client_total": [[30]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 1
+  },
+  "batch-2000": {
+    "autobahn_params_file": ".parameters-batch-2000.json",
+    "client_total": [[40]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2
+  },
+  "batch-2500": {
+    "autobahn_params_file": ".parameters-batch-2500.json",
+    "client_total": [[50]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2
+  },
+  "batch-3000": {
+    "autobahn_params_file": ".parameters-batch-3000.json",
+    "client_total": [[60]],
+    "client_processes_per_client_node": [[8]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2
+  }
+}

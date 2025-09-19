@@ -18,9 +18,6 @@
       "client_threads_per_process"
     ]
   ],
-
-  "analysis_name": "peloton-hs-tpcc-sql",
-
   "replication_protocol": ["peloton-smr"],
   "client_protocol_mode": ["peloton-smr"],
   "num_shards": [1],
@@ -28,26 +25,41 @@
 
   "benchmark_type": "sql_bench",
 
-  "benchmark_name": "tpcc-sql",
-  "benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",
+  "benchmark_name": "rw-sql",
+  "benchmark_schema_file_path": "/users/atli/rw-sql.json",
 
-  "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
-  "server_load_time": 48,
+  "server_load_time": 15,
 
-  "_TPCC_SQL_ARGS_": 0,
-  "_note: partitioner is unused currently": 0,
-  "tpcc_run_sequential": false,
-  "partitioner": "warehouse",
-  "tpcc_num_warehouses": 20,
+  "_RW_SQL_ARGS_": 0,
+  "_note: parititoner is unused currently": 0,
+  "partitioner": "rw_sql",
 
-  "tpcc_stock_level_ratio": 4,
-  "tpcc_delivery_ratio": 4,
-  "tpcc_order_status_ratio": 4,
-  "tpcc_payment_ratio": 44,
-  "tpcc_new_order_ratio": 44,
+  "autobahn_config_dir": "/users/atli/hotstuff_rs_config",
+  "autobahn_params_file": ".parameters.json",
 
-  "tpcc_c_c_id": 0,
-  "tpcc_c_c_last": 0,
+  "client_key_selector": "uniform",
+  "client_zipf_coefficient": 0.75,
+
+  "_note: for rw_sql client_num_keys is just placeholder, it is not used!": 0,
+  "client_num_keys": 10000000,
+  "rw_num_ops_txn": 1,
+
+  "num_tables": 10,
+  "num_keys_per_table": 1000000,
+  "value_size": -1,
+  "value_categories": 100,
+
+  "rw_read_only": true,
+  "rw_read_only_rate": 100,
+  "rw_secondary_condition": false,
+  "disable_wraparound": true,
+  "fixed_range": true,
+  "max_range": 10,
+  "point_op_freq": 0,
+
+  "scan_as_point": false,
+  "scan_as_point_parallel": false,
+  "rw_simulate_point_kv": false,
 
   "client_abort_backoff": 2,
   "client_retry_aborted": true,
@@ -61,11 +73,9 @@
 
   "replication_protocol_settings": [
     {
-      "_batch_size (set by hs config)": "upper bound 200",
-
       "local_config": "false",
       "fake_SMR": "true",
-      "SMR_mode": 1,
+      "SMR_mode": 4,
 
       "message_transport_type": "tcp",
       "watermark_time_delta": 30000,
@@ -95,26 +105,24 @@
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
 
-  "_note: HS without batch timer cannot run with 1 client": 0,
-
-  "client_total": [[10, 20, 30]],
-  "client_processes_per_client_node": [[8, 8, 8]],
-  "client_threads_per_process": [[1, 1, 1]],
+  "client_total": [[30]],
+  "client_processes_per_client_node": [[8]],
+  "client_threads_per_process": [[1]],
 
   "client_nodes_per_server": 1,
   "_NOTE: Don't pin for HS so that HS is not pinned.": 0,
   "_pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
   "pin_client_processes": [0, 1, 2, 3, 4, 5, 6, 7],
   "client_debug_output": false,
-  "_client_debug_output": "*",
+  "_client_debug_output": "store/pelotonstore/*",
   "server_debug_output": false,
-  "_server_debug_output": "*",
+  "_server_debug_output": "store/pelotonstore/replica.cc,store/pelotonstore/server.cc,store/hotstuff_rs/library/hotstuff_rs_bftinterface/cppinclude/hotstuff_rs_callback.cc",
   "server_debug_stats": false,
   "client_debug_stats": false,
 
-  "client_experiment_length": 60,
-  "client_ramp_down": 15,
-  "client_ramp_up": 15,
+  "client_experiment_length": 30,
+  "client_ramp_down": 5,
+  "client_ramp_up": 5,
 
   "default_remote_shell": "bash",
 
@@ -126,6 +134,14 @@
   "project_name": "pequin-pg0",
 
   "fault_tolerance": 1,
+
+  "_server_names": [["us-east-1-0"]],
+
+  "_server_regions": [
+    {
+      "us-east-1": ["us-east-1-0"]
+    }
+  ],
 
   "server_names": [
     ["us-east-1-0", "us-east-1-1", "us-east-1-2", "eu-west-1-0"]

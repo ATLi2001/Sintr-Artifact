@@ -18,6 +18,9 @@
       "client_threads_per_process"
     ]
   ],
+
+  "analysis_name": "peloton-autobahn-tpcc-sql",
+
   "replication_protocol": ["peloton-smr"],
   "client_protocol_mode": ["peloton-smr"],
   "num_shards": [1],
@@ -29,6 +32,7 @@
   "benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",
 
   "autobahn_config_dir": "/users/atli/autobahn_config",
+  "autobahn_params_file": ".parameters.json",
 
   "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
   "server_load_time": 48,
