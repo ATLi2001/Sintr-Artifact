@@ -40,6 +40,7 @@ ANALYSIS_TYPES = [
     "sig_nosig_lat_bar",
     "overheads_lat_cum_bar",
     "overheads_lat_grouped_bar",
+    "throughput_time",
 ]
 
 
@@ -93,6 +94,43 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
 
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
 
+    return out_df
+
+
+# collect all the logs in the original_stats_dir into a csv file
+# logs are formatted as operation,latency,timestamp,client_id
+def logs_to_csv(original_stats_dir, output_dir, now_string):
+    out_df = pd.DataFrame(columns=["experiment_name", "operation", "commit_timestamp_ns", "client_id"])
+
+    for subdir in os.listdir(original_stats_dir):
+        for file in os.listdir(os.path.join(original_stats_dir, subdir)):
+            # read in config file
+            if file != "stats.json" and file.endswith(".json"):
+                with open(os.path.join(original_stats_dir, subdir, file), "r") as config_file:
+                    config = json.load(config_file)
+
+                    if "analysis_name" in config:
+                        analysis_name = config["analysis_name"]
+                    else:
+                        protocol = config["client_protocol_mode"]
+                        benchmark = config["benchmark_name"]
+                        analysis_name = f"{protocol}-{benchmark}"
+
+        for log_file in os.listdir(os.path.join(original_stats_dir, subdir, "logs")):
+            with open(os.path.join(original_stats_dir, subdir, "logs", log_file), "r") as f:
+                for line in f:
+                    if "#end" in line:
+                        break
+                    operation, latency, timestamp, client_id = line.strip().split(",")
+                    out_df.loc[len(out_df)] = [
+                        analysis_name,
+                        operation,
+                        timestamp,
+                        client_id
+                    ]
+
+    out_df.sort_values(by=["experiment_name", "commit_timestamp_ns", "client_id"], inplace=True)
+    out_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
     return out_df
 
 
@@ -350,6 +388,32 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
         grouped_yerr=grouped_err
     )
 
+def create_tput_time_plot(df, output_dir, now_string):
+
+    df["commit_timestamp_ns"] = df["commit_timestamp_ns"].astype(float)
+    df["commit_timestamp_ns"] = df["commit_timestamp_ns"] / 1e9
+
+    for experiment_name, group in df.groupby(["experiment_name"]):
+        # normalize to start at 0
+        group = group.sort_values(by=["commit_timestamp_ns"])
+        t0 = group["commit_timestamp_ns"].iloc[0]
+        group["commit_timestamp_ns"] = group["commit_timestamp_ns"] - t0
+
+        # calculate throughput at 1s intervals
+        time_bins = np.arange(0, group["commit_timestamp_ns"].max() + 1, 1)
+        group["time_bin"] = pd.cut(group["commit_timestamp_ns"], bins=time_bins, right=False)
+        # throughput is number of transactions in bin
+        tput = group.groupby("time_bin").size()
+
+        plt.plot(time_bins[1:], tput, "-o", label=experiment_name[0])
+
+    plt.xlabel("Time (s)")
+    plt.ylabel("Throughput (txn/s)")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
+    plt.close()
+
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -395,6 +459,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
+    parser.add_argument(
+        "-l", "--logs",
+        type=str,
+        required=False,
+        help="Path to directory that contains logs to analyze for throughput over time plot. If provided, generates plot from these logs instead of going through original_stats_dir."
+    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -420,3 +490,9 @@ if __name__ == "__main__":
         create_overheads_lat_cum_bar_plot(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[4]:
         create_overheads_lat_grouped_bar_plot(df, args.output_plot_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[5]:
+        if args.logs:
+            logs_df = pd.read_csv(args.logs)
+        else:
+            logs_df = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
+        create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
