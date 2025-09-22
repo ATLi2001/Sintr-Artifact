@@ -52,7 +52,7 @@ node_params = {
     'sync_retry_delay': 5_000,  # ms
     'sync_retry_nodes': 3,  # number of nodes
     'batch_size': 500_000,  # bytes
-    'max_batch_delay': 20,  # ms
+    'max_batch_delay': 10,  # ms
     'use_optimistic_tips': True,
     'use_parallel_proposals': True,
     'k': 4,

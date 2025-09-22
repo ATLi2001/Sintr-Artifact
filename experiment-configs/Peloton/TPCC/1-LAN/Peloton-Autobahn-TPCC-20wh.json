@@ -33,6 +33,7 @@
 
   "autobahn_config_dir": "/users/atli/autobahn_config",
   "autobahn_params_file": ".parameters.json",
+  "autobahn_client_send_to_all": true,
 
   "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
   "server_load_time": 48,
