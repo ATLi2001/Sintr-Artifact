@@ -83,6 +83,12 @@ impl BatchMaker {
         tokio::pin!(timer);
         let mut current_time = Instant::now();
 
+        // // start the timer exactly when the first transaction in an empty batch comes in
+        // // send when either the batch size is full or mini timer goes off
+        // let mini_timer_ms = 15;
+        // let mini_timer = sleep(Duration::from_millis(mini_timer_ms));
+        // tokio::pin!(mini_timer);
+
         loop {
             tokio::select! {
                 // Assemble client transactions into batches of preset size.
@@ -94,12 +100,18 @@ impl BatchMaker {
                     //     debug_via_cpp(&format!("{},{},begin", now.as_millis(), seq_num));
                     // }
 
+                    // if self.current_batch.is_empty() {
+                    //     // reset mini_timer if this is the first transaction in the batch
+                    //     mini_timer.as_mut().reset(Instant::now() + Duration::from_millis(mini_timer_ms));
+                    // }
+
                     self.current_batch_size += transaction.len();
                     self.current_batch.push(transaction);
                     if self.current_batch_size >= self.batch_size {
                         self.seal().await;
 
                         debug!("batch ready it took {:?} ms", current_time.elapsed().as_millis());
+                        // debug_via_cpp(&format!("batch ready it took {:?} ms", current_time.elapsed().as_millis()));
                         current_time = Instant::now();
 
                         timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
@@ -110,12 +122,22 @@ impl BatchMaker {
                 () = &mut timer => {
                     debug!("BatchMaker: max batch delay timer triggered");
                     if !self.current_batch.is_empty() {
+                        // debug_via_cpp("batch maker: max batch delay timer triggered");
                         self.seal().await;
                     }
 
                     current_time = Instant::now();
                     timer.as_mut().reset(Instant::now() + Duration::from_millis(self.max_batch_delay));
-                }
+                },
+
+                // () = &mut mini_timer => {
+                //     if !self.current_batch.is_empty() {
+                //         debug_via_cpp(&format!("BatchMaker: mini timer2 triggered with batch size {}", self.current_batch_size));
+                //         self.seal().await;
+                //     }
+                //     current_time = Instant::now();
+                //     mini_timer.as_mut().reset(Instant::now() + Duration::from_millis(mini_timer_ms));
+                // }
             }
 
             // Give the change to schedule other tasks.

@@ -35,7 +35,8 @@
   "partitioner": "rw_sql",
 
   "autobahn_config_dir": "/users/atli/autobahn_config",
-  "autobahn_params_file": ".parameters-batch-1000.json",
+  "autobahn_params_file": ".parameters-batch-4000.json",
+  "autobahn_client_send_to_all": true,
 
   "client_key_selector": "uniform",
   "client_zipf_coefficient": 0.75,
