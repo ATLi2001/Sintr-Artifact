@@ -36,8 +36,8 @@ using json = nlohmann::json;
 namespace autobahn {
 
 AutobahnAgent::AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport, const std::string &config_path, 
-  const std::string &params_file)
-    : id(id), is_client(is_client), receiver(receiver), tcp_transport(tcp_transport), config_path(config_path) {
+  const std::string &params_file, bool send_to_all)
+    : id(id), is_client(is_client), receiver(receiver), tcp_transport(tcp_transport), config_path(config_path), send_to_all(send_to_all) {
   if (is_client) {
     CreateClientInterface();
   }
@@ -59,23 +59,27 @@ void AutobahnAgent::CreateClientInterface() {
     num_workers_per_authority.push_back(value["workers"].size());
     Debug("Authority: %s", key.c_str());
 
-    // if we want to connect to all nodes
-    // size_t target_worker = (id / authorities.size()) % value["workers"].size();
-    // std::string target_worker_name = std::to_string(target_worker);
-    // std::string target_addr = value["workers"][target_worker_name]["transactions"];
+    if (send_to_all) {
+      // if we want to connect to all nodes
+      size_t target_worker = (id / authorities.size()) % value["workers"].size();
+      std::string target_worker_name = std::to_string(target_worker);
+      std::string target_addr = value["workers"][target_worker_name]["transactions"];
 
-    // clients.push_back(std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr))));
+      clients.push_back(std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr))));
+    }
   }
 
-  // distribute clients evenly across authorities
-  size_t target_authority = id % authorities.size();
-  // and also evenly within each authority
-  size_t target_worker = (id / authorities.size()) % num_workers_per_authority[target_authority];
+  if (!send_to_all) {
+    // distribute clients evenly across authorities
+    size_t target_authority = id % authorities.size();
+    // and also evenly within each authority
+    size_t target_worker = (id / authorities.size()) % num_workers_per_authority[target_authority];
 
-  std::string target_worker_name = std::to_string(target_worker);
-  std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
+    std::string target_worker_name = std::to_string(target_worker);
+    std::string target_addr = committee_json["authorities"][authorities[target_authority]]["workers"][target_worker_name]["transactions"];
 
-  client = std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr)));
+    client = std::make_unique<rust::Box<AutobahnClient>>(new_client(id, GetSocketAddr(target_addr)));
+  }
 }
 
 void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std::string &params_file) {
@@ -86,6 +90,7 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std
   json committee_json = json::parse(f1);
 
   // modify hostname:port into socket addr because autobahn expects this
+  size_t total_replicas = 0;
   for (auto& [key, value] : committee_json["authorities"].items()) {
     value["consensus"]["consensus_to_consensus"] = GetSocketAddr(value["consensus"]["consensus_to_consensus"]);
     value["primary"]["primary_to_primary"] = GetSocketAddr(value["primary"]["primary_to_primary"]);
@@ -95,6 +100,10 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std
       worker_info["primary_to_worker"] = GetSocketAddr(worker_info["primary_to_worker"]);
       worker_info["transactions"] = GetSocketAddr(worker_info["transactions"]);
       worker_info["worker_to_worker"] = GetSocketAddr(worker_info["worker_to_worker"]);
+    }
+
+    if (send_to_all) {
+      ++total_replicas;
     }
   }
 
@@ -128,7 +137,8 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std
     parameter_json_path.string(),
     primary_db_path.string(),
     true,
-    0 // ignored for primary
+    0, // ignored for primary
+    total_replicas
   );
 
   Debug("Finished starting primary");
@@ -146,24 +156,29 @@ void AutobahnAgent::CreateServerInterface(TransportReceiver *receiver, const std
       parameter_json_path.string(),
       worker_db_path.string(),
       false,
-      i
+      i,
+      total_replicas
     );
   }
 }
 
 void AutobahnAgent::SendMessageToGroup(int group_idx, void *buffer, size_t size) {
   UW_ASSERT(is_client);
-  (*client)->send(
-    client_seq_num,
-    rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
-  );
-  // if we want to connect to all nodes
-  // for (auto& c : clients) {
-  //   (*c)->send(
-  //     client_seq_num,
-  //     rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
-  //   );
-  // }
+  if (!send_to_all) {
+    (*client)->send(
+      client_seq_num,
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
+    );
+  }
+  else {
+    // if we want to connect to all nodes
+    for (auto& c : clients) {
+      (*c)->send(
+        client_seq_num,
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(buffer), size)
+      );
+    }
+  }
 }
 
 void AutobahnAgent::SetClientSeqNum(uint64_t seq_num) {

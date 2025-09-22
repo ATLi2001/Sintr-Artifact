@@ -416,6 +416,7 @@ DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart 
 
 DEFINE_string(autobahn_config_dir, "", "path to directory containing autobahn configurations");
 DEFINE_string(autobahn_params_file, ".parameters.json", "name of the parameters file in autobahn config dir");
+DEFINE_bool(autobahn_client_send_to_all, true, "if true, autobahn client sends to all replicas in group; if false, client sends to closest local replica");
 
 DEFINE_uint64(pbft_esig_batch, 1, "signature batch size"
 		" sig batch size (for PBFT decision phase)");
@@ -1110,7 +1111,7 @@ int main(int argc, char **argv) {
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx, protocol_cpu, FLAGS_local_config, FLAGS_num_shards, tport, 
                                        FLAGS_pg_fake_SMR, FLAGS_hs_dummy_to, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir, FLAGS_autobahn_config_dir,
-                                       FLAGS_autobahn_params_file);
+                                       FLAGS_autobahn_params_file, FLAGS_autobahn_client_send_to_all);
 
       break;
   }

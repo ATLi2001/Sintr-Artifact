@@ -316,6 +316,7 @@ DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
 DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart configurations");
 
 DEFINE_string(autobahn_config_dir, "", "path to directory containing autobahn configurations");
+DEFINE_bool(autobahn_client_send_to_all, true, "if true, autobahn client sends to all replicas in group; if false, client sends to closest local replica");
 
 DEFINE_bool(indicus_parallel_CCC, true, "sort read/write set for parallel CCC locking at server");
 
@@ -1951,7 +1952,7 @@ int main(int argc, char **argv) {
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
                                        keyManager,
 																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir,
-                                       FLAGS_autobahn_config_dir);
+                                       FLAGS_autobahn_config_dir, FLAGS_autobahn_client_send_to_all);
         break;
     }
 

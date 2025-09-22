@@ -36,7 +36,7 @@ namespace autobahn {
 class AutobahnAgent{
 public:
   AutobahnAgent(size_t id, bool is_client, TransportReceiver *receiver, TCPTransport *tcp_transport,
-    const std::string &config_path, const std::string &params_file = "");
+    const std::string &config_path, const std::string &params_file = "", bool send_to_all = true);
 
   void SendMessageToGroup(int group_idx, void *buffer, size_t size);
   void SetClientSeqNum(uint64_t seq_num);
@@ -54,6 +54,7 @@ private:
   TransportReceiver *receiver;
   TCPTransport *tcp_transport;
   std::string config_path;
+  bool send_to_all;
   uint64_t client_seq_num;
 
   std::unique_ptr<rust::Box<AutobahnClient>> client;

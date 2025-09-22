@@ -39,7 +39,7 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
     uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
     bool signMessages, bool validateProofs, KeyManager *keyManager, Stats* stats, 
     bool fake_SMR, uint64_t SMR_mode, const std::string& PG_BFTSMART_config_path,
-    const std::string& autobahn_config_dir) :
+    const std::string& autobahn_config_dir, bool autobahn_client_send_to_all) :
     config(config), transport(transport), group_idx(group_idx), signMessages(signMessages), validateProofs(validateProofs),
     keyManager(keyManager), stats(stats), reqId(0UL), client_id(client_id),
     fake_SMR(fake_SMR), SMR_mode(SMR_mode)  {
@@ -73,7 +73,10 @@ ShardClient::ShardClient(const transport::Configuration& config, Transport *tran
   }
   else if (SMR_mode == 3) {
     Debug("created autobahn agent in shard client!");
-    autobahn_agent = new ::autobahn::AutobahnAgent(client_id, true, this, dynamic_cast<TCPTransport*>(transport), autobahn_config_dir);
+    autobahn_agent = new ::autobahn::AutobahnAgent(
+      client_id, true, this, dynamic_cast<TCPTransport*>(transport),
+      autobahn_config_dir, "", autobahn_client_send_to_all
+    );
     // similarly here notify servers about reply address because replica doesn't receive a return address when autobahn calls back to replica
     Debug("Sending connect messages! with client id %d, config n: %d", client_id, config.n);
     proto::Connect connect;

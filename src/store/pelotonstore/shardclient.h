@@ -69,7 +69,7 @@ class ShardClient : public TransportReceiver {
       bool signMessages, bool validateProofs,
       KeyManager *keyManager, Stats* stats,
       bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "",
-      const std::string& autobahn_config_dir = "");
+      const std::string& autobahn_config_dir = "", bool autobahn_client_send_to_all = true);
   ~ShardClient();
 
   void ReceiveMessage(const TransportAddress &remote, const std::string &type, const std::string &data, void *meta_data);

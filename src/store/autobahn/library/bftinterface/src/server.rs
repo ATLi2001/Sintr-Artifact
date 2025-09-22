@@ -3,7 +3,7 @@ use config::Import as _;
 use config::{Committee, KeyPair, Parameters};
 use crypto::SignatureService;
 use primary::Primary;
-// use std::collections::HashSet;
+use std::collections::HashMap;
 use store::Store;
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::mpsc::channel;
@@ -35,6 +35,7 @@ impl AutobahnServer {
         store_path: String,
         is_primary: bool,
         worker_id: u32,
+        total_replicas: u32,
     ) {
         let (tx_slot_txn_reply, mut rx_slot_txn_reply) = channel(CHANNEL_CAPACITY);
 
@@ -62,14 +63,24 @@ impl AutobahnServer {
             let local = LocalSet::new();
             local.block_on(&rt, async {
                 let mut highest_committed_slot: u64 = 0;
-                // let mut request_set = HashSet::new();
+                let mut request_map: HashMap<Vec<u8>, u32> = HashMap::new();
                 while let Some(slot_txn_reply) = rx_slot_txn_reply.recv().await {
                     // if client is sending to all nodes, need to deduplicate requests
-                    // // deduplicate requests
-                    // if request_set.contains(&slot_txn_reply.committed_request) {
-                    //     continue;
-                    // }
-                    // request_set.insert(slot_txn_reply.committed_request.clone());
+                    // total_replicas == 0 means client is sending to only one node
+                    if total_replicas > 0 {
+                        let seen = request_map.contains_key(&slot_txn_reply.committed_request);
+                        *request_map
+                            .entry(slot_txn_reply.committed_request.clone())
+                            .or_insert(0) += 1;
+                        if seen {
+                            // garbage collect if we have seen this request from all nodes
+                            let count = request_map.get(&slot_txn_reply.committed_request).unwrap();
+                            if *count == total_replicas {
+                                request_map.remove(&slot_txn_reply.committed_request);
+                            }
+                            continue;
+                        }
+                    }
 
                     // if slot_txn_reply.client_id == 0 {
                     //     // log for performance measurement

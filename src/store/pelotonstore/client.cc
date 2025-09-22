@@ -40,11 +40,11 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
       bool validateProofs, KeyManager *keyManager,TrueTime timeserver, 
       bool fake_SMR, uint64_t SMR_mode, const std::string &PG_BFTSMART_config_path,
-      const std::string &autobahn_config_dir) : config(config), nshards(nShards),
+      const std::string &autobahn_config_dir, bool autobahn_client_send_to_all) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
     signMessages(signMessages), validateProofs(validateProofs), keyManager(keyManager), timeServer(timeserver),
     fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path),
-    autobahn_config_dir(autobahn_config_dir) {
+    autobahn_config_dir(autobahn_config_dir), autobahn_client_send_to_all(autobahn_client_send_to_all) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -64,7 +64,7 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
   for (uint64_t i = 0; i < ngroups; i++) {
     bclient.push_back(new ShardClient(config, transport, client_id, i, closestReplicas,
         signMessages, validateProofs, keyManager, &stats, fake_SMR, SMR_mode, PG_BFTSMART_config_path,
-        autobahn_config_dir));
+        autobahn_config_dir, autobahn_client_send_to_all));
   }
 
   Notice("PelotonSMR client [%lu] created! %lu %lu", client_id, ngroups, bclient.size());

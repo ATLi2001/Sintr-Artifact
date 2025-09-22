@@ -19,6 +19,7 @@ mod ffi {
             store_path: String,
             is_primary: bool,
             worker_id: u32,
+            total_replicas: u32,
         );
     }
 
