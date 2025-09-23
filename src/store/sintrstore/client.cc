@@ -74,6 +74,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
 
   Notice("Initializing Sintr client with id [%lu] %lu", client_id, nshards);
   Notice("P1 Decision Timeout: %d", phase1DecisionTimeout);
+  Notice("Multithreading is %d", params.multiThreading);
 
   if(params.injectFailure.enabled) stats.Increment("total_byz_clients", 1);
 
@@ -228,8 +229,9 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
       protoTxnState.ParseFromString(txnState);
       EstimateTxnPolicy(protoTxnState, policyClient);
     }
-    if(params.sintr_params.ignorePolicyUpdate) {
-      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
+    std::string tsDigest = params.sintr_params.hideTimestamps ? TimestampDigest(client_id, txnStartTime) : "";
+    if(!params.sintr_params.ignorePolicyUpdate) {
+      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient), tsDigest);
     }
 
     txn.Clear(); //txn = proto::Transaction();
@@ -238,6 +240,9 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     // Optimistically choose a read timestamp for all reads in this transaction
     txn.mutable_timestamp()->set_timestamp(txnStartTime);
     txn.mutable_timestamp()->set_id(client_id);
+    if(params.sintr_params.hideTimestamps) {
+      txn.set_hashed_timestamp(tsDigest);
+    }
 
     if (params.sintr_params.clientEstimatePolicy && IsPolicyChangeTxn(protoTxnState)) {
       Debug("Begin policy change transaction from client id %lu, seq num %lu", client_id, client_seq_num);
@@ -301,9 +306,8 @@ void Client::Get(const std::string &key, get_callback gcb,
     read_callback rcb = [gcb, this](int status, const std::string &key,
         const std::string &val, const Timestamp &ts, const proto::Dependency &dep,
         bool hasDep, bool addReadSet,
-        const proto::CommittedProof &proof, const std::string &serializedWrite, 
-        const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg,
-        const proto::Dependency &policyDep, bool hasPolicyDep) {
+        const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg,
+        const proto::Dependency &policyDep, bool hasPolicyDep, const std::string &tsDigest) {
 
       uint64_t ns = 0; //Latency_End(&getLatency);
       if (Message_DebugEnabled(__FILE__)) {
@@ -321,8 +325,8 @@ void Client::Get(const std::string &key, get_callback gcb,
         Debug("Adding read to read set");
         ReadMessage *read = txn.add_read_set();
         read->set_key(key);
-        if(params.sintr_params.hideTimestamps) {
-          read->set_hashed_readtime(TimestampDigest(ts));
+        if(params.sintr_params.hideTimestamps && tsDigest != "") {
+          read->set_hashed_readtime(tsDigest);
         }
         ts.serialize(read->mutable_readtime());
       }
@@ -342,9 +346,8 @@ void Client::Get(const std::string &key, get_callback gcb,
       }
       if(!params.sintr_params.ignorePolicyUpdate) {
         c2client->SendForwardReadResultMessage(
-          key, val, ts, proof, serializedWrite, 
-          serializedWriteTypeName, dep, hasDep, addReadSet,
-          policyDep, hasPolicyDep
+          key, val, ts, proof, signedWrite, dep, hasDep, addReadSet,
+          policyDep, hasPolicyDep, tsDigest
         );
       }
 
@@ -704,7 +707,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
         // still forward cached point query result but no proofs or dependencies needed
         c2client->SendForwardPointQueryResultMessage(
           encoded_key, itr->second, Timestamp(), pendingQuery->table_name,
-          proto::CommittedProof(), std::string(), std::string(),
+          proto::CommittedProof(), proto::SignedMessage(),
           proto::Dependency(), false, false
         );
 
@@ -771,8 +774,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
       prcb = std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
-                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
-                     std::placeholders::_12);
+                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11);
       stats.Increment("PointQueryAttempts", 1);
     }
     else{
@@ -808,8 +810,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
 void Client::PointQueryResultCallback(PendingQuery *pendingQuery,  
                                   int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                                   const proto::Dependency &dep, bool hasDep, bool addReadSet,
-                                  const proto::CommittedProof &proof, const std::string &serializedWrite, 
-                                  const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg) 
+                                  const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg) 
 { 
   
    if(PROFILING_LAT){
@@ -851,7 +852,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
   // instead we use the table_name passed in as an argument
   c2client->SendForwardPointQueryResultMessage(
     key, result, read_time, table_name, proof,
-    serializedWrite, serializedWriteTypeName, dep, hasDep, addReadSet
+    signedWrite, dep, hasDep, addReadSet
   );
       
   Debug("Upcall with Point Query result");
@@ -1252,8 +1253,7 @@ void Client::RetryQuery(PendingQuery *pendingQuery){
       bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg, true, std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
-                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
-                     std::placeholders::_12));
+                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11));
     } 
     else{
       bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg); //--> Retry Query, shard clients already have the rcb.
@@ -1423,9 +1423,6 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     std::sort(txn.mutable_involved_groups()->begin(), txn.mutable_involved_groups()->end());
 
     // set expected endorsement digest
-    if(params.sintr_params.hideTimestamps) {
-      txn.set_hashed_timestamp(TimestampDigest(Timestamp(txn.timestamp())));
-    }
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
     if (params.sintr_params.debugEndorseCheck && !params.sintr_params.ignorePolicyUpdate) {
       std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(txn);
@@ -1478,13 +1475,23 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
 
     req->waitingForEndorsementsTimeout->Reset();
-    Phase1(req);
+    if(params.sintr_params.ignorePolicyUpdate || !params.sintr_params.useEndorsementCB || endorseClient->IsSatisfied()) {
+      Phase1(req);
+    } else if(!params.sintr_params.ignorePolicyUpdate && params.sintr_params.useEndorsementCB) {
+      auto ecb = [this, req]() { 
+        transport->Timer(0, [this, req]() {
+          Phase1(req);
+        });
+        return (void*) true;
+      };
+      c2client->setEndorsementCB(std::move(ecb));
+    }
   });
 }
 
 void Client::Phase1(PendingRequest *req) {
   // if endorsement is not satisfied yet, add back to event loop
-  if (!params.sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied()) {
+  if (!params.sintr_params.ignorePolicyUpdate && !params.sintr_params.useEndorsementCB && !endorseClient->IsSatisfied()) {
     transport->Timer(0, [this, req]() {
       Phase1(req);
     });
@@ -1526,11 +1533,11 @@ void Client::Phase1(PendingRequest *req) {
   req->txn = txn;
 
   if(params.sintr_params.hashEndorsements) {
-    req->txnDigest = EndorsedTxnDigest(req->txnDigest, txn, params.hashDigest);
+    req->txnDigest = TransactionDigest(req->txn,params.hashDigest, params.sintr_params.hideTimestamps, true);
   }
 
   Debug("PHASE1 [%lu:%lu] for txn_id %s at TS %lu", client_id, client_seq_num,
-      BytesToHex(TransactionDigest(req->txn, params.hashDigest, params.sintr_params.hideTimestamps), 16).c_str(), txn.timestamp().timestamp());
+      BytesToHex(req->txnDigest, 16).c_str(), txn.timestamp().timestamp());
 
   UW_ASSERT(txn.involved_groups().size() > 0);
 
@@ -2538,11 +2545,9 @@ bool Client::ValidateWB(proto::Writeback &msg, std::string *txnDigest, proto::Tr
     } 
   }
   else if(msg.has_txn()){
-    std::string temp_digest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-    if(params.sintr_params.hashEndorsements) {
-      temp_digest = EndorsedTxnDigest(temp_digest, msg.txn(), params.hashDigest);
-    }
-    if(*txnDigest != temp_digest){
+    if(*txnDigest !=
+        TransactionDigest(msg.txn(), params.hashDigest,
+        params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements)){
       Panic("txnDig doesnt match Transaction");
       return false;
     } 
@@ -2572,10 +2577,7 @@ bool Client::ValidateWB(proto::Writeback &msg, std::string *txnDigest, proto::Tr
         }
     } 
     else if (msg.decision() == proto::ABORT && msg.has_conflict()) {
-      std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-      if(params.sintr_params.hashEndorsements) {
-        committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
-      }
+      std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       if (!ValidateCommittedConflict(msg.conflict(), &committedTxnDigest, txn, txnDigest, params.signedMessages, keyManager, config, verifier, 
           params.sintr_params.policyFunctionName)) {
             Panic("WRITEBACK[%s] Failed to validate committed conflict for fast abort.", BytesToHex(*txnDigest, 16).c_str());

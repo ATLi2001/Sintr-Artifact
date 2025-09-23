@@ -673,10 +673,10 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       }
     }
 
-    if(params.sintr_params.hideTimestamps && TimestampDigest(Timestamp(txn.timestamp())) != txn.hashed_timestamp()) {
-      Debug("txn [%s] hashed timestamp %s is not same as given hashed timestamp %s",
+    if(params.sintr_params.hideTimestamps && TimestampDigest(txn.timestamp()) != txn.hashed_timestamp()) {
+      Panic("txn [%s] hashed timestamp %s is not same as given hashed timestamp %s",
         BytesToHex(txnDigest,16).c_str(), BytesToHex(txn.hashed_timestamp(), 16).c_str(),
-        BytesToHex(TimestampDigest(Timestamp(txn.timestamp())), 16).c_str());
+        BytesToHex(TimestampDigest(txn.timestamp()), 16).c_str());
       stats.Increment("abstains", 1);
       return proto::ConcurrencyControl::ABSTAIN;
     }
@@ -694,10 +694,12 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
         continue;
       }
       // check if read timestamp is same as read 
-      if(params.sintr_params.hideTimestamps && TimestampDigest(Timestamp(read.readtime())) != read.hashed_readtime()) {
-        Debug("read key %s hashed timestamp %s is not same as given hashed readtime %s",
+      if(params.sintr_params.hideTimestamps &&
+        (read.readtime().id() != 0 || read.readtime().timestamp() != 0) &&
+        TimestampDigest(read.readtime()) != read.hashed_readtime()) {
+        Panic("read key %s hashed timestamp %s is not same as given hashed readtime %s",
           read.key().c_str(), BytesToHex(read.hashed_readtime(), 16).c_str(),
-          BytesToHex(TimestampDigest(Timestamp(read.readtime())), 16).c_str());
+          BytesToHex(TimestampDigest(read.readtime()), 16).c_str());
         stats.Increment("abstains", 1);
         return proto::ConcurrencyControl::ABSTAIN;
       }
@@ -802,31 +804,39 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       }
     }
 
+    std::set<std::string> alreadyVerifiedPolicies;
+    std::string policyId;
     //3) Validate write set for conflicts.
     for (const auto &write : txn.write_set()) {
       if(write.is_table_col_version()){   //Don't do the OCC check for table_versions (//TODO: Also skip column versions. Note: Currently just disabled col versions)
         continue;
       }
       //HACKY: briefly const cast TX to non-const so we can edit it.(alternatively, we can pass it in as non-const.)
-      proto::Transaction &txn_mut = const_cast<proto::Transaction&>(txn);
+      // proto::Transaction &txn_mut = const_cast<proto::Transaction&>(txn);
 
       if (txn.policy_type() != proto::Transaction::POLICY_ID_POLICY) {
         if (!IsKeyOwned(write.key())) { //Only do OCC check for keys in this group.
           continue;
         }
         if (params.sintr_params.policyCCC) {
-          // hack to change txn to mutable
-          proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
-          if(tempResult != proto::ConcurrencyControl::COMMIT) {
-            return tempResult;
+          policyId = policyIdFunction(write.key(), write.value());
+          if(alreadyVerifiedPolicies.find(policyId) == alreadyVerifiedPolicies.end()) {
+            proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(policyId, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
+            if(tempResult != proto::ConcurrencyControl::COMMIT) {
+              return tempResult;
+            }
+            alreadyVerifiedPolicies.insert(policyId);
           }
         }
       } else {
         // add implicit policy read for gov txn writeset
         // writeset key is policy ID for gov txn
-        proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(txn_mut, write, ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
-        if(tempResult != proto::ConcurrencyControl::COMMIT) {
-          return tempResult;
+        if(alreadyVerifiedPolicies.find(write.key()) == alreadyVerifiedPolicies.end()) {
+          proto::ConcurrencyControl::Result tempResult = Server::policyCheckHelper(write.key(), ts, depSet, txnDigest, abstain_conflict, *implicitPolicyReads);
+          if(tempResult != proto::ConcurrencyControl::COMMIT) {
+            return tempResult;
+          }
+          alreadyVerifiedPolicies.insert(write.key());
         }
       }
     
@@ -1216,15 +1226,15 @@ void Server::CheckDepLocalPresence(const proto::Transaction &txn, const DepSet &
 }
 
 // helper function for CC check for policies in writeset
-proto::ConcurrencyControl::Result Server::policyCheckHelper(proto::Transaction &txn, const WriteMessage &write, const Timestamp &ts,
+proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &policyId, const Timestamp &ts,
     const DepSet &depSet, const std::string &txnDigest, const proto::Transaction* &abstain_conflict,
     std::set<std::pair<std::string, Timestamp>> &implicitPolicyReads) {
-  std::string policyId = "";
-  if(txn.policy_type() == proto::Transaction::POLICY_ID_POLICY) {
-    policyId = write.key();
-  } else {
-    policyId = policyIdFunction(write.key(), write.value());
-  }
+  // std::string policyId = "";
+  // if(txn.policy_type() == proto::Transaction::POLICY_ID_POLICY) {
+  //   policyId = write.key();
+  // } else {
+  //   policyId = policyIdFunction(write.key(), write.value());
+  // }
   std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
   const proto::Transaction *preparedTxn = nullptr;
   // I don't free prepared txn bc I assume that preparedWrites is properly garbage collected
@@ -1232,13 +1242,9 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(proto::Transaction &
   if(params.sintr_params.useOCCForPolicies) {
     // if prepared txn exists (so prepared policy exists)
     if(preparedTxn != nullptr) {
-      Debug("[%lu:%lu][%s] ABSTAIN wr conflict prepared policy for policy ID associated with txn write key %s [plain:%s]:"
+      Debug("[%s] ABSTAIN wr conflict prepared policy for policy ID associated with txn:"
         " prepared policy ts %lu.%lu < this txn's ts %lu.%lu.",
-        txn.client_id(),
-        txn.client_seq_num(),
         BytesToHex(txnDigest, 16).c_str(),
-        BytesToHex(write.key(), 16).c_str(),
-        write.key().c_str(),
         tsPolicy.first.getTimestamp(), tsPolicy.first.getID(),
         ts.getTimestamp(), ts.getID());
       stats.Increment("cc_abstains", 1);
@@ -1249,24 +1255,25 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(proto::Transaction &
     }
   } else {
     // if prepared policy exists, add dependency to prepared policy if it already doesn't exist, then return wait
-    if(preparedTxn != nullptr) {
-      bool depExists = false;
-      for(const auto &dep: depSet){
-        if(dep.write().prepared_txn_digest() == preparedTxn->txndigest()) {
-          depExists = true;
-          break;
-        }
-      }
-      if(!depExists) {
-        Debug("Adding new dependency on policy");
-        auto new_dep = txn.mutable_merged_read_set()->add_deps();
-        new_dep->mutable_write()->set_prepared_txn_digest(std::move(preparedTxn->txndigest()));
-        new_dep->set_involved_group(groupIdx);  
-      }
-      Debug("Waiting for prepared policy to commit");
-      stats.Increment("cc_waits", 1);
-      return proto::ConcurrencyControl::WAIT;        
-    }
+    Panic("Must use OCC for policies, MVTSO for policy CC is not supported");
+    // if(preparedTxn != nullptr) {
+    //   bool depExists = false;
+    //   for(const auto &dep: depSet){
+    //     if(dep.write().prepared_txn_digest() == preparedTxn->txndigest()) {
+    //       depExists = true;
+    //       break;
+    //     }
+    //   }
+    //   if(!depExists) {
+    //     Debug("Adding new dependency on policy");
+    //     auto new_dep = txn.mutable_merged_read_set()->add_deps();
+    //     new_dep->mutable_write()->set_prepared_txn_digest(std::move(preparedTxn->txndigest()));
+    //     new_dep->set_involved_group(groupIdx);  
+    //   }
+    //   Debug("Waiting for prepared policy to commit");
+    //   stats.Increment("cc_waits", 1);
+    //   return proto::ConcurrencyControl::WAIT;        
+    // }
   }
   // hack to return commit if neither check fails
   implicitPolicyReads.insert(std::make_pair(policyId, tsPolicy.first));

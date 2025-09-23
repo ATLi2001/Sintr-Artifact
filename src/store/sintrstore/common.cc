@@ -1730,6 +1730,46 @@ void asyncValidateTransactionWrite(const proto::CommittedProof &proof,
       }
 }
 
+int validateKeyAndTS(const proto::CommittedProof &proof, const std::string *txnDigest,
+  const std::string &key, const std::string &val, const Timestamp &timestamp,
+  const std::string &tsDigest) {
+  if (proof.txn().client_id() == 0UL && proof.txn().client_seq_num() == 0UL) {
+    // Genesis objects have no proofs ==> pass validation by default.
+    // TODO: this is unsafe, but a hack so that we can bootstrap a benchmark
+    //    without needing to write all existing data with transactions
+    return 1;
+  }
+  if ((tsDigest == "" && Timestamp(proof.txn().timestamp()) != timestamp) ||
+  (tsDigest != "" && proof.txn().hashed_timestamp() != tsDigest)) {
+    Debug("VALIDATE timestamp failed for txn %lu.%lu: txn ts %lu.%lu != returned"
+      " ts %lu.%lu.", proof.txn().client_id(), proof.txn().client_seq_num(),
+      proof.txn().timestamp().timestamp(), proof.txn().timestamp().id(),
+      timestamp.getTimestamp(), timestamp.getID());
+        return -1;
+  }
+  bool keyInWriteSet = false;
+  for (const auto &write : proof.txn().write_set()) {
+    if (write.key() == key) {
+      keyInWriteSet = true;
+      if (write.value() != val) {
+        Debug("VALIDATE value failed for txn %lu.%lu key %s: txn value %s != "
+          "returned value %s.", proof.txn().client_id(),
+          proof.txn().client_seq_num(), BytesToHex(key, 16).c_str(),
+          BytesToHex(write.value(), 16).c_str(), BytesToHex(val, 16).c_str());
+        return -1;
+      }
+      break;
+    }
+  }
+  if (!keyInWriteSet) {
+    Debug("VALIDATE value failed for txn %lu.%lu; key %s not written.",
+            proof.txn().client_id(), proof.txn().client_seq_num(),
+            BytesToHex(key, 16).c_str());
+    return -1;
+  }
+  return 0;
+}
+
 void asyncValidateTransactionWriteCB(const proto::CommittedProof &proof,
    const std::string &key, const std::string &val, mainThreadCallback mcb, void* result){
    mcb(result);
@@ -1952,6 +1992,10 @@ std::string TimestampDigest(const Timestamp &ts) {
   return TimestampDigest(ts.getID(), ts.getTimestamp());
 }
 
+std::string TimestampDigest(const TimestampMessage &ts) {
+  return TimestampDigest(ts.id(), ts.timestamp());
+}
+
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS) {
   blake3_hasher hasher;
   blake3_hasher_init(&hasher);
@@ -1965,7 +2009,7 @@ std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timesta
 
 //should hashing be parallelized?
 //ignores txnDigest field --> this is not part of protocol contents, just a hack for storage.
-std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS) {
+std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS, bool hashEndorsements) {
   if (hashDigest) {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
@@ -2116,6 +2160,12 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
           blake3_hasher_update(&hasher, (unsigned char *) &val[0], val.length());
         }
       }
+    }
+
+    if(hashEndorsements && txn.has_endorsements()) {
+      std::string endorsements;
+      txn.endorsements().SerializeToString(&endorsements);
+      blake3_hasher_update(&hasher, (unsigned char *) &endorsements[0], endorsements.length());
     }
 
     blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);

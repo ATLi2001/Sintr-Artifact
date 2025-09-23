@@ -85,17 +85,18 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // sends BeginValidateTxnMessage to peers
   // takes ownership of policyClient, which contains the estimated policy for the transaction
   void SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
-    PolicyClient *policyClient);
+    PolicyClient *policyClient, const std::string &tsDigest);
 
   // forward server read reply to other peers
   void SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep);
+    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
+    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep, 
+    const std::string &tsDigest);
   
   // forward server point query result to other peers
   void SendForwardPointQueryResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
-    const std::string &serializedWrite, const std::string &serializedWriteTypeName,
+    const proto::SignedMessage &signedWrite,
     const proto::Dependency &dep, bool hasDep, bool addReadset);
   
   // forward query results to other clients
@@ -115,6 +116,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void SetFailureFlag(bool f) {
     failureActive = f;
   }
+
+  void setEndorsementCB(std::function<void*(void)> ecb);
 
  private:
 
@@ -213,6 +216,50 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::string query_read_set_hash;
   };
 
+  struct AsyncReadSigCheck {
+  AsyncReadSigCheck(uint32_t _quorumSize, mainThreadCallback mcb, int groupTotals,
+    proto::CommitDecision _decision) :  quorumSize(_quorumSize),
+    mcb(std::move(mcb)), groupTotals(groupTotals), decision(_decision),
+    terminate(false), callback(true), num_skips(0) { 
+        groupCounts.empty();
+    }
+    ~AsyncReadSigCheck() { deleteMessages(); }
+
+    std::mutex objMutex;
+    std::vector<std::string*> ccMsgs;
+
+    void deleteMessages(){
+      for(auto ccMsg : ccMsgs){
+        FreeMessageString(ccMsg);//delete ccMsg;
+      }
+    }
+
+    const uint32_t quorumSize;
+    //std::function<void(bool)> mainThreadCallback;
+    mainThreadCallback mcb;
+
+    std::map<uint64_t, uint32_t> groupCounts;
+    int groupTotals;
+    int groupsVerified = 0;
+
+    proto::CommitDecision decision;
+    //proto::Transaction *txn;
+    //std::set<int> groupsVerified;
+
+    uint32_t num_skips;
+    uint32_t deletable;
+    bool terminate;
+    bool callback;
+  };
+
+  struct AsyncPreparedReadCheck {
+    AsyncPreparedReadCheck(uint32_t _quorumSize) : quorumSize(_quorumSize) {}
+    std::atomic<size_t> num_finished{0};
+    std::atomic<bool> called_val_client{false};
+    uint32_t quorumSize;
+  };
+
+
   struct SentFwdResultState {
     SentFwdResultState() : fwdReadResultMsg(nullptr), fwdPointQueryResultMsg(nullptr), fwdQueryResultMsg(nullptr),
       blindWriteMsg(nullptr) {}
@@ -248,18 +295,21 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   
 
   void SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
-    uint64_t txnStartTime, PolicyClient *policyClient);
+    uint64_t txnStartTime, PolicyClient *policyClient, const std::string &tsDigest);
 
   void ResetTrackingState();
 
   void SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep);
+    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
+    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep,
+    const std::string &tsDigest);
   
   void SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
-    const std::string &serializedWrite, const std::string &serializedWriteTypeName,
+    const proto::SignedMessage &signedWrite,
     const proto::Dependency &dep, bool hasDep, bool addReadset);
+  
+  bool ReadSigHelper(const proto::ForwardReadResult &fwdReadResult, proto::ForwardReadResultMessage &fwdReadResultMsg);
   
   // take ownership of the actual signatures inside group_sigs
   void SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
@@ -278,7 +328,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data);
 
   void HandleBeginValidateTxnMessage(const TransportAddress &remote, const proto::BeginValidateTxnMessage &beginValTxnMsg);
-  void HandleForwardReadResultMessage(const proto::ForwardReadResultMessage &fwdReadResultMsg);
+  void HandleForwardReadResultMessage(const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg);
   void HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg);
   void HandleForwardQueryResultMessage(const proto::ForwardQueryResultMessage &fwdQueryResultMsg);
   void HandleBlindWriteMessage(const proto::BlindWriteMessage &blindWriteMsg);
@@ -292,9 +342,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   // check if fwdReadResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdReadResultMsg
-  bool CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdReadResult, 
-    const proto::ForwardReadResultMessage &fwdReadResultMsg, 
-    proto::Write &write, proto::Dependency &dep);
+  bool CheckPreparedCommittedEvidence(const std::shared_ptr<proto::ForwardReadResult> &fwdReadResult, 
+    const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg);
   // check if fwdPointQueryResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdPointQueryResultMsg
   bool CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
@@ -322,6 +371,21 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // creates hmac for only dst_client_ids
   void CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage,
     const std::set<uint64_t> &dst_client_ids);
+
+  void asyncValidateP1RepliesC2C(proto::CommitDecision decision, bool fast, const proto::Transaction *txn, const std::string *txnDigest,
+    const proto::GroupedSignatures &groupedSigs, KeyManager *keyManager, const transport::Configuration *config, int64_t myProcessId,
+    proto::ConcurrencyControl::Result myResult, Verifier *verifier, mainThreadCallback mcb);
+
+  void asyncValidateP1RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result);
+
+  void asyncValidateP2RepliesC2C(proto::CommitDecision decision, uint64_t view, const proto::Transaction *txn, const std::string *txnDigest,
+    const proto::GroupedSignatures &groupedSigs, KeyManager *keyManager, const transport::Configuration *config, int64_t myProcessId,
+    proto::CommitDecision myDecision, Verifier *verifier, mainThreadCallback mcb);
+
+  void asyncValidateP2RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result);
+
+  void asyncValidateDependency(const proto::Dependency &dep, const transport::Configuration *config, uint64_t readDepSize,
+    KeyManager *keyManager, Verifier *verifier, const uint64_t &client_id, const uint64_t &client_seq_num);
 
   const uint64_t client_id; // Unique ID for this client.
   Transport *transport; // Transport layer.
@@ -427,6 +491,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   std::mutex tcpMutex;
   bool sendDone;
   bool replyDone;
+
+  std::function<void*(void)> ecb = nullptr; // only need one endorsement callback because client is closed loop
 };
 
 } // namespace sintrstore

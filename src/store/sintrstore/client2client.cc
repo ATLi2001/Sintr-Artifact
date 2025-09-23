@@ -104,7 +104,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     cpus_per_client = 4;
   }
   int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
-  Debug("CPUs per client is %lu main client cpu is %d num_cpus is %lu", cpus_per_client, main_client_cpu, num_cpus);
+  Warning("CPUs per client is %lu main client cpu is %d num_cpus is %lu", cpus_per_client, main_client_cpu, num_cpus);
 
 
   Debug("Starting %lu validation threads", params.sintr_params.maxValThreads);
@@ -161,9 +161,11 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     );
     if (params.sintr_params.clientPinCores) {
       // set cpu affinity
+      // TODO: Change back later
+      // Debug("CPU PIN TO: %lu", (main_client_cpu + 2 + i % 2) % num_cpus);
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET((main_client_cpu + (2 + i) % cpus_per_client) % num_cpus, &cpuset);
+      CPU_SET((main_client_cpu + 2 + i % 2) % num_cpus, &cpuset);
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -338,7 +340,7 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
 }
 
 void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
-    PolicyClient *policyClient) {
+    PolicyClient *policyClient, const std::string &tsDigest) {
 
   if (params.sintr_params.clientEstimatePolicy) {
     UW_ASSERT(policyClient != nullptr);
@@ -354,13 +356,13 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
   }
   
   if (!params.sintr_params.c2cSendThread) {
-    SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState, txnStartTime, policyClient);
+    SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState, txnStartTime, policyClient, tsDigest);
     delete policyClient;
   }
   else {
     auto f = [=]() {
       this->SendBeginValidateTxnMessageHelper(
-        client_seq_num, protoTxnState, txnStartTime, policyClient
+        client_seq_num, protoTxnState, txnStartTime, policyClient, tsDigest
       );
       delete policyClient;
       return (void*) true;
@@ -371,7 +373,7 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
 }
 
 void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_num, const TxnState &protoTxnState,
-    uint64_t txnStartTime, PolicyClient *policyClient) {
+    uint64_t txnStartTime, PolicyClient *policyClient, const std::string &tsDigest) {
   UW_ASSERT(policyClient != nullptr);
 
   // if (create_hmac_us.count > 0 && create_hmac_us.count % 2000 == 0) {
@@ -416,7 +418,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   beginValTxn.set_client_seq_num(client_seq_num);
   *beginValTxn.mutable_txn_state() = protoTxnState;
   if(params.sintr_params.hideTimestamps) {
-    beginValTxn.set_hashed_ts(TimestampDigest(client_id, txnStartTime));
+    beginValTxn.set_hashed_ts(tsDigest);
   } else {
     beginValTxn.mutable_timestamp()->set_timestamp(txnStartTime);
     beginValTxn.mutable_timestamp()->set_id(client_id);
@@ -505,19 +507,19 @@ void Client2Client::ResetTrackingState() {
 }
 
 void Client2Client::SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep) {
+    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
+const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep,
+    const std::string &tsDigest) {
 
   if (!params.sintr_params.c2cSendThread) {
-    SendForwardReadResultMessageHelper(key, value, ts, proof, serializedWrite, serializedWriteTypeName,
-      dep, hasDep, addReadset, policyDep, hasPolicyDep);
+    SendForwardReadResultMessageHelper(key, value, ts, proof, signedWrite,
+      dep, hasDep, addReadset, policyDep, hasPolicyDep, tsDigest);
   }
   else {
     auto f = [=]() {
       this->SendForwardReadResultMessageHelper(
-        key, value, ts, proof, serializedWrite, 
-        serializedWriteTypeName, dep, hasDep, addReadset,
-        policyDep, hasPolicyDep
+        key, value, ts, proof, signedWrite, dep, hasDep, addReadset,
+        policyDep, hasPolicyDep, tsDigest
       );
       return (void*) true;
     };
@@ -527,8 +529,8 @@ void Client2Client::SendForwardReadResultMessage(const std::string &key, const s
 }
 
 void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const std::string &serializedWrite, const std::string &serializedWriteTypeName, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep) {
+    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
+    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep, const std::string &tsDigest) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardReadResultMessage *fwdReadResultMsgToSend = new proto::ForwardReadResultMessage();
@@ -539,7 +541,6 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
     fwdReadResult.mutable_timestamp()->set_id(ts.getID());
   } else {
-    std::string tsDigest = TimestampDigest(ts);
     fwdReadResult.set_hashed_timestamp(tsDigest);
   }
   fwdReadResult.set_client_id(client_id);
@@ -566,13 +567,8 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
           UW_ASSERT(value.length() == 0);
         }
       }
-
-      // depending on if signatures are enabled and if the value is non empty
-      if (serializedWriteTypeName == fwdReadResultMsgToSend->signed_write().GetTypeName()) {
-        UW_ASSERT(fwdReadResultMsgToSend->mutable_signed_write()->ParseFromString(serializedWrite));
-      }
-      else if (serializedWriteTypeName == fwdReadResultMsgToSend->write().GetTypeName()) {
-        UW_ASSERT(fwdReadResultMsgToSend->mutable_write()->ParseFromString(serializedWrite));
+      if(params.signedMessages && value.length() != 0) {
+        *fwdReadResultMsgToSend->mutable_signed_write() = std::move(signedWrite);
       }
       else {
         // this should only happen if value is empty
@@ -638,20 +634,20 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
 
 void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
-    const std::string &serializedWrite, const std::string &serializedWriteTypeName,
+    const proto::SignedMessage &signedWrite,
     const proto::Dependency &dep, bool hasDep, bool addReadset) {
   
   if (!params.sintr_params.c2cSendThread) {
     SendForwardPointQueryResultMessageHelper(
-      key, value, ts, table_name, proof, serializedWrite, 
-      serializedWriteTypeName, dep, hasDep, addReadset
+      key, value, ts, table_name, proof, signedWrite,
+      dep, hasDep, addReadset
     );
   }
   else {
     auto f = [=]() {
       this->SendForwardPointQueryResultMessageHelper(
-        key, value, ts, table_name, proof, serializedWrite, 
-        serializedWriteTypeName, dep, hasDep, addReadset
+        key, value, ts, table_name, proof, signedWrite,
+        dep, hasDep, addReadset
       );
       return (void*) true;
     };
@@ -664,7 +660,7 @@ void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, c
 // no policy dep but additional table_name field
 void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
-    const std::string &serializedWrite, const std::string &serializedWriteTypeName,
+    const proto::SignedMessage &signedWrite,
     const proto::Dependency &dep, bool hasDep, bool addReadset) {
   
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
@@ -706,13 +702,9 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
       }
 
       // depending on if signatures are enabled and if the value is non empty
-      if (serializedWriteTypeName == fwdPointQueryResultMsgToSend->signed_write().GetTypeName()) {
-        UW_ASSERT(fwdPointQueryResultMsgToSend->mutable_signed_write()->ParseFromString(serializedWrite));
-      }
-      else if (serializedWriteTypeName == fwdPointQueryResultMsgToSend->write().GetTypeName()) {
-        UW_ASSERT(fwdPointQueryResultMsgToSend->mutable_write()->ParseFromString(serializedWrite));
-      }
-      else {
+      if(params.signedMessages && value.length() != 0) {
+        *fwdPointQueryResultMsgToSend->mutable_signed_write() = std::move(signedWrite);
+      } else {
         // this should only happen if value is empty
         UW_ASSERT(value.length() == 0);
         *fwdPointQueryResultMsgToSend->mutable_write() = proto::Write();
@@ -1064,15 +1056,15 @@ void Client2Client::ManageDispatchBeginValidateTxnMessage(const TransportAddress
 
 void Client2Client::ManageDispatchForwardReadResultMessage(const TransportAddress &remote, const std::string &data) {
   if (!params.sintr_params.c2cReceiveThread) {
-    fwdReadResultMsg.ParseFromString(data);
+    const std::shared_ptr<proto::ForwardReadResultMessage> fwdReadResultMsg = std::make_shared<proto::ForwardReadResultMessage>();
+    fwdReadResultMsg->ParseFromString(data);
     HandleForwardReadResultMessage(fwdReadResultMsg);
   }
   else {
-    proto::ForwardReadResultMessage *fwdReadResultMsg = new proto::ForwardReadResultMessage();
-    fwdReadResultMsg->ParseFromString(data);
-    auto f = [this, fwdReadResultMsg](){
-      this->HandleForwardReadResultMessage(*fwdReadResultMsg);
-      delete fwdReadResultMsg;
+    auto f = [this, data](){
+      const std::shared_ptr<proto::ForwardReadResultMessage> fwdReadResultMsg = std::make_shared<proto::ForwardReadResultMessage>();
+      fwdReadResultMsg->ParseFromString(data);
+      this->HandleForwardReadResultMessage(fwdReadResultMsg);
       return (void*) true;
     };
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
@@ -1229,8 +1221,8 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   // MySendPing(curr_client_id, ping, false);
 }
 
-void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResultMessage &fwdReadResultMsg) {
-  proto::ForwardReadResult fwdReadResult;
+void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg) {
+  std::shared_ptr<proto::ForwardReadResult> fwdReadResult;
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -1238,12 +1230,12 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
 
     // first check client signature
     // Debugs will not include client ID/client seq num because they are included in the fwdReadResult
-    if (!fwdReadResultMsg.has_signed_fwd_read_result()) {
+    if (!fwdReadResultMsg->has_signed_fwd_read_result()) {
       Debug("Missing client signature on forwarded read result");
       return;
     }
     std::string data;
-    if (!ValidateHMACedMessage(fwdReadResultMsg.signed_fwd_read_result(), data)) {
+    if (!ValidateHMACedMessage(fwdReadResultMsg->signed_fwd_read_result(), data)) {
       Debug("Invalid client signature on forwarded read result");
       return;
     }
@@ -1254,85 +1246,54 @@ void Client2Client::HandleForwardReadResultMessage(const proto::ForwardReadResul
     // auto duration = end - start;
     // verify_hmac_us.add(duration);
 
-    fwdReadResult.ParseFromString(data);
+    fwdReadResult = std::make_shared<proto::ForwardReadResult>();
+
+    fwdReadResult->ParseFromString(data);
   }
   else {
-    fwdReadResult = fwdReadResultMsg.fwd_read_result();
+    fwdReadResult = std::shared_ptr<proto::ForwardReadResult>(fwdReadResultMsg->release_fwd_read_result());
   }
 
-  uint64_t curr_client_id = fwdReadResult.client_id();
-  uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
+  uint64_t curr_client_id = fwdReadResult->client_id();
+  uint64_t curr_client_seq_num = fwdReadResult->client_seq_num();
 
-  std::string curr_key = fwdReadResult.key();
-  std::string curr_value = fwdReadResult.value();
 
-  proto::Write write;
-  bool hasDep = fwdReadResult.has_dep();
-  proto::Dependency dep;
-  bool addReadset = fwdReadResult.add_readset();
+  bool addReadset = fwdReadResult->add_readset();
   // only if addReadset is true will there be dep or committed proofs
   if (addReadset && params.sintr_params.clientCheckEvidence) {
-    if (!CheckPreparedCommittedEvidence(fwdReadResult, fwdReadResultMsg, write, dep)) {
+    if (!params.sintr_params.parallelQuerySigsCheck && !CheckPreparedCommittedEvidence(fwdReadResult, fwdReadResultMsg)) {
+      Panic("Invalid prepared or committed evidence on forwarded read result");
       return;
-    }
-    // if there is an actual value, expect matches
-    if (curr_value.length() > 0) {
-      UW_ASSERT(write.key() == curr_key);
-      if (hasDep) {
-        UW_ASSERT(write.prepared_value() == curr_value);
-        if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(write.hashed_prepared_ts() == fwdReadResult.hashed_timestamp());
-        } else {
-          UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.prepared_timestamp(), fwdReadResult.timestamp()));
-        }
-      }
-      else {
-        UW_ASSERT(write.committed_value() == curr_value);
-        if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(write.hashed_committed_ts() == fwdReadResult.hashed_timestamp());
-        } else {
-          UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdReadResult.timestamp()));
-        }
-      }
-    }
-    // otherwise the write should be empty
-    else {
-      UW_ASSERT(!write.has_key());
-    }
-
-    // curr_key is essentially what the forwarding client is claiming is the key
-    // write contains the server's claim as to what the key is
-    // these two should match
-    // also if value is empty, then no need to check since server makes no claims about it
-    if (curr_value.length() > 0 && curr_key != write.key()) {
-      Debug(
-        "Mismatch in forwarded key and the server key: from client id %lu, seq num %lu, forwarded key %s, server key %s",
+    } else {
+      Debug("HandleForwardReadResult parallel sig check: from client id %lu, seq num %lu, read key %s, read result %s",
         curr_client_id, 
         curr_client_seq_num,
-        BytesToHex(curr_key, 16).c_str(),
-        BytesToHex(write.key(), 16).c_str()
+        BytesToHex(fwdReadResult->key(), 16).c_str(),
+        BytesToHex(fwdReadResult->value(), 16).c_str()
       );
-      return;
+      CheckPreparedCommittedEvidence(fwdReadResult, fwdReadResultMsg);
     }
   }
-
-  bool hasPolicyDep = fwdReadResult.has_policy_dep();
+  bool hasPolicyDep = false;
   proto::Dependency policyDep;
-  if (hasPolicyDep) {
-    policyDep = fwdReadResult.policy_dep();
+  if(!params.sintr_params.useOCCForPolicies) {
+    hasPolicyDep = fwdReadResult->has_policy_dep();
+    if (hasPolicyDep) {
+      policyDep = fwdReadResult->policy_dep();
+    }
   }
 
   Debug(
     "HandleForwardReadResult: from client id %lu, seq num %lu, key %s, value %s", 
     curr_client_id, 
     curr_client_seq_num,
-    BytesToHex(curr_key, 16).c_str(),
-    BytesToHex(curr_value, 16).c_str()
+    BytesToHex(fwdReadResult->key().c_str(), 16).c_str(),
+    BytesToHex(fwdReadResult->value().c_str(), 16).c_str()
   );
   // tell valClient about this forwardedReadResult
   valClient->ProcessForwardReadResult(
-    curr_client_id, curr_client_seq_num, fwdReadResult,
-    dep, hasDep, addReadset, policyDep, hasPolicyDep
+    curr_client_id, curr_client_seq_num, *fwdReadResult,
+    fwdReadResult->dep(), fwdReadResult->has_dep(), addReadset, policyDep, hasPolicyDep
   );
 }
 
@@ -1622,6 +1583,11 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
 
   if (!params.sintr_params.optimisticReceiveEndorsement) {
     endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg);
+    // may have to acquire lock here
+    if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied()) {
+      ecb();
+      ecb = nullptr;
+    }
   }
   // in optimistic case, endorsement is added outside so just check
   else {
@@ -1660,14 +1626,52 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
       signedMsg
     );
   }
+  // may have to acquire lock here
+  if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied()) {
+    ecb();
+    ecb = nullptr;
+  }
 }
 
-bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdReadResult, 
-  const proto::ForwardReadResultMessage &fwdReadResultMsg, proto::Write &write, proto::Dependency &dep) {
+bool Client2Client::CheckPreparedCommittedEvidence(const std::shared_ptr<proto::ForwardReadResult> &fwdReadResult, 
+    const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  if(!fwdReadResult->add_readset()) {
+    // skip checking evidence if we dont add it to the readset
+    Debug("Skipping validation because we don't add to readset");
+    return true;
+  }
 
+  if(params.sintr_params.parallelQuerySigsCheck) {
+    // TODO: We copy the shared pointer instead of the message -> should be less overhead
+    auto f = [this, fwdReadResult, fwdReadResultMsg] {
+      Debug("Checking signatures asynchronously for %lu : %lu", fwdReadResult->client_id(), fwdReadResult->client_seq_num());
+
+      if(!this->ReadSigHelper(*fwdReadResult, *fwdReadResultMsg)) {
+        Panic("Invalid signatures for read result!");
+      }
+      if(!params.sintr_params.c2cUseAsynchVal || fwdReadResult->has_dep()) {
+        // if it has dependencies notify the client because we don't async validate dependencies
+        valClient->NotifyForwardReadResultValid(fwdReadResult->client_id(), fwdReadResult->client_seq_num());
+      }
+      return (void*) true;
+    };
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    parallelSigCheckQueue.push(executor);
+    return true;
+  } else {
+    return ReadSigHelper(*fwdReadResult, *fwdReadResultMsg);
+  }
+}
+
+
+bool Client2Client::ReadSigHelper(const proto::ForwardReadResult &fwdReadResult, proto::ForwardReadResultMessage &fwdReadResultMsg) {
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  proto::Write write;
   uint64_t curr_client_id = fwdReadResult.client_id();
   uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
 
@@ -1684,9 +1688,22 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
         return false;
       }
     }
-    dep = fwdReadResult.dep();
+      // if(params.sintr_params.c2cUseAsynchVal) {
+      //   asyncValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
+      //     keyManager, verifier, curr_client_id, curr_client_seq_num);
+      // } else {
+      //   if (!ValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
+      //     keyManager, verifier)) {
+      //     Debug(
+      //       "Invalid dependency on forwarded read result from client id %lu, seq num %lu",
+      //       curr_client_id, 
+      //       curr_client_seq_num
+      //     );
+      //     return false;
+      //   }
+      // }
     write = fwdReadResult.dep().write();
-  } 
+  }
   else {
     // otherwise can check committed proof and signature
 
@@ -1733,12 +1750,47 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
           );
           return false;
         }
-
-        std::string committedTxnDigest = TransactionDigest(fwdReadResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-        if(params.sintr_params.hashEndorsements) {
-          committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, fwdReadResultMsg.proof().txn(), params.hashDigest);
-        }
-        if (!ValidateTransactionWrite(fwdReadResultMsg.proof(), &committedTxnDigest,
+        std::string committedTxnDigest = TransactionDigest(fwdReadResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
+        if(params.sintr_params.c2cUseAsynchVal) {
+          std::string *txnDigestPointer = new std::string(committedTxnDigest);
+          proto::CommittedProof *proof = fwdReadResultMsg.release_proof();
+          auto mcb = [this, curr_client_id, curr_client_seq_num, txnDigestPointer, proof](void* valid) mutable { 
+            Debug("RUNNING MCB for %lu %lu", curr_client_id, curr_client_seq_num);
+            if(!valid){
+              Panic("Commit Proof not valid");
+              return (void*) false;
+            } else {
+              valClient->NotifyForwardReadResultValid(curr_client_id, curr_client_seq_num);
+            }
+            delete txnDigestPointer;
+            txnDigestPointer = nullptr;
+            delete proof;
+            proof = nullptr;
+            return (void*) true;
+          };
+          Debug("Running async validate txn write for %lu %lu for key %s", curr_client_id, curr_client_seq_num, BytesToHex(write.key(), 16).c_str());
+          int res = validateKeyAndTS(*proof, txnDigestPointer, write.key(), write.committed_value(),
+            write.has_committed_timestamp() ? write.committed_timestamp() : Timestamp(), write.has_hashed_committed_ts() ? write.hashed_committed_ts() : "");
+          if (res == 1) {
+            mcb((void*) true);
+          } else if (res == -1) {
+            mcb((void*) false);
+            return false;
+          } else {
+            if (proof->has_p1_sigs()) {
+              asyncValidateP1RepliesC2C(proto::COMMIT, true, &proof->txn(), txnDigestPointer,
+                proof->p1_sigs(), keyManager, config, -1, proto::ConcurrencyControl::ABORT,
+                verifier, std::move(mcb));
+            } else if (proof->has_p2_sigs()) {
+              asyncValidateP2RepliesC2C(proto::COMMIT, proof->p2_view(), &proof->txn(), txnDigestPointer,
+                proof->p2_sigs(), keyManager, config, -1, proto::ABORT, verifier, std::move(mcb));
+            } else {
+              Debug("Proof has neither P1 nor P2 sigs.");
+              mcb((void*) false);
+              return false;
+            }
+          }
+        } else if(!ValidateTransactionWrite(fwdReadResultMsg.proof(), &committedTxnDigest,
             write.key(), write.committed_value(), write.has_committed_timestamp() ? write.committed_timestamp() : Timestamp(),
             config, params.signedMessages, keyManager, verifier, write.has_hashed_committed_ts() ? write.hashed_committed_ts() : "")) {
           Debug(
@@ -1752,6 +1804,29 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
     }
   }
 
+  if (fwdReadResult.value().length() > 0) {
+    UW_ASSERT(write.key() == fwdReadResult.key());
+    if (fwdReadResult.has_dep()) {
+      UW_ASSERT(write.prepared_value() == fwdReadResult.value());
+      if(params.sintr_params.hideTimestamps) {
+        UW_ASSERT(write.hashed_prepared_ts() == fwdReadResult.hashed_timestamp());
+      } else {
+        UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.prepared_timestamp(), fwdReadResult.timestamp()));
+      }
+    }
+    else {
+      UW_ASSERT(write.committed_value() == fwdReadResult.value());
+      if(params.sintr_params.hideTimestamps) {
+        UW_ASSERT(write.hashed_committed_ts() == fwdReadResult.hashed_timestamp());
+      } else {
+        UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdReadResult.timestamp()));
+      }
+    }
+  }
+  // otherwise the write should be empty
+  else {
+    UW_ASSERT(!write.has_key());
+  }
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
@@ -1759,6 +1834,40 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
   // check_committed_prepared_us.add(duration);
 
   return true;
+}
+
+void Client2Client::asyncValidateDependency(const proto::Dependency &dep,
+    const transport::Configuration *config, uint64_t readDepSize,
+    KeyManager *keyManager, Verifier *verifier,
+    const uint64_t &client_id, const uint64_t &client_seq_num) {
+  if (dep.write_sigs().sigs_size() < readDepSize) {
+    Panic("Dep sig size %lu less than read dep size %lu", 
+      dep.write_sigs().sigs_size(), readDepSize);
+    return;
+  }
+
+  auto preparedData = std::make_shared<std::string>();
+  dep.write().SerializeToString(preparedData.get());
+
+  auto asyncPreparedReadCheck = std::make_shared<AsyncPreparedReadCheck>(dep.write_sigs().sigs_size());
+
+  for (const auto &sig : dep.write_sigs().sigs()) {
+    auto f = [this, asyncPreparedReadCheck, sig, preparedData, 
+      readDepSize, client_id, client_seq_num, 
+      verifier, keyManager]() {
+        if (!verifier->Verify(keyManager->GetPublicKey(sig.process_id()), *preparedData, sig.signature())) {
+          Panic("Failed verifying dep signature");
+          return (void*)false;
+        }
+        size_t finished = asyncPreparedReadCheck->num_finished.fetch_add(1) + 1;
+        if (finished >= readDepSize && !asyncPreparedReadCheck->called_val_client.exchange(true)) {
+          valClient->NotifyForwardReadResultValid(client_id, client_seq_num);
+        }
+        return (void*)true;
+    };
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    parallelSigCheckQueue.push(executor);
+  }
 }
 
 bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
@@ -1833,12 +1942,7 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
           return false;
         }
 
-        std::string committedTxnDigest = TransactionDigest(fwdPointQueryResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-        if(params.sintr_params.hashEndorsements && fwdPointQueryResultMsg.proof().txn().has_txndigest()) {
-          committedTxnDigest = fwdPointQueryResultMsg.proof().txn().txndigest();
-        } else if(params.sintr_params.hashEndorsements) {
-          Debug("NO TXN DIGEST IN PROOF FOR CLIENT2CLIENT forward point query result");
-        }
+        std::string committedTxnDigest = TransactionDigest(fwdPointQueryResultMsg.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
 
         sql::QueryResultProtoWrapper query_result;
         if (!ValidateTransactionTableWrite(fwdPointQueryResultMsg.proof(), &committedTxnDigest,
@@ -2276,5 +2380,373 @@ void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, 
   }
   signedMessage.set_signature(hmacs.SerializeAsString());
 }
+
+void Client2Client::setEndorsementCB(std::function<void*(void)> ecb) {
+  // i don't put it on the receive thread for simplicity ...
+  this->ecb = std::move(ecb);
+}
+
+void Client2Client::asyncValidateP1RepliesC2C(proto::CommitDecision decision,
+    bool fast,
+    const proto::Transaction *txn,
+    const std::string *txnDigest,
+    const proto::GroupedSignatures &groupedSigs,
+    KeyManager *keyManager,
+    const transport::Configuration *config,
+    int64_t myProcessId, proto::ConcurrencyControl::Result myResult, Verifier *verifier,
+    mainThreadCallback mcb) {
+  proto::ConcurrencyControl concurrencyControl;
+  concurrencyControl.Clear();
+  *concurrencyControl.mutable_txn_digest() = *txnDigest;
+  uint32_t quorumSize = 0;
+
+  if (fast && decision == proto::COMMIT) {
+    concurrencyControl.set_ccr(proto::ConcurrencyControl::COMMIT);
+    quorumSize = config->n;
+  } else if (decision == proto::COMMIT) {
+    concurrencyControl.set_ccr(proto::ConcurrencyControl::COMMIT);
+    quorumSize = SlowCommitQuorumSize(config);
+  } else if (fast && decision == proto::ABORT) {
+    concurrencyControl.set_ccr(proto::ConcurrencyControl::ABSTAIN);
+    quorumSize = FastAbortQuorumSize(config);
+  } else if (decision == proto::ABORT) {
+    concurrencyControl.set_ccr(proto::ConcurrencyControl::ABSTAIN);
+    quorumSize = SlowAbortQuorumSize(config);
+  } else {
+    // NOT_REACHABLE();
+    Panic("decision neither Commit nor Abort, should not be reachable");
+    mcb((void*) false);
+    return; //false; //dont need to return anything
+  }
+
+  int no_of_groups = 0;
+
+  std::shared_ptr<AsyncReadSigCheck> asyncReadSigCheck = std::make_shared<AsyncReadSigCheck>(quorumSize, std::move(mcb), txn->involved_groups_size(), decision);
+  
+  std::vector<std::function<void*(void)>> verificationJobs;
+  for (const auto &sigs : groupedSigs.grouped_sigs()) {
+    //only need to verify a single group for Abort decisions.
+    if(decision == proto::ABORT && no_of_groups > 0) {
+      //Panic("stopping at ABort group break");
+      break;
+    }
+    no_of_groups++;
+
+    concurrencyControl.set_involved_group(sigs.first);
+    std::string* ccMsg = GetUnusedMessageString();//new string();
+    concurrencyControl.SerializeToString(ccMsg);
+    asyncReadSigCheck->ccMsgs.push_back(ccMsg); //TODO: delete at callback
+
+    std::unordered_set<uint64_t> replicasVerified;
+
+    for (const auto &sig : sigs.second.sigs()) {
+
+      if (!IsReplicaInGroup(sig.process_id(), sigs.first, config)) {
+        Debug("Signature for group %lu from replica %lu who is not in group.", sigs.first, sig.process_id());
+        Panic("Received sig from replica[%lu] not in group", sig.process_id());
+        
+        asyncReadSigCheck->mcb((void*) false);
+        return;
+      }
+
+      auto insertItr = replicasVerified.insert(sig.process_id());  //maybe use unordered_set
+      if (!insertItr.second) {
+        Debug("Already verified sig from replica %lu in group %lu.",
+            sig.process_id(), sigs.first);
+        Panic("Received duplicate signature from server %u", sig.process_id());
+
+        asyncReadSigCheck->mcb((void*) false);
+        return;
+      }
+
+      //IS THIS SAFE?
+      bool skip = false;
+      if (sig.process_id() == myProcessId && myProcessId >= 0) {
+
+        if (concurrencyControl.ccr() == myResult) {
+          skip = true;
+          asyncReadSigCheck->num_skips++;
+          if(myResult == proto::ConcurrencyControl::WAIT) Panic("Aborting due to Wait Sent");
+
+          asyncReadSigCheck->groupCounts[sigs.first]++;
+          if (asyncReadSigCheck->groupCounts[sigs.first] == asyncReadSigCheck->quorumSize) {
+            Debug("Completed verification of group: %d", sigs.first);
+              asyncReadSigCheck->groupsVerified++;
+              if (asyncReadSigCheck->decision == proto::COMMIT) {
+                if(asyncReadSigCheck->groupsVerified == asyncReadSigCheck->groupTotals){
+                  asyncReadSigCheck->mcb((void*) true);
+                  return;
+                }
+              }
+              else{ //Abort only needs 1 group.
+                asyncReadSigCheck->mcb((void*) true);
+                return;
+              }
+          }
+        } else {
+          Debug("Signature with result %u, purportedly from replica %lu"
+              " (= my id %ld) doesn't match my response %u.",
+              concurrencyControl.ccr(), sig.process_id(), myProcessId, myResult);
+          std::cerr << "stored CCR[" <<  myResult << "] does not match signed CCR[ " << concurrencyControl.ccr() << "] for txn " << BytesToHex(*txnDigest, 64) << std::endl;
+          Panic("Aborting due to mismatch");
+          asyncReadSigCheck->mcb((void*) false);
+          return;
+        }
+      }
+      if(skip) continue;
+
+
+
+      Debug("Verifying %lu byte signature from replica %lu in group %lu.",
+          sig.signature().size(), sig.process_id(), sigs.first);
+
+      crypto::PubKey* pubKey = keyManager->GetPublicKey(sig.process_id());
+      const std::string* mut_sig = &sig.signature();
+      uint64_t grpId = sigs.first;
+      auto f = [this, verifier, pubKey, ccMsg, mut_sig, asyncReadSigCheck, grpId](){
+        void* res = (void*) verifier->Verify2(pubKey, ccMsg, mut_sig);
+        asyncValidateP1RepliesC2CCallback(asyncReadSigCheck, grpId, res);
+        return (void*) res;
+      };
+      verificationJobs.push_back(std::move(f));
+    }
+  }
+  asyncReadSigCheck->deletable = verificationJobs.size();
+
+  for (auto&& f : std::move(verificationJobs)){
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    parallelSigCheckQueue.push(executor);
+  }
+
+}
+
+void Client2Client::asyncValidateP1RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result){
+
+  Debug("(CPU:%d - mainthread) asyncValidateP1RepliesCallback with result: %s", sched_getcpu(), result ? "true" : "false");
+
+  auto lockScope = std::unique_lock<std::mutex>(asyncReadSigCheck->objMutex);
+  //Need to delete only after "last count" has finished.
+  asyncReadSigCheck->deletable--;
+  //altneratively: keep shared datastructure (set) for asyncReadSigCheck: If not in structure anymore = deleted. (remove terminate bool)
+
+  if(asyncReadSigCheck->terminate){
+      if(asyncReadSigCheck->deletable == 0){
+        Debug("Return to CB UNSUCCESSFULLY");
+        Panic("fail validation");
+        if(asyncReadSigCheck->callback) asyncReadSigCheck->mcb((void*) false);
+        lockScope.unlock();
+      }
+      return;
+  }
+  if(!result){
+      asyncReadSigCheck->terminate = true;
+      if(asyncReadSigCheck->deletable == 0){
+         Debug("Return to CB UNSUCCESSFULLY");
+         Panic("fail validation");
+         asyncReadSigCheck->mcb((void*) false);
+         lockScope.unlock();
+      }
+      return;
+    }
+  asyncReadSigCheck->groupCounts[groupId]++;
+  Debug("Group %d verified %d out of necessary %d", groupId, asyncReadSigCheck->groupCounts[groupId], asyncReadSigCheck->quorumSize);
+  if (asyncReadSigCheck->groupCounts[groupId] == asyncReadSigCheck->quorumSize) {
+    Debug("Completed verification of group: %d", groupId);
+      asyncReadSigCheck->groupsVerified++;
+  }
+  else{
+    if(asyncReadSigCheck->deletable == 0){
+      Debug("Return to CB UNSUCCESSFULLY");
+      Panic("fail validation. Total groups: %d. Verified groups: %d Quorum size: %d, Group[%d]: Group Counts: %d. Num skips: %d", 
+              asyncReadSigCheck->groupTotals, asyncReadSigCheck->groupsVerified,asyncReadSigCheck->quorumSize, groupId,
+              asyncReadSigCheck->groupCounts[groupId], asyncReadSigCheck->num_skips);
+      asyncReadSigCheck->mcb((void*) false);
+      lockScope.unlock();
+    }
+    return;
+  }
+
+  Debug("Obj GroupsVerified: %d", asyncReadSigCheck->groupsVerified);
+
+  if (asyncReadSigCheck->decision == proto::COMMIT) {
+    if(!(asyncReadSigCheck->groupsVerified == asyncReadSigCheck->groupTotals)){
+          Debug("Phase1Replies for involved_group %d not complete.", (int)groupId);
+          if(asyncReadSigCheck->deletable == 0){
+            Debug("Return to CB UNSUCCESSFULLY");
+            Panic("fail validation");
+            asyncReadSigCheck->mcb((void*) false);
+            
+            lockScope.unlock();
+          }
+      return;
+    }
+  }
+  //bool* ret = new bool(true);
+  asyncReadSigCheck->terminate = true;
+  asyncReadSigCheck->callback = false;
+  Debug("Finished async verify");
+  asyncReadSigCheck->mcb((void*) true);
+  if(asyncReadSigCheck->deletable == 0){
+    lockScope.unlock();
+  }
+  return;
+}
+
+
+void Client2Client::asyncValidateP2RepliesC2C(proto::CommitDecision decision, uint64_t view,
+    const proto::Transaction *txn,
+    const std::string *txnDigest, const proto::GroupedSignatures &groupedSigs,
+    KeyManager *keyManager, const transport::Configuration *config,
+    int64_t myProcessId, proto::CommitDecision myDecision, Verifier *verifier,
+    mainThreadCallback mcb) {
+
+    proto::Phase2Decision p2Decision;
+    p2Decision.Clear();
+    p2Decision.set_decision(decision);
+    p2Decision.set_view(view);
+    p2Decision.set_involved_group(GetLogGroup(*txn, *txnDigest));
+    *p2Decision.mutable_txn_digest() = *txnDigest;
+
+    std::string* p2DecisionMsg = GetUnusedMessageString();
+    p2Decision.SerializeToString(p2DecisionMsg);
+
+    if (groupedSigs.grouped_sigs().size() != 1) {
+      Debug("Expected exactly 1 group for txn %s but saw %lu", BytesToHex(*txnDigest, 16).c_str(), groupedSigs.grouped_sigs().size());
+      mcb((void*) false);
+      return;
+    }
+
+    const auto &sigs = groupedSigs.grouped_sigs().begin(); //this is an iterator
+
+    std::unordered_set<uint64_t> replicasVerified;
+    int64_t logGrp = GetLogGroup(*txn, *txnDigest);
+    //verify that this group corresponds to the log group
+    if(sigs->first != logGrp){
+      Debug("P2 replies from group (%lu) that is not logging group (%lu) for txn %s.", sigs->first, logGrp, BytesToHex(*txnDigest, 16).c_str());
+      mcb((void*) false);
+      return;
+    }
+    std::shared_ptr<AsyncReadSigCheck> asyncReadSigCheck = std::make_shared<AsyncReadSigCheck>(QuorumSize(config), std::move(mcb), 1, decision);
+    if(config->f == 1){
+      if(asyncReadSigCheck->quorumSize != 5) Panic("P2 Quorum size is wrong?: %d", asyncReadSigCheck->quorumSize);
+      if(sigs->second.sigs_size() !=5) Panic("P2 Quorum wrong amount of sigs? %d", sigs->second.sigs_size());
+    }
+
+    asyncReadSigCheck->ccMsgs.push_back(p2DecisionMsg);
+    std::vector<std::function<void*(void)>> verificationJobs;
+
+    Debug("%d P2 signatures included for txn %s", sigs->second.sigs().size(), BytesToHex(*txnDigest, 16).c_str());
+
+    for (const auto &sig : sigs->second.sigs()) {
+
+      if (!IsReplicaInGroup(sig.process_id(), sigs->first, config)) {
+        Debug("Signature for group %lu from replica %lu who is not in group; txn %s.", sigs->first, sig.process_id(), BytesToHex(*txnDigest, 16).c_str());
+        asyncReadSigCheck->mcb((void*) false);
+        return;
+      }
+      if (!replicasVerified.insert(sig.process_id()).second) {
+        Debug("Duplicate signature from %lu for txn %s", sig.process_id(), BytesToHex(*txnDigest, 16).c_str() );
+        asyncReadSigCheck->mcb((void*) false);
+        return;
+      }
+      //TODO: does this work as expected?
+      bool skip = false;
+      if (sig.process_id() == myProcessId && myProcessId >= 0) {
+        if (p2Decision.decision() == myDecision) {
+          skip = true;
+          asyncReadSigCheck->num_skips++;
+          Debug("Skipping verification of local signature for txn %s", BytesToHex(*txnDigest, 16).c_str() );
+          asyncReadSigCheck->groupCounts[sigs->first]++;
+          if (asyncReadSigCheck->groupCounts[sigs->first] == asyncReadSigCheck->quorumSize) {
+            Debug("Completed Quorum for txn %s", BytesToHex(*txnDigest, 16).c_str() );
+            asyncReadSigCheck->mcb((void*) true);
+            return;
+          }
+        }
+      }
+      if(skip) continue;
+
+      crypto::PubKey* pubKey = keyManager->GetPublicKey(sig.process_id());
+      const std::string* mut_sig = &sig.signature();
+
+      auto f = [this, verifier, pubKey, p2DecisionMsg, mut_sig, asyncReadSigCheck, logGrp](){
+        void* res = (void*) verifier->Verify2(pubKey, p2DecisionMsg, mut_sig);
+        asyncValidateP2RepliesC2CCallback(asyncReadSigCheck, logGrp, res);
+        return (void*) res;
+      };
+      verificationJobs.push_back(std::move(f));
+    }
+    asyncReadSigCheck->deletable = verificationJobs.size();
+    for (auto&& f : std::move(verificationJobs)){
+      Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+      parallelSigCheckQueue.push(executor);
+    }
+}
+
+void Client2Client::asyncValidateP2RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result){
+
+  //bool verification_result = * ((bool*) result);
+  //delete (bool*) result;
+
+  Debug("(CPU:%d - mainthread) asyncValidateP2RepliesCallback with result: %s", sched_getcpu(), result ? "true" : "false");
+
+
+  auto lockScope = std::unique_lock<std::mutex>(asyncReadSigCheck->objMutex);
+  // std::unique_lock<std::mutex> lock;
+
+  //Need to delete only after "last count" has finished.
+  asyncReadSigCheck->deletable--;
+
+  if(asyncReadSigCheck->terminate){
+    if(asyncReadSigCheck->deletable == 0){
+      Debug("Return to CB UNSUCCESSFULLY");
+      Panic("fail validation");
+      if(asyncReadSigCheck->callback) asyncReadSigCheck->mcb((void*) false);
+      lockScope.unlock();
+    }
+    return;
+  }
+  if(!result){
+     Panic("P2 validation fails");
+      asyncReadSigCheck->terminate = true;
+
+      if(asyncReadSigCheck->deletable == 0){
+        Debug("Return to CB UNSUCCESSFULLY");
+        Panic("fail validation");
+        asyncReadSigCheck->mcb((void*) false);
+        lockScope.unlock();
+      }
+      return;
+    }
+
+  asyncReadSigCheck->groupCounts[groupId]++;
+  UW_ASSERT(asyncReadSigCheck->groupCounts.size() == 1);   //Note: P2 only has one involved group, namely the logging group.
+
+  Debug("%d out of necessary %d Phase2Replies for logging group %d verified.", asyncReadSigCheck->groupCounts[groupId],asyncReadSigCheck->quorumSize,(int)groupId);
+
+  if (asyncReadSigCheck->groupCounts[groupId] == asyncReadSigCheck->quorumSize) {
+     Debug("Phase2Replies for logging group %d successfully verified.", (int)groupId);
+    asyncReadSigCheck->terminate = true;
+    asyncReadSigCheck->callback = false;
+    asyncReadSigCheck->mcb((void*) true);
+
+    if(asyncReadSigCheck->deletable == 0){
+      lockScope.unlock();
+    }
+    return;
+
+  }
+  else{
+      Debug("Phase2Replies for logging group %d insufficient to complete.", (int)groupId);
+      if(asyncReadSigCheck->deletable == 0){
+        Debug("Return to CB UNSUCCESSFULLY");
+        Panic("fail validation. Decision: %d Quorum size: %d, Group Counts: %d. Num skips: %d", asyncReadSigCheck->decision, asyncReadSigCheck->quorumSize, asyncReadSigCheck->groupCounts[groupId], asyncReadSigCheck->num_skips);
+        asyncReadSigCheck->mcb((void*) false);
+        lockScope.unlock();
+      }
+      return;
+  }
+}
+
 
 } // namespace sintrstore

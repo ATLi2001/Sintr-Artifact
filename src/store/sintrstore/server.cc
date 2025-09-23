@@ -1216,17 +1216,13 @@ void Server::HandleRead(const TransportAddress &remote,
             if (params.maxDepDepth == -1 || DependencyDepth(mostRecent) <= params.maxDepDepth) {
               readReply->mutable_write()->set_prepared_value(preparedValue);
               if(params.sintr_params.hideTimestamps) {
-                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(Timestamp(mostRecent->timestamp())));
+                readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(mostRecent->timestamp()));
                 *readReply->mutable_prepared_timestamp() = mostRecent->timestamp();
               } else {
                 *readReply->mutable_write()->mutable_prepared_timestamp() = mostRecent->timestamp();
               }
-              std::string tempDigest = TransactionDigest(*mostRecent, params.hashDigest, params.sintr_params.hideTimestamps);
-              if(params.sintr_params.hashEndorsements) {
-                tempDigest = EndorsedTxnDigest(tempDigest, *mostRecent, params.hashDigest);
-              }
               //Debug("setting prepared value and digest for txn %s", BytesToHex(tempDigest,16).c_str());
-              *readReply->mutable_write()->mutable_prepared_txn_digest() = tempDigest;
+              *readReply->mutable_write()->mutable_prepared_txn_digest() = TransactionDigest(*mostRecent, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
             }
           }
         }
@@ -1248,18 +1244,14 @@ void Server::HandleRead(const TransportAddress &remote,
           Debug("Prepared policy id write with most recent ts %lu.%lu.",
                   tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
           if(params.sintr_params.hideTimestamps) {
-            readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
+            // readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
             tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
           } else {
             tsPolicy.first.serialize(readReply->mutable_write()->mutable_prepared_policy_timestamp());
           }
           readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(preparedPolicyId);
           tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-          std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
-          if(params.sintr_params.hashEndorsements) {
-            tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
-          }
-          *readReply->mutable_write()->mutable_prepared_policy_txn_digest() = tempDigest;
+          *readReply->mutable_write()->mutable_prepared_policy_txn_digest() = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
         } else {
           // using a committed policy for a prepared write
           if(params.sintr_params.hideTimestamps) {
@@ -1302,7 +1294,7 @@ void Server::HandleRead(const TransportAddress &remote,
       readReply->mutable_write()->set_prepared_value(preparedPolicyVal);
       if(params.sintr_params.hideTimestamps) {
         readReply->mutable_write()->set_hashed_prepared_ts(TimestampDigest(tsPolicy.first));
-        readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
+        // readReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
         *readReply->mutable_prepared_timestamp() = mostRecentPolicyTxn->timestamp();
         tsPolicy.first.serialize(readReply->mutable_prepared_policy_timestamp());
       } else {
@@ -1313,10 +1305,7 @@ void Server::HandleRead(const TransportAddress &remote,
               tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
       readReply->mutable_write()->mutable_prepared_policy()->set_policy_id(msg.key());
       tsPolicy.second.policy->SerializeToProtoMessage(readReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-      std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
-      if(params.sintr_params.hashEndorsements) {
-        tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
-      }
+      std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       *readReply->mutable_write()->mutable_prepared_policy_txn_digest() = tempDigest;
       *readReply->mutable_write()->mutable_prepared_txn_digest() = tempDigest;
     } else {
@@ -1522,7 +1511,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
   }
   
   std::string txnDigest;
-  std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps); //could parallelize it too hypothetically
+  std::string oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, false); //could parallelize it too hypothetically
   //Notice("Txn:[%d:%d] has digest: %s", txn->client_id(), txn->client_seq_num(), BytesToHex(txnDigest, 16).c_str());
 
   //if(params.signClientProposals) *txn->mutable_txndigest() = txnDigest; //Hack to have access to txnDigest inside TXN later (used for abstain conflict)
@@ -1534,7 +1523,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 
     // TODO: can get rid of phase1 message endorsements bc endorsements come with txn now
     // Right now we just check if the txn digest computed from both is the same
-    txnDigest = EndorsedTxnDigest(oldTxnDigest, *txn, params.hashDigest);
+    txnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, true);
     Debug("OLD TXN DIGEST: %s", BytesToHex(oldTxnDigest, 16).c_str());
     Debug("NEW TXN DIGEST:  %s", BytesToHex(txnDigest, 16).c_str());
 
@@ -1846,10 +1835,7 @@ void Server::HandlePhase2(const TransportAddress &remote, proto::Phase2 &msg) {
       txnDigest = &msg.txn_digest();
     } else {
       txn = &msg.txn();
-      computedTxnDigest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-      if(params.sintr_params.hashEndorsements) {
-        computedTxnDigest = EndorsedTxnDigest(computedTxnDigest, msg.txn(), params.hashDigest);
-      }
+      computedTxnDigest = TransactionDigest(msg.txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       txnDigest = &computedTxnDigest;
       Debug("Validate Proofs no txn digest P2: Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
       RegisterTxTS(computedTxnDigest, txn, Timestamp(txn->timestamp()));
@@ -1979,11 +1965,7 @@ void Server::HandlePhase2(const TransportAddress &remote, proto::Phase2 &msg) {
             if(msg.has_txn()){
               txn = &msg.txn();
               // check that digest and txn match..
-              std::string tempDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
-              if(params.sintr_params.hashEndorsements) {
-                tempDigest = EndorsedTxnDigest(tempDigest, *txn, params.hashDigest);
-              }
-               if(*txnDigest != tempDigest) return;
+               if(*txnDigest != TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements)) return;
                Debug("P2: Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
                RegisterTxTS(*txnDigest, txn, Timestamp(txn->timestamp()));
             }
@@ -2189,11 +2171,7 @@ void Server::HandleWriteback(const TransportAddress &remote,
       if(msg.has_txn()){
         txn = msg.release_txn();
         // check that digest and txn match..
-        std::string tempDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
-        if(params.sintr_params.hashEndorsements) {
-          tempDigest = EndorsedTxnDigest(tempDigest, *txn, params.hashDigest);
-        }
-         if(*txnDigest != tempDigest) return;
+         if(*txnDigest != TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements)) return;
         Debug("Writeback 1 Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
         RegisterTxTS(*txnDigest, txn, Timestamp(txn->timestamp()));
       }
@@ -2242,10 +2220,7 @@ void Server::HandleWriteback(const TransportAddress &remote,
   } else {
     UW_ASSERT(msg.has_txn());
     txn = msg.release_txn();
-    computedTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
-    if(params.sintr_params.hashEndorsements) {
-      computedTxnDigest = EndorsedTxnDigest(computedTxnDigest, *txn, params.hashDigest);
-    }
+    computedTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
     // txnDigest shouldn't end up as a dangling pointer bc I think it has the same scope as computedTxnDigest
     txnDigest = &computedTxnDigest;
     Debug("Writeback 2 Timestamp is: %d, %d", txn->timestamp().id(), txn->timestamp().timestamp());
@@ -3276,6 +3251,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
   Timestamp ts(txn->timestamp());
+  std::set<std::string> policiesChecked;
 
   for (const auto &write : txn->write_set()) {
     if (write.is_table_col_version()) {
@@ -3295,6 +3271,11 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       // if txn is POLICY_ID_POLICY, then writeset keys are policy ids
       policyId = write.key();
     }
+    if(policiesChecked.find(policyId) != policiesChecked.end()) {
+      continue;
+    } else {
+      policiesChecked.insert(policyId);
+    }
 
     Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
 
@@ -3308,6 +3289,8 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   }
 
   if (params.sintr_params.checkPolicyLeak) {
+    policiesChecked.clear();
+    std::string policyId;
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
       if (read.is_table_col_version()) {
@@ -3318,8 +3301,13 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       if (!IsKeyOwned(read.key())) {
         continue;
       }
-  
-      std::string policyId = policyIdFunction(read.key(), "");
+
+      policyId = policyIdFunction(read.key(), "");
+      if(policiesChecked.find(policyId) != policiesChecked.end()) {
+        continue;
+      } else {
+        policiesChecked.insert(policyId);
+      }
       Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;

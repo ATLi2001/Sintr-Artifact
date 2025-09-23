@@ -159,7 +159,7 @@ class Client : public ::Client {
       queryMsg.set_retry_version(0);
       if(client->params.sintr_params.hideTimestamps) {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
-          TimestampDigest(Timestamp(client->txn.timestamp())), client->params.sintr_params.hashQueryGenId);
+          TimestampDigest(client->txn.timestamp()), client->params.sintr_params.hashQueryGenId);
       } else {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "", client->params.sintr_params.hashQueryGenId);
       }
@@ -238,8 +238,7 @@ class Client : public ::Client {
   void PointQueryResultCallback(PendingQuery *pendingQuery,  
                             int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                             const proto::Dependency &dep, bool hasDep, bool addReadSet,
-                            const proto::CommittedProof &proof, const std::string &serializedWrite, 
-                            const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg); 
+                            const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                             std::vector<proto::SignedMessage *> *query_sigs, // take ownership

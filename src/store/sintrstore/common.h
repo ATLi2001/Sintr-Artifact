@@ -403,15 +403,21 @@ bool ValidateDependency(const proto::Dependency &dep,
     const transport::Configuration *config, uint64_t readDepSize,
     KeyManager *keyManager, Verifier *verifier);
 
+int validateKeyAndTS(const proto::CommittedProof &proof, const std::string *txnDigest,
+  const std::string &key, const std::string &val, const Timestamp &timestamp,
+  const std::string &tsDigest);
+
 bool operator==(const proto::Write &pw1, const proto::Write &pw2);
 
 bool operator!=(const proto::Write &pw1, const proto::Write &pw2);
 
-std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS = false);
+std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS = false, bool hashEndorsements = false);
 
 std::string EndorsedTxnDigest(const std::string &txnDigest, const proto::Transaction &txn, bool hashDigest);
 
 std::string TimestampDigest(const Timestamp &ts);
+
+std::string TimestampDigest(const TimestampMessage &ts);
 
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS);
 

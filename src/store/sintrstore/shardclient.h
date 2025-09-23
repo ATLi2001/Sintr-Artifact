@@ -69,9 +69,9 @@ static int successful_invoke = 0;
 typedef std::function<void(int, const std::string &,
     const std::string &, const Timestamp &, const proto::Dependency &,
     bool, bool,
-    const proto::CommittedProof &, const std::string &, const std::string &,
+    const proto::CommittedProof &, const proto::SignedMessage &,
     const EndorsementPolicyMessage &,
-    const proto::Dependency &, bool)> read_callback;
+    const proto::Dependency &, bool, const std::string &)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
 ////////// Queries
@@ -81,7 +81,7 @@ typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string
   const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
   const proto::Dependency &, bool, bool,
-  const proto::CommittedProof &, const std::string &, const std::string &,
+  const proto::CommittedProof &, const proto::SignedMessage &,
   const EndorsementPolicyMessage &)> point_result_callback;  //TODO: This == Get callback.
 
 typedef std::function<void(int)> result_timeout_callback;
@@ -256,9 +256,8 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
 
     // these correspond with maxValue, to be forwarded to peers
     proto::CommittedProof maxCommittedProof;
-    // this may be a proto::Write or signed version of it
-    std::string maxSerializedWrite;
-    std::string maxSerializedWriteTypeName;
+    // this must be a signed write... sintr doesn't work without server sigs
+    proto::SignedMessage maxWrite;
     // endorsement policy corresponding to maxValue
     EndorsementPolicyMessage maxPolicy;
 
@@ -539,7 +538,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
   void GetTimeout(uint64_t reqId);
 
   /* Callbacks for hearing back from a shard for an operation. */
-  void HandleReadReply(const proto::ReadReply &readReply);
+  void HandleReadReply(proto::ReadReply &readReply);
   void HandlePhase1Reply(proto::Phase1Reply &phase1Reply);
   void ProcessP1R(proto::Phase1Reply &reply, bool FB_path = false, PendingFB *pendingFB = nullptr, const std::string *txnDigest = nullptr);
   void HandleP1REquivocate(const proto::Phase1Reply &phase1Reply);

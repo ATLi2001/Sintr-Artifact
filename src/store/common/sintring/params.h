@@ -69,6 +69,8 @@ typedef struct SintrParameters {
   const bool hashQueryGenId; // hash query general id
   const bool separateTransport; // enable separate transport object for c2c communication
   const uint32_t maxClientsConnect; // max number of clients that a single client connects to
+  const bool c2cUseAsynchVal; // use asynch validation for transaction writes in C2C
+  const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -77,7 +79,8 @@ typedef struct SintrParameters {
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
-    bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect) :
+    bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
+    bool c2cUseAsynchVal, bool useEndorsementCB) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -107,7 +110,9 @@ typedef struct SintrParameters {
     clientEstimatePolicy(clientEstimatePolicy),
     hashQueryGenId(hashQueryGenId),
     separateTransport(separateTransport),
-    maxClientsConnect(maxClientsConnect)
+    maxClientsConnect(maxClientsConnect),
+    c2cUseAsynchVal(c2cUseAsynchVal),
+    useEndorsementCB(useEndorsementCB)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering

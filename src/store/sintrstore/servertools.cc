@@ -664,11 +664,7 @@ void Server::FindTableVersionOld(const std::string &key_name, const Timestamp &t
 
     if(mostRecentPrepared != nullptr){ //Read prepared
       readSetMgr->AddToReadSet(key_name, mostRecentPrepared->timestamp());
-      std::string tempDigest = TransactionDigest(*mostRecentPrepared, params.hashDigest, params.sintr_params.hideTimestamps);
-      if(params.sintr_params.hashEndorsements) {
-        tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPrepared, params.hashDigest);
-      }
-      readSetMgr->AddToDepSet(tempDigest, mostRecentPrepared->timestamp());
+      readSetMgr->AddToDepSet(TransactionDigest(*mostRecentPrepared, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements), mostRecentPrepared->timestamp());
     }
     else{ //Read committed
       TimestampMessage tsm;
@@ -1703,10 +1699,7 @@ void Server::ManageWritebackValidation(proto::Writeback &msg, const std::string 
              stats.Increment("total_transactions_fast_Abort_conflict", 1);
 
             Debug("2: Taking Aborted conflict branch for txn %s WB validation", BytesToHex(*txnDigest, 16).c_str());
-            std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-            if(params.sintr_params.hashEndorsements) {
-              committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
-            }
+            std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
               asyncValidateCommittedConflict(msg.conflict(), &committedTxnDigest, txn,
                     txnDigest, params.signedMessages, keyManager, &config, verifier,
                     std::move(mcb), transport, params.sintr_params.policyFunctionName, true, params.batchVerification);
@@ -1776,10 +1769,7 @@ void Server::ManageWritebackValidation(proto::Writeback &msg, const std::string 
             }
 
           } else if (msg.decision() == proto::ABORT && msg.has_conflict()) {
-              std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-              if(params.sintr_params.hashEndorsements) {
-                committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, msg.conflict().txn(), params.hashDigest);
-              }
+              std::string committedTxnDigest = TransactionDigest(msg.conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
                 if(params.batchVerification){
                   mainThreadCallback mcb(std::bind(&Server::WritebackCallback, this, &msg, txnDigest, txn, std::placeholders::_1));
                   asyncValidateCommittedConflict(msg.conflict(), &committedTxnDigest, txn,

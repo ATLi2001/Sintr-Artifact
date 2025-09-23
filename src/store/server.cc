@@ -858,7 +858,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_policy_CCC, false, false, true,
         FLAGS_sintr_hash_query_gen_id,
         false,
-        0
+        0, false, false
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
