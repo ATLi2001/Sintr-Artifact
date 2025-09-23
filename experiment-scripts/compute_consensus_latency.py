@@ -8,23 +8,42 @@ if len(sys.argv) != 2:
 # event: begin, end
 # computes difference between begin and end for each tx_id and averages them
 
-with open(sys.argv[1], "r") as f:
-    lines = f.readlines()
+begin_times = {}  # tx_id -> timestamp
+end_times = {}    # tx_id -> timestamp
 
-    begin_lines = [line for line in lines if "begin" in line]
-    end_lines = [line for line in lines if "end" in line]
+with open(sys.argv[1], "r") as f:    
+    # Single pass through the file
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+            
+        parts = line.split(",")
+        if len(parts) != 3:
+            continue
+        if not "begin" in parts and not "end" in parts:
+            continue
 
-    begin_times = [int(line.split(",")[0]) for line in begin_lines]
-    end_times = [int(line.split(",")[0]) for line in end_lines]
-    tx_ids = [line.split(",")[1] for line in begin_lines]
+        timestamp = int(parts[0])
+        tx_id = parts[1]
+        event = parts[2]
+        
+        if event == "begin":
+            begin_times[tx_id] = timestamp
+        elif event == "end":
+            end_times[tx_id] = timestamp
 
-    tx_latency = []
-    for tx_id in set(tx_ids):
-        begin_time = [int(line.split(",")[0]) for line in begin_lines if line.split(",")[1] == tx_id][0]
-        if tx_id in [line.split(",")[1] for line in end_lines]:
-            end_time = [int(line.split(",")[0]) for line in end_lines if line.split(",")[1] == tx_id][-1]
-            tx_latency.append(end_time - begin_time)
+# Calculate latencies
+tx_latencies = []
+for tx_id, begin_time in begin_times.items():
+    if tx_id in end_times:
+        # Use the last end time for this transaction
+        end_time = end_times[tx_id]
+        tx_latencies.append(end_time - begin_time)
 
-    # average
-    avg_tx_latency = sum(tx_latency) / len(tx_latency)
+# Calculate average
+if tx_latencies:
+    avg_tx_latency = sum(tx_latencies) / len(tx_latencies)
     print(f"Average consensus latency: {avg_tx_latency} ms")
+else:
+    print("No completed transactions found")
