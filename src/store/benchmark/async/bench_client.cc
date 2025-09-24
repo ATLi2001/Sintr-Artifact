@@ -61,6 +61,7 @@ BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 	started = false;
 	done = false;
   cooldownStarted = false;
+  isNextPolicyChange = false;
   if (numRequests > 0) {
 	  latencies.reserve(numRequests);
   }

@@ -97,14 +97,11 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
         timeServer, phase1DecisionTimeout, consecutiveMax));
   }
 
-  policyParseClient = new PolicyParseClient();
   policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
-  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(params.sintr_params.policyConfigPath);
+  policyCache = policyParseClient.ParseConfigFile(params.sintr_params.policyConfigPath);
 
   endorseClient = new EndorsementClient(client_id);
   endorseClient->SetDebugCheckFunction(DebugCheck);
-  UW_ASSERT(policyCache.IsEmpty());
-  policyCache.Initialize(std::move(policies));
 
   // create client for other clients
   // right now group is always 0, maybe configure later
@@ -165,7 +162,6 @@ Client::~Client()
   }
   delete c2client;
   delete endorseClient;
-  delete policyParseClient;
   delete verifier;
 }
 
@@ -225,6 +221,10 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
       policyClient = new PolicyClient();
       protoTxnState.ParseFromString(txnState);
       EstimateTxnPolicy(protoTxnState, policyClient);
+      Debug(
+        "Estimated policy (%s) for client id %lu, seq num %lu",
+        policyClient->ToString().c_str(), client_id, client_seq_num
+      );
     }
     c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient));
 
@@ -270,7 +270,7 @@ bool Client::IsPolicyChangeTxn(const TxnState &protoTxnState) const {
 
 void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient) {
   EstimatePolicy est_policy_obj(params.sintr_params.policyFunctionName);
-  est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
+  est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, *policyCache);
 }
 
 void Client::Get(const std::string &key, get_callback gcb,
@@ -316,11 +316,11 @@ void Client::Get(const std::string &key, get_callback gcb,
       }
       // new policy can only come from server, which must correspond to addReadSet
       if (policyMsg.IsInitialized()) {
-        if (Message_DebugEnabled(__FILE__)) {
-          Debug("PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %lu",client_id, client_seq_num, BytesToHex(key, 16).c_str(), policyMsg.policy_id());
-        }
-        Policy *policy = policyParseClient->Parse(policyMsg.policy());
-        policyCache.Put(policyMsg.policy_id(), std::move(policy));
+        Debug(
+          "PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %s",
+          client_id, client_seq_num, key.c_str(), policyMsg.policy_id().c_str()
+        );
+        policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()));
       }
       if (hasDep) {
         *txn.add_deps() = dep;
@@ -371,12 +371,11 @@ void Client::Put(const std::string &key, const std::string &value,
     WriteMessage *write = txn.add_write_set();
     write->set_key(key);
     write->set_value(value);
-    const Policy *policy;
     // Contact the appropriate shard to set the value.
     if(txn.policy_type() == proto::Transaction::POLICY_ID_POLICY) {
       // look in cache for policy
-      bool exists = policyCache.Get(key, policy);
-      if (!exists) {
+      const Policy *policy = policyCache->Get(key);
+      if (policy == nullptr) {
         // if not found, that means we are trying to write to a policy that doesn't exist
         Panic("Attempting to write to policy ID %lu when policy ID doesn't exist", key);
       }
@@ -411,10 +410,11 @@ void Client::Put(const std::string &key, const std::string &value,
     } else {
       if (!params.sintr_params.ignorePolicyUpdate) {
         // look in cache for policy
-        bool exists = policyCache.Get(policyIdFunction(key, value), policy);
-        if (!exists) {
+        const Policy *policy = policyCache->Get(policyIdFunction(key, value));
+        if (policy == nullptr) {
           // if not found, use default policy for now
-          UW_ASSERT(policyCache.Get("p#0", policy));
+          policy = policyCache->Get("p#0");
+          UW_ASSERT(policy != nullptr);
         }
         Debug("Sending policy update for put using c2client in regular transaction");
         c2client->HandlePolicyUpdate(policy);
@@ -510,9 +510,9 @@ void Client::Write(std::string &write_statement, write_callback wcb,
           for (const auto &key : *keys_written) {
             std::string policyId = policyIdFunction(key, "");
             //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
-            const Policy *policy;
-            UW_ASSERT(policyCache.Get(policyId, policy));
-            Debug("handle policy update for policy id %lu in write", policyId);
+            const Policy *policy = policyCache->Get(policyId);
+            UW_ASSERT(policy != nullptr);
+            Debug("handle policy update for policy id %s (policy %s) in write", policyId.c_str(), policy->ToString().c_str());
             c2client->HandlePolicyUpdate(policy);
           }
         }
@@ -827,8 +827,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     // new policy can only come from server, which must correspond to addReadSet
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR key %s in GET",client_id, client_seq_num, BytesToHex(key, 16).c_str());
-      Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      policyCache.Put(policyMsg.policy_id(), std::move(policy));
+      policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()));
     }
   }
   if (hasDep) {
@@ -1037,9 +1036,8 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     const EndorsementPolicyMessage &policyMsg = policyEntry.second.first;
     UW_ASSERT(id == policyMsg.policy_id());
     if (policyMsg.IsInitialized()) {
-      Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id);
-      Policy *policy = policyParseClient->Parse(policyMsg.policy());
-      policyCache.Put(policyMsg.policy_id(), std::move(policy));
+      Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id.c_str());
+      policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()));
     }
   }
 

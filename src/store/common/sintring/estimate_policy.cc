@@ -93,8 +93,8 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     }
     if (repeated_values.size() > 0) {
       for (int const &value : repeated_values) {
-        const Policy *temp_policy;
-        UW_ASSERT(policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench), temp_policy));
+        const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench));
+        UW_ASSERT(temp_policy != nullptr);
         policyClient->AddPolicy(temp_policy);
       }
     }
@@ -107,8 +107,8 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     }
     else {
       // txn will have writes
-      const Policy *temp_policy;
-      UW_ASSERT(policyCache.Get("p#0", temp_policy));
+      const Policy *temp_policy = policyCache.Get("p#0");
+      UW_ASSERT(temp_policy != nullptr);
       policyClient->AddPolicy(temp_policy);
     }
   }
@@ -158,8 +158,8 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     }
     if (repeated_values.size() > 0) {
       for (int const &value : repeated_values) {
-        const Policy *temp_policy;
-        UW_ASSERT(policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench), temp_policy));
+        const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench));
+        UW_ASSERT(temp_policy != nullptr);
         policyClient->AddPolicy(temp_policy);
       }
     }
@@ -173,14 +173,14 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         if (!valTxnData.read_only()) {
           // txn will have writes
           if (policy_function_name.empty() || policy_function_name == "basic_id") {
-            const Policy *temp_policy;
-            UW_ASSERT(policyCache.Get("p#0", temp_policy));
+            const Policy *temp_policy = policyCache.Get("p#0");
+            UW_ASSERT(temp_policy != nullptr);
             policyClient->AddPolicy(temp_policy);
           }
           else if (policy_function_name == "rw_sql_policy_change_grouped") {
             for (const uint64_t &t : valTxnData.tables()) {
-              const Policy *temp_policy;
-              UW_ASSERT(policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench), temp_policy));
+              const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
+              UW_ASSERT(temp_policy != nullptr);
               policyClient->AddPolicy(temp_policy);
             }
           }
@@ -194,13 +194,13 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
-          const Policy *temp_policy;
-          UW_ASSERT(policyCache.Get("p#0", temp_policy));
+          const Policy *temp_policy = policyCache.Get("p#0");
+          UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
         else if (policy_function_name == "rw_sql_policy_change_grouped") {
-          const Policy *temp_policy;
-          UW_ASSERT(policyCache.Get(EstimatePolicy::TableToPolicyID(valTxnData.table(), txn_bench), temp_policy));
+          const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(valTxnData.table(), txn_bench));
+          UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
         else {
@@ -212,8 +212,8 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
   }
   else {
     // return default policy ID (policy ID 0)
-    const Policy *temp_policy;
-    UW_ASSERT(policyCache.Get("p#0", temp_policy));
+    const Policy *temp_policy = policyCache.Get("p#0");
+    UW_ASSERT(temp_policy != nullptr);
     policyClient->AddPolicy(temp_policy);
   }
 }

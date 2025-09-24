@@ -40,6 +40,7 @@
 #include "lib/assert.h"
 #include "lib/batched_sigs.h"
 #include "lib/tcptransport.h"
+#include "store/common/policy/policy_cache.h"
 #include "store/sintrstore/basicverifier.h"
 #include "store/sintrstore/common.h"
 #include "store/sintrstore/localbatchsigner.h"
@@ -165,7 +166,6 @@ Server::Server(const transport::Configuration &config, int groupIdx, int idx,
   LoadPolicyStore(params.sintr_params.policyConfigPath);
 
   policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
-  policyParseClient = new PolicyParseClient();
 
   if (sql_bench) {
 
@@ -347,11 +347,6 @@ Server::~Server() {
   //Latency_Dump(&waitOnProtoLock);
   //Latency_Dump(&batchSigner->waitOnBatchLock);
   //Latency_Dump(&(store.storeLockLat));
-
-  // free policies
-  for (const auto &p : policiesToFree) {
-    delete p;
-  }
 
   if(sql_bench){
     Notice("Freeing Table Store interface");
@@ -545,16 +540,18 @@ void Server::Load(const std::string &key, const std::string &value,
 }
 
 void Server::LoadPolicyStore(const std::string &policyStorePath) {
-  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(policyStorePath);
+  std::unique_ptr<PolicyCache> policies = policyParseClient.ParseConfigFile(policyStorePath);
+  std::vector<std::string> policyIds = policies->GetAllKeys();
 
-  for (const auto &p : policies) {
+  for (const auto &p : policyIds) {
     PolicyStoreValue policyStoreValue;
-    policyStoreValue.policy = p.second;
+    std::unique_ptr<Policy> policy = policies->Take(p);
+    policyStoreValue.policy = policy.get();
     auto committedItr = committed.find("");
     UW_ASSERT(committedItr != committed.end());
     policyStoreValue.proof = committedItr->second;
-    policyStore.put(p.first, policyStoreValue, Timestamp());
-    policiesToFree.push_back(p.second);
+    policyStore.put(p, policyStoreValue, Timestamp());
+    policiesToFree.push_back(std::move(policy));
   }
 }
 
@@ -1128,6 +1125,10 @@ void Server::HandleRead(const TransportAddress &remote,
       std::string policyId = policyIdFunction(msg.key(), tsVal.second.val);
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       GetPolicy(policyId, ts, tsPolicy);
+      Debug(
+        "Found policy %s in policyStore at time %lu.%lu",
+        policyId.c_str(), tsPolicy.first.getTimestamp(), tsPolicy.first.getID()
+      );
       if(params.sintr_params.hideTimestamps) {
         readReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
         tsPolicy.first.serialize(readReply->mutable_committed_policy_timestamp());
@@ -2904,9 +2905,10 @@ void Server::CommitToStore(proto::CommittedProof *proof, proto::Transaction *txn
       PolicyStoreValue policyVal;
       PolicyObject policyMsg;
       policyMsg.ParseFromString(write.value());
-      policyVal.policy = policyParseClient->Parse(policyMsg);
+      std::unique_ptr<Policy> policy = policyParseClient.Parse(policyMsg);
+      policyVal.policy = policy.get();
       // parse allocates a new policy so need to free it at end
-      policiesToFree.push_back(policyVal.policy);
+      policiesToFree.push_back(std::move(policy));
       policyVal.proof = proof;
       policyStore.put(write.key(), policyVal, ts);
       return;
@@ -3218,13 +3220,12 @@ void Server::GetPolicy(const std::string policyId, const Timestamp &ts,
         // policy change transaction writeset value is a new policy
         PolicyObject policyMsg;
         policyMsg.ParseFromString(w.value());
-        // parse results in a new allocation, so need to free it later
-        Policy *policy = policyParseClient->Parse(policyMsg);
-        policiesToFree.push_back(policy);
-
+        std::unique_ptr<Policy> policy = policyParseClient.Parse(policyMsg);
         tsPolicy.first = mostRecentPrepared->timestamp();
-        tsPolicy.second.policy = policy;
+        tsPolicy.second.policy = policy.get();
         tsPolicy.second.proof = nullptr;
+        // parse results in a new allocation, so need to free it later
+        policiesToFree.push_back(std::move(policy));
 
         if (preparedTxn != nullptr) {
           *preparedTxn = mostRecentPrepared;
@@ -3252,7 +3253,9 @@ bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transac
   // }
 
   PolicyClient policyClient;
-  ExtractPolicy(txn, policyClient);
+  if (!ExtractPolicy(txn, policyClient)) {
+    return false;
+  }
   return ValidateEndorsements(policyClient, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
@@ -3264,12 +3267,19 @@ void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const 
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
   //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
   // }
-  
-  ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
+
+  if (!ExtractPolicy(txn, *asyncValidatePrepare.policyClient)) {
+    bool done = asyncValidatePrepare.SetPolicyLeak();
+    // free if all done
+    if (done) {
+      delete &asyncValidatePrepare;
+    }
+    return;
+  }
   ValidateEndorsements(asyncValidatePrepare, &txn->endorsements(), txn->client_id(), txnDigest);
 }
 
-void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient) {
+bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
@@ -3295,7 +3305,10 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       policyId = write.key();
     }
 
-    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
+    Debug(
+      "Extracting policy %s at time %lu.%lu for write to key %s",
+      policyId.c_str(), ts.getTimestamp(), ts.getID(), write.key().c_str()
+    );
 
     std::pair<Timestamp, PolicyStoreValue> tsPolicy;
     if(params.sintr_params.useOCCForPolicies) {
@@ -3319,7 +3332,10 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
   
       std::string policyId = policyIdFunction(read.key(), "");
-      Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
+      Debug(
+        "Extracting policy %s at time %lu.%lu for read to key %s",
+        policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
+      );
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       if(params.sintr_params.useOCCForPolicies) {
@@ -3328,11 +3344,12 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
         GetPolicy(policyId, read.readtime(), tsPolicy, true);
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
-        Panic(
+        Debug(
           "Read policy (%s) does not imply write policy (%s)",
           tsPolicy.second.policy->ToString().c_str(),
           policyClient.ToString().c_str()
         );
+        return false;
       }
     }
   }
@@ -3341,6 +3358,8 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
   // auto duration = end - start;
   // extract_policy_us.add(duration);
+
+  return true;
 }
 
 bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 

@@ -29,36 +29,38 @@
 #include "lib/message.h"
 
 
-PolicyCache::PolicyCache() {}
-
-PolicyCache::~PolicyCache() {
-  for (const auto &idPolicy : policyCache) {
-    delete idPolicy.second;
-  }
-}
-
-void PolicyCache::Initialize(std::map<std::string, Policy *> &&policies) {
-  UW_ASSERT(this->policyCache.empty());
-  policyCache = std::move(policies);
-}
-
 bool PolicyCache::IsEmpty() const {
   return policyCache.empty();
 }
 
-bool PolicyCache::Get(const std::string &policyId, const Policy *&policy) const {
+const Policy *PolicyCache::Get(const std::string &policyId) const {
   auto it = policyCache.find(policyId);
   if (it == policyCache.end()) {
-    return false;
+    return nullptr;
   }
-  policy = it->second;
-  return true;
+  return it->second.get();
 }
 
-void PolicyCache::Put(const std::string &policyId, Policy *&&policy) {
-  UW_ASSERT(policy != nullptr);
-  if (policyCache.find(policyId) != policyCache.end()) {
-    delete policyCache[policyId];
+std::unique_ptr<Policy> PolicyCache::Take(const std::string &policyId) {
+  auto it = policyCache.find(policyId);
+  if (it == policyCache.end()) {
+    return nullptr;
   }
-  policyCache.emplace(policyId, std::move(policy));
+  std::unique_ptr<Policy> policy = std::move(it->second);
+  policyCache.erase(it);
+  return policy;
+}
+
+void PolicyCache::Put(const std::string &policyId, std::unique_ptr<Policy> policy) {
+  UW_ASSERT(policy != nullptr);
+  // unique_ptr automatically handles cleanup of existing policy
+  policyCache[policyId] = std::move(policy);
+}
+
+std::vector<std::string> PolicyCache::GetAllKeys() const {
+  std::vector<std::string> keys;
+  for (const auto &entry : policyCache) {
+    keys.push_back(entry.first);
+  }
+  return keys;
 }
