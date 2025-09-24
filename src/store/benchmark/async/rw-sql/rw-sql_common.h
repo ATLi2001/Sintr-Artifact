@@ -27,6 +27,7 @@
 #define RW_SQL_COMMON_H
 
 #include "lib/message.h"
+#include "store/common/table_kv_encoder.h"
 #include <string>
 
 namespace rwsql {
@@ -60,6 +61,27 @@ inline RWSQLTransactionType GetBenchmarkTxnTypeEnum(const std::string &txn_type)
   else {
     Panic("Received unexpected txn type: %s", txn_type.c_str());
   }
+}
+
+inline std::string GetPolicyIdForTable(const std::string &table_name, const std::string &policy_function_name = "basic_id") {
+  if (policy_function_name == "basic_id") {
+    return "p#0";
+  }
+  else if (policy_function_name == "rw_sql_policy_change_grouped") {
+    if (table_name == "t0") {
+      return "p#0";
+    } 
+    else {
+      return "p#1";
+    }
+  }
+  else {
+    Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
+  }
+}
+
+inline std::string GetPolicyIdForTable(const uint64_t table_id, const std::string &policy_function_name = "basic_id") {
+  GetPolicyIdForTable(*DecodeTable(std::to_string(table_id)), policy_function_name);
 }
 
 }

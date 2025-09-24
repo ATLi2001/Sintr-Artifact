@@ -58,9 +58,9 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   
   // separate verifier from main client instance
   clients_verifier = new BasicVerifier(transport);
-  
-  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params); 
-  valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
+
+  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params);
+  valParseClient = new ValidationParseClient(10000, params.sintr_params.policyFunctionName, keys); // TODO: pass arg for timeout length
   Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 
   if(params.sintr_params.maxClientsConnect > 0) {

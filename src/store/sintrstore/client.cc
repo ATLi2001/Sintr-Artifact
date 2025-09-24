@@ -269,16 +269,8 @@ bool Client::IsPolicyChangeTxn(const TxnState &protoTxnState) const {
 }
 
 void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient) {
-  if (IsPolicyChangeTxn(protoTxnState)) {
-    // policy change transaction could require separate handling
-    const Policy *policy;
-    UW_ASSERT(policyCache.Get("p#0", policy));
-    policyClient->AddPolicy(policy);
-  } 
-  else {
-    EstimatePolicy est_policy_obj;
-    est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
-  }
+  EstimatePolicy est_policy_obj(params.sintr_params.policyFunctionName);
+  est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
 }
 
 void Client::Get(const std::string &key, get_callback gcb,

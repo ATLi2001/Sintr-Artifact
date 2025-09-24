@@ -36,12 +36,10 @@ namespace rwsql {
 
 class RWSQLPolicyChange : public SyncTransaction, public RWSQLBasePolicyChange {
  public:
-  RWSQLPolicyChange(uint64_t table, uint32_t policy_weight);
+  RWSQLPolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name);
   ~RWSQLPolicyChange();
 
   transaction_status_t Execute(SyncClient &client) override;
-
-  void SerializeTxnState(std::string &txnState);
 };
 
 } // namespace rwsql

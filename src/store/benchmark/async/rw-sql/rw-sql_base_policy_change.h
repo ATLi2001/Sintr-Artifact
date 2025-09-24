@@ -34,7 +34,7 @@ namespace rwsql {
 
 class RWSQLBasePolicyChange {
  public:
-  RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight);
+  RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name);
   RWSQLBasePolicyChange() {};
   virtual ~RWSQLBasePolicyChange();
 
@@ -45,6 +45,7 @@ class RWSQLBasePolicyChange {
 
   uint64_t table;
   uint32_t policy_weight;
+  std::string policy_function_name;
 };
 
 } // namespace rwsql

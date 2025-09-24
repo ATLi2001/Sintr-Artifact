@@ -35,8 +35,8 @@
 
 namespace rwsql {
 
-RWSQLBasePolicyChange::RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight) 
-  : table(table), policy_weight(policy_weight) {}
+RWSQLBasePolicyChange::RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name) 
+  : table(table), policy_weight(policy_weight), policy_function_name(policy_function_name) {}
 
 RWSQLBasePolicyChange::~RWSQLBasePolicyChange() {}
 
@@ -59,7 +59,7 @@ transaction_status_t RWSQLBasePolicyChange::BaseExecute(SyncClient &client, uint
   std::string policy_str;
   policy.SerializeToString(&policy_str);
 
-  std::string policy_id = fmt::format("p#{}", table);
+  std::string policy_id = GetPolicyIdForTable(table, policy_function_name);
   client.Put(policy_id, policy_str, timeout);
 
   return client.Commit(timeout);
