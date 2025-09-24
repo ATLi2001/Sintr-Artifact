@@ -81,7 +81,7 @@ inline std::string GetPolicyIdForTable(const std::string &table_name, const std:
 }
 
 inline std::string GetPolicyIdForTable(const uint64_t table_id, const std::string &policy_function_name = "basic_id") {
-  GetPolicyIdForTable(*DecodeTable(std::to_string(table_id)), policy_function_name);
+  return GetPolicyIdForTable(*DecodeTable(std::to_string(table_id)), policy_function_name);
 }
 
 }

@@ -25,6 +25,7 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/rw-sql/sync/rw-sql_client.h"
+#include "store/benchmark/async/rw-sql/sync/rw-sql_policy_change.h"
 
 #include <iostream>
 #include "rw-sql_client.h"
@@ -47,14 +48,16 @@ RWSQLClient::RWSQLClient(uint64_t numOps, QuerySelector *querySelector, bool rea
       int warmupSec, int cooldownSec, int tputInterval, 
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, 
       const uint32_t timeout,
+      uint64_t policyChangeTime, uint64_t policyChangeTable, uint32_t newPolicyWeight, const std::string &policyFunctionName,
       const std::string &latencyFilename)
      : SyncTransactionBenchClient(client, transport, id, numRequests,
                                  expDuration, delay, warmupSec, cooldownSec,
                                  tputInterval, abortBackoff, retryAborted, maxBackoff, maxAttempts, timeout,
-                                 latencyFilename),
+                                 latencyFilename, policyChangeTime),
         readOnly(readOnly), readOnlyRate(readOnlyRate), querySelector(querySelector), numOps(numOps),
         readSecondaryCondition(readSecondaryCondition), fixedRange(fixedRange), value_size(value_size), value_categories(value_categories), 
-        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel) {
+        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel),
+        policyChangeTable(policyChangeTable), newPolicyWeight(newPolicyWeight), policyFunctionName(policyFunctionName) {
 
     if(readOnly) readOnlyRate = 100;
 }
@@ -65,6 +68,14 @@ RWSQLClient::~RWSQLClient() {
 
 SyncTransaction *RWSQLClient::GetNextTransaction() {
 
+  if (IsNextPolicyChange()) {
+    SetNextPolicyChange(false);
+    Notice("Changing transaction policy for table %lu to weight %u", policyChangeTable, newPolicyWeight);
+    lastOp = "policy_change";
+    return new RWSQLPolicyChange(policyChangeTable, newPolicyWeight, policyFunctionName);
+  }
+
+  lastOp = "rw_sql";
   // Switch depending on read only percentage.
   int ttype = GetRand()() % 100;
   RWSQLTransaction *rw_tx = new RWSQLTransaction(querySelector, numOps, GetRand(), readSecondaryCondition, fixedRange,
@@ -74,7 +85,7 @@ SyncTransaction *RWSQLClient::GetNextTransaction() {
 }
 
 std::string RWSQLClient::GetLastOp() const {
-  return "rw_sql";
+  return lastOp;
 }
 
 } // namespace rw

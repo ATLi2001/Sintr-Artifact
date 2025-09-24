@@ -44,14 +44,15 @@ DEFINE_LATENCY(op);
 
 BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 		int numRequests, int expDuration, uint64_t delay, int warmupSec,
-    int cooldownSec, int tputInterval, const std::string &latencyFilename) :
+    int cooldownSec, int tputInterval, const std::string &latencyFilename,
+    uint64_t policyChangeTime) :
     id(id),
     tputInterval(tputInterval),
     transport(transport),
     rand(id),
     numRequests(numRequests), expDuration(expDuration),	delay(delay),
     warmupSec(warmupSec), cooldownSec(cooldownSec),
-    latencyFilename(latencyFilename) {
+    latencyFilename(latencyFilename), policyChangeTime(policyChangeTime) {
 	if (delay != 0) {
 		Notice("Delay between requests: %ld ms", delay);
 	} else {
@@ -102,6 +103,12 @@ void BenchmarkClient::TimeInterval() {
 }
 
 void BenchmarkClient::WarmupDone() {
+  if (policyChangeTime > 0) {
+    Notice("Will change transaction policy after %lu seconds", policyChangeTime);
+    transport.Timer(policyChangeTime * 1000, [this]() {
+      isNextPolicyChange = true;
+    });
+  }
   started = true;
   Notice("Completed warmup period of %d seconds with %d requests", warmupSec, n);
   n = 0;
