@@ -286,7 +286,7 @@ void Client::Get(const std::string &key, get_callback gcb,
     Debug("GET[%lu:%lu] for key %s", client_id, client_seq_num,
         BytesToHex(key, 16).c_str());
 
-    read_callback rcb = [gcb, this](int status, const std::string &key,
+    read_callback rcb = [gcb, this, target_group_for_put](int status, const std::string &key,
         const std::string &val, const Timestamp &ts, const proto::Dependency &dep,
         bool hasDep, bool addReadSet,
         const proto::CommittedProof &proof, const std::string &serializedWrite, 
@@ -328,7 +328,9 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasPolicyDep) {
         *txn.add_deps() = policyDep;
       }
-      if(!params.sintr_params.ignorePolicyUpdate) {
+      // if target_group_for_put != -1, then we are calling get in order to get policy
+      // so don't need to forward read result to validating clients
+      if(!params.sintr_params.ignorePolicyUpdate && target_group_for_put == -1) {
         c2client->SendForwardReadResultMessage(
           key, val, ts, proof, serializedWrite, 
           serializedWriteTypeName, dep, hasDep, addReadSet,
