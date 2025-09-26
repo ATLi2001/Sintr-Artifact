@@ -401,10 +401,15 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
     )
 
 def create_tput_time_plot(df, output_dir, now_string):
+    fig, ax = plt.subplots(layout="constrained")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Throughput (txn/s)")
+    ax.grid(True)
 
     df["commit_timestamp_ns"] = df["commit_timestamp_ns"].astype(float)
     df["commit_timestamp_ns"] = df["commit_timestamp_ns"] / 1e9
 
+    tput_interval_s = 1
     for experiment_name, group in df.groupby(["experiment_name"]):
         # group by client_id and normalize each client's time to start at 0
         # then combine all clients' data
@@ -416,18 +421,18 @@ def create_tput_time_plot(df, output_dir, now_string):
             client_group["commit_timestamp_ns"] = client_group["commit_timestamp_ns"] - t0
             combined_group = pd.concat([combined_group, client_group])
 
-        # calculate throughput at 1s intervals
-        time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max() + 1, 1)
+        # calculate throughput at intervals
+        time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
         combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
         # throughput is number of transactions in bin
-        tput = combined_group.groupby("time_bin").size()
+        tput = combined_group.groupby("time_bin").size() / tput_interval_s
 
-        plt.plot(time_bins[1:], tput, "-o", label=experiment_name[0])
+        overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
+        print(f"{experiment_name[0]}: avg tput {overall_tput:.2f} txn/s")
 
-    plt.xlabel("Time (s)")
-    plt.ylabel("Throughput (txn/s)")
-    plt.grid(True)
-    plt.legend()
+        ax.plot(time_bins[1:], tput, "-o", label=experiment_name[0])
+
+    fig.legend(loc="outside lower center", ncol=2)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 

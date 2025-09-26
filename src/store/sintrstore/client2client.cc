@@ -480,6 +480,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     // sanity check - policy should be satisfied by the clients we are sending to
     UW_ASSERT(policyClient->IsSatisfied(beginValSent));
   }
+  Debug("Sent begin validate txn message to %lu clients", beginValSent.size() - 1);
 }
 
 void Client2Client::ResetTrackingState() {
