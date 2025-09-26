@@ -65,7 +65,7 @@ def read_original_stats(original_stats_dir):
                         analysis_name = f"{protocol}-{benchmark}"
                     num_clients = config["client_total"]
                     # create a unique name for the stats file
-                    unique_name = f"{analysis_name}_{num_clients}_{subdir}"
+                    unique_name = (analysis_name, num_clients, subdir)
 
                     with open(os.path.join(original_stats_dir, subdir, "stats.json"), "r") as stats_file:
                         stats = json.load(stats_file)
@@ -80,7 +80,7 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
         if "run_stats" not in stat_json or "combined" not in stat_json["run_stats"]:
             print(f"Skipping {name} as it does not contain run_stats or combined data.")
             continue
-        experiment_name, num_clients, timestamp = name.split("_")
+        experiment_name, num_clients, timestamp = name
         num_clients = int(num_clients)
         out_df.loc[len(out_df)] = [
             experiment_name,
@@ -409,7 +409,8 @@ def create_tput_time_plot(df, output_dir, now_string):
     df["commit_timestamp_ns"] = df["commit_timestamp_ns"].astype(float)
     df["commit_timestamp_ns"] = df["commit_timestamp_ns"] / 1e9
 
-    tput_interval_s = 1
+    policy_change_time_s = -1
+    tput_interval_s = 2
     for experiment_name, group in df.groupby(["experiment_name"]):
         # group by client_id and normalize each client's time to start at 0
         # then combine all clients' data
@@ -419,6 +420,13 @@ def create_tput_time_plot(df, output_dir, now_string):
             client_group = client_group.sort_values(by=["commit_timestamp_ns"])
             t0 = client_group["commit_timestamp_ns"].iloc[0]
             client_group["commit_timestamp_ns"] = client_group["commit_timestamp_ns"] - t0
+            if int(client_id) == 0:
+                # find policy change time
+                policy_change = client_group[client_group["operation"] == "policy_change"]
+                if len(policy_change) > 0:
+                    policy_change_time_s = policy_change["commit_timestamp_ns"].iloc[0]
+                    print(f"{experiment_name[0]}: policy change at {policy_change_time_s:.2f}s")
+
             combined_group = pd.concat([combined_group, client_group])
 
         # calculate throughput at intervals
@@ -430,7 +438,10 @@ def create_tput_time_plot(df, output_dir, now_string):
         overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
         print(f"{experiment_name[0]}: avg tput {overall_tput:.2f} txn/s")
 
-        ax.plot(time_bins[1:], tput, "-o", label=experiment_name[0])
+        ax.plot(time_bins[1:], tput, "-", label=experiment_name[0])
+
+    if policy_change_time_s > 0:
+        ax.axvline(x=policy_change_time_s, color="black", linestyle="--", label="Policy Change")
 
     fig.legend(loc="outside lower center", ncol=2)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))

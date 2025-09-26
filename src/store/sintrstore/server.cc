@@ -1761,6 +1761,7 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
   };
   // if failed because of endorsement check
   if(failEndorsementCheck) {
+    stats.Increment("failed_endorsement_check", 1);
     phase1Reply->set_insufficient_endorsements(failEndorsementCheck);
   }
   phase1Reply->mutable_cc()->set_ccr(result);
