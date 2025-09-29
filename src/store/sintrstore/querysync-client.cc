@@ -1261,11 +1261,10 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         if (req->firstCommittedReply || req->maxTs < replyTs) {
             req->maxTs = replyTs;
             req->maxValue = write->committed_value();
-            req->maxCommittedProof = *proof;
+            req->maxCommittedProof = std::make_unique<proto::CommittedProof>(*proof);
             
             if (reply.has_signed_write()) {
-                std::unique_ptr<proto::SignedMessage> temp(reply.release_signed_write());
-                req->maxWrite = std::move(*temp);
+                req->maxWrite = std::unique_ptr<proto::SignedMessage>(reply.release_signed_write());
             }
             else {
                 Panic("No signed write for reply in sintr");
@@ -1298,7 +1297,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             Timestamp policyTs(params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp());
             if (req->firstCommittedReply || req->maxPolicyTs < policyTs) {
                 req->maxPolicyTs = policyTs;
-                req->maxPolicy = write->committed_policy();
+                req->maxPolicy = std::make_unique<EndorsementPolicyMessage>(write->committed_policy());
             }
         }
         else {
@@ -1407,28 +1406,36 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     req->maxTs = ts;
                     req->maxValue = std::get<2>(preparedItr->first);
                     // if we are going to be forwarding a prepared value, no need for committed proof and signed write
-                    req->maxCommittedProof.Clear();
-                    req->maxWrite.Clear();
+                    if(req->maxCommittedProof != nullptr) {
+                    req->maxCommittedProof->Clear();
+                    }
+                    if(req->maxWrite != nullptr) {
+                    req->maxWrite->Clear();
+                    }
                     // if (preparedItr->second.first.has_prepared_policy()) {
                     //     req->maxPolicy = preparedItr->second.first.prepared_policy();
                     // }
-                    *req->dep.mutable_write()->mutable_prepared_txn_digest() = std::get<1>(preparedItr->first);
+                    if(req->dep == nullptr) {
+                        req->dep = std::make_unique<proto::Dependency>();
+                    }
+                    *req->dep->mutable_write()->mutable_prepared_txn_digest() = std::get<1>(preparedItr->first);
                     if (params.validateProofs && params.signedMessages && params.verifyDeps) {
                         //FIXME: To succeed in verifyDeps verification: Need to set whole Write... ==> However, that makes no sense. Deprecate verifyDeps.
-                        *req->dep.mutable_write()->mutable_prepared_value() = req->maxValue; 
+                        *req->dep->mutable_write()->mutable_prepared_value() = req->maxValue; 
                         if(params.sintr_params.hideTimestamps) {
-                            req->dep.mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts));
+                            req->dep->mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts));
                         } else {
-                            ts.serialize(req->dep.mutable_write()->mutable_prepared_timestamp());
+                            ts.serialize(req->dep->mutable_write()->mutable_prepared_timestamp());
                         }
-                        *req->dep.mutable_write_sigs() = std::move(sigs);
+                        *req->dep->mutable_write_sigs() = std::move(sigs);
                     }
-                    req->dep.set_involved_group(group);
+                    req->dep->set_involved_group(group);
                     req->hasDep = true;
                     break;
                 }
             }
             // also do prepared policy map
+            // should not run if useOCCForPolicies is true.
             for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
                 preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
                 
@@ -1439,7 +1446,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                 if (preparedPolicyItr->second.second >= req->rds) {
                     req->maxPolicyTs = preparedPolicyItr->first;
                     if (preparedPolicyItr->second.first.has_prepared_policy()) {
-                        req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
+                        // req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
                     }
                     break;
                 }
@@ -1463,9 +1470,9 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             
             Debug("MaxVAl: %s",BytesToHex(req->maxValue, 100).c_str());
             Debug("MaxTS: [%lu:%lu]", req->maxTs.getTimestamp(), req->maxTs.getID());
-            removeTsfromTx(req->maxCommittedProof.mutable_txn());
-            req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, req->dep,req->hasDep, true,
-                req->maxCommittedProof, req->maxWrite, req->maxPolicy);
+            removeTsfromTx(req->maxCommittedProof->mutable_txn());
+            req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, *req->dep,req->hasDep, true,
+                *req->maxCommittedProof, *req->maxWrite, *req->maxPolicy);
         }
         // else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
         //     Notice("Duplicate Point read to key %s", req->key.c_str());

@@ -100,7 +100,10 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   int num_cpus = std::thread::hardware_concurrency();
   size_t cpus_per_client = 2;
   // if we give more sig check threads, up to 4 cpus per client
-  if (params.sintr_params.maxClientSigCheckThreads > 0) {
+  // 8 per client if you give more than 2 sig check threads
+  if(params.sintr_params.maxClientSigCheckThreads > 2) {
+    cpus_per_client = 8;
+  } else if (params.sintr_params.maxClientSigCheckThreads > 0) {
     cpus_per_client = 4;
   }
   int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
@@ -114,7 +117,13 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET((main_client_cpu + (1 + i) % cpus_per_client) % num_cpus, &cpuset);
+      if(cpus_per_client == 8) {
+        Warning("8 cores client validation thread pinned to core: %lu", (main_client_cpu + 1 + i) % num_cpus);
+        CPU_SET((main_client_cpu + 1 + i) % num_cpus, &cpuset);
+      } else {
+        Warning("client validation thread pinned to core : %lu", (main_client_cpu + 1) % num_cpus);
+        CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      }
       pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -165,7 +174,13 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // Debug("CPU PIN TO: %lu", (main_client_cpu + 2 + i % 2) % num_cpus);
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET((main_client_cpu + 2 + i % 2) % num_cpus, &cpuset);
+      if(cpus_per_client == 8) {
+        Warning("8 cores client sig check thread pinned to core: %lu", (main_client_cpu + 1 + params.sintr_params.maxValThreads + i) % num_cpus);
+        CPU_SET((main_client_cpu + 1 + params.sintr_params.maxValThreads + i) % num_cpus, &cpuset);
+      } else {
+        Warning("client sig check thread pinned to core : %lu", (main_client_cpu + 2 + i % 2) % num_cpus);
+        CPU_SET((main_client_cpu + 2 + i % 2) % num_cpus, &cpuset);
+      }
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
     }
   }
@@ -197,7 +212,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     if(!cvSend.wait_for(lk, std::chrono::seconds(5), [this]{return sendDone;})) {
       Panic("Timeout: Sent ping not responded to");
     }
-    if(!cvReply.wait_for(lk, std::chrono::seconds(5), [this]{return replyDone;})) {
+    if(reply_to != target && !cvReply.wait_for(lk, std::chrono::seconds(5), [this]{return replyDone;})) {
       Panic("Timeout: Reply ping not responded to");
     }
     lk.unlock();
@@ -339,8 +354,8 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
   }
 }
 
-void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
-    PolicyClient *policyClient, const std::string &tsDigest) {
+void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const std::shared_ptr<TxnState> &protoTxnState, uint64_t txnStartTime,
+    PolicyClient *policyClient, const std::shared_ptr<std::string> &tsDigest) {
 
   if (params.sintr_params.clientEstimatePolicy) {
     UW_ASSERT(policyClient != nullptr);
@@ -356,13 +371,16 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
   }
   
   if (!params.sintr_params.c2cSendThread) {
-    SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState, txnStartTime, policyClient, tsDigest);
+    SendBeginValidateTxnMessageHelper(client_seq_num, protoTxnState ? *protoTxnState : TxnState(), txnStartTime,
+      policyClient, tsDigest ? *tsDigest : "");
     delete policyClient;
   }
   else {
-    auto f = [=]() {
+    auto f = [this, client_seq_num,
+        protoTxnState = std::move(protoTxnState), txnStartTime,
+        policyClient = std::move(policyClient), tsDigest = std::move(tsDigest)]() {
       this->SendBeginValidateTxnMessageHelper(
-        client_seq_num, protoTxnState, txnStartTime, policyClient, tsDigest
+        client_seq_num, protoTxnState ? *protoTxnState : TxnState(), txnStartTime, policyClient, tsDigest ? *tsDigest : ""
       );
       delete policyClient;
       return (void*) true;
@@ -406,11 +424,12 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   //     std::cerr << "Mean time to receive begin ack " << i << ": " << time_to_begin_ack_n_us[i].mean() << std::endl;
   //   }
   // }
-
-  ResetTrackingState();
+  if (params.sintr_params.clientEstimatePolicy) {
+    ResetTrackingState();
+    beginValSent.insert(client_id);
+  }
   this->client_seq_num = client_seq_num;
   // for tracking purposes, must have self in beginValSent
-  beginValSent.insert(client_id);
 
   sentBeginValTxnMsg.Clear();
   proto::BeginValidateTxn beginValTxn;
@@ -507,16 +526,24 @@ void Client2Client::ResetTrackingState() {
 }
 
 void Client2Client::SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
-const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep,
-    const std::string &tsDigest) {
+    std::unique_ptr<proto::CommittedProof> &proof, std::unique_ptr<proto::SignedMessage> &signedWrite, 
+    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, std::unique_ptr<proto::Dependency> &policyDep, bool hasPolicyDep, 
+    std::unique_ptr<std::string> &tsDigest) {
+  
+  proto::CommittedProof *proofPtr = proof.release();
+  proto::Dependency *depPtr = dep.release();
+  proto::SignedMessage *signedWritePtr = signedWrite.release();
+  proto::Dependency *policyDepPtr = policyDep.release();
+  std::string *tsDigestPtr = tsDigest.release();
 
   if (!params.sintr_params.c2cSendThread) {
-    SendForwardReadResultMessageHelper(key, value, ts, proof, signedWrite,
-      dep, hasDep, addReadset, policyDep, hasPolicyDep, tsDigest);
+    SendForwardReadResultMessageHelper(key, value, ts, proofPtr, signedWritePtr,
+      depPtr, hasDep, addReadset, policyDepPtr, hasPolicyDep, tsDigestPtr);
   }
   else {
-    auto f = [=]() {
+    auto f = [this, key, value, ts, proof = std::move(proofPtr),
+      signedWrite = std::move(signedWritePtr), dep = std::move(depPtr), policyDep = std::move(policyDepPtr),
+      tsDigest = std::move(tsDigestPtr), hasDep, hasPolicyDep, addReadset]() {
       this->SendForwardReadResultMessageHelper(
         key, value, ts, proof, signedWrite, dep, hasDep, addReadset,
         policyDep, hasPolicyDep, tsDigest
@@ -529,8 +556,9 @@ const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Depende
 }
 
 void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep, const std::string &tsDigest) {
+    proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
+    proto::Dependency* dep, bool hasDep, bool addReadset, proto::Dependency* policyDep, bool hasPolicyDep,
+    std::string* tsDigest) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardReadResultMessage *fwdReadResultMsgToSend = new proto::ForwardReadResultMessage();
@@ -541,7 +569,8 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
     fwdReadResult.mutable_timestamp()->set_id(ts.getID());
   } else {
-    fwdReadResult.set_hashed_timestamp(tsDigest);
+    fwdReadResult.set_allocated_hashed_timestamp(tsDigest);
+    tsDigest = nullptr;
   }
   fwdReadResult.set_client_id(client_id);
   fwdReadResult.set_client_seq_num(client_seq_num);
@@ -551,24 +580,25 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
   // otherwise it came from the buffer and there is no dependency or committed proof
   if (addReadset) {
     // this will contain the prepared txn dependency
-    if (hasDep) {
-      UW_ASSERT(dep.IsInitialized());
-      *fwdReadResult.mutable_dep() = std::move(dep);
+    if (hasDep && dep != nullptr) {
+      UW_ASSERT(dep->IsInitialized());
+      fwdReadResult.set_allocated_dep(dep);
       // must be oneof write or signed write
+      dep = nullptr;
       *fwdReadResultMsgToSend->mutable_write() = proto::Write();
     }
     else {
       if (params.validateProofs) {
-        if (proof.IsInitialized()) {
-          *fwdReadResultMsgToSend->mutable_proof() = std::move(proof);
-        }
-        // if no proof then it is possible the value is empty
-        else {
+        if (proof != nullptr && proof->IsInitialized()) {
+          fwdReadResultMsgToSend->set_allocated_proof(proof);
+          proof = nullptr;
+        } else {
           UW_ASSERT(value.length() == 0);
         }
       }
       if(params.signedMessages && value.length() != 0) {
-        *fwdReadResultMsgToSend->mutable_signed_write() = std::move(signedWrite);
+        fwdReadResultMsgToSend->set_allocated_signed_write(signedWrite);
+        signedWrite = nullptr;
       }
       else {
         // this should only happen if value is empty
@@ -578,10 +608,32 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     }
 
     // separately include policy change txn dependency if there is one
-    if (hasPolicyDep) {
-      UW_ASSERT(policyDep.IsInitialized());
-      *fwdReadResult.mutable_policy_dep() = std::move(policyDep);
+    if (hasPolicyDep && policyDep != nullptr) {
+      UW_ASSERT(policyDep->IsInitialized());
+      fwdReadResult.set_allocated_policy_dep(policyDep);
+      policyDep = nullptr;
     }
+  }
+
+  if(proof != nullptr) {
+    delete proof;
+    proof = nullptr;
+  }
+  if(signedWrite != nullptr) {
+    delete signedWrite;
+    signedWrite = nullptr;
+  }
+  if(tsDigest != nullptr) {
+    delete tsDigest;
+    tsDigest = nullptr;
+  }
+  if(dep != nullptr) {
+    delete dep;
+    dep = nullptr;
+  }
+  if(policyDep != nullptr) {
+    delete policyDep;
+    policyDep = nullptr;
   }
 
   // copy into sentFwdResultState
@@ -1512,7 +1564,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   // uint64_t finish = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
   // auto duration = finish - send_begin_time_us;
   // send_begin_to_receive_endorse_us.add(duration);
-  // auto duration = finish - send_fwd_read_time_us;
+  // duration = finish - send_fwd_read_time_us;
   // fwd_read_to_receive_endorse_us.add(duration);
   // auto duration = finish - send_fwd_point_query_time_us;
   // fwd_point_query_to_receive_endorse_us.add(duration);
@@ -1558,7 +1610,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     // struct timespec ts_end;
     // clock_gettime(CLOCK_MONOTONIC, &ts_end);
     // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-    // auto duration = end - start;
+    // duration = end - start;
     // verify_endorse_us.add(duration);
 
     valTxnDigest = signedMsg->data();
@@ -2243,16 +2295,16 @@ void Client2Client::ValidationThreadFunction() {
     valClient->SetThreadValTxnId(curr_client_id, curr_client_seq_num);
     valClient->SetTxnTimestamp(curr_client_id, curr_client_seq_num, curr_ts, valInfo->isPolicyTransaction, valInfo->hashed_ts);
 
-    struct timespec ts_start;
-    clock_gettime(CLOCK_MONOTONIC, &ts_start);
-    uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
     transaction_status_t result = valTxn->Validate(syncClient);
 
-    struct timespec ts_end;
-    clock_gettime(CLOCK_MONOTONIC, &ts_end);
-    uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-    auto duration = end - start;
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
     // validation_time_us.add(duration);
 
     if (result == COMMITTED) {
@@ -2383,7 +2435,11 @@ void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, 
 
 void Client2Client::setEndorsementCB(std::function<void*(void)> ecb) {
   // i don't put it on the receive thread for simplicity ...
-  this->ecb = std::move(ecb);
+  if(endorseClient->IsSatisfied()) {
+    ecb();
+  } else {
+    this->ecb = std::move(ecb);
+  }
 }
 
 void Client2Client::asyncValidateP1RepliesC2C(proto::CommitDecision decision,

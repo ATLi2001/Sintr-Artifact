@@ -1525,12 +1525,21 @@ void Server::ClearRTS(const google::protobuf::RepeatedPtrField<ReadMessage> &rea
 void Server::SignSendReadReply(proto::Write *write, proto::SignedMessage *signed_write, const std::function<void()> &sendCB){
       
     //If readReplyBatch is false then respond immediately, otherwise respect batching policy
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+
     Debug("SIGNING AND SENDING READ REPLY");
     if (params.readReplyBatch) {
         // move: sendCB = std::move(sendCB) or {std::move(sendCB)}
         Debug("READ REPLY BATCH");
         MessageToSign(write, signed_write, [sendCB, write]() {
             sendCB();
+            // struct timespec ts_end;
+            // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+            // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+            // auto duration = end - start;
+            // read_sign_us.add(duration);
             delete write;
         });
 
@@ -1543,6 +1552,11 @@ void Server::SignSendReadReply(proto::Write *write, proto::SignedMessage *signed
               SignMessage(write, keyManager->GetPrivateKey(id), id, signed_write);
               sendCB();
               delete write;
+              // struct timespec ts_end;
+              // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+              // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+              // auto duration = end - start;
+              // read_sign_us.add(duration);
               return (void*) true;
             };
             transport->DispatchTP_noCB(std::move(f));
@@ -1551,6 +1565,11 @@ void Server::SignSendReadReply(proto::Write *write, proto::SignedMessage *signed
           Debug("NO MULTITHREADING HERE");
             SignMessage(write, keyManager->GetPrivateKey(id), id, signed_write);
             sendCB();
+            // struct timespec ts_end;
+            // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+            // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+            // auto duration = end - start;
+            // read_sign_us.add(duration);
             delete write;
         }
 
@@ -1568,6 +1587,11 @@ void Server::SignSendReadReply(proto::Write *write, proto::SignedMessage *signed
             SignMessages(msgs, keyManager->GetPrivateKey(id), id, smsgs, params.merkleBranchFactor);
             sendCB();
             delete write;
+            // struct timespec ts_end;
+            // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+            // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+            // auto duration = end - start;
+            // read_sign_us.add(duration);
             return (void*) true;
             };
             transport->DispatchTP_noCB(std::move(f));
@@ -1580,6 +1604,11 @@ void Server::SignSendReadReply(proto::Write *write, proto::SignedMessage *signed
             smsgs.push_back(signed_write);
             SignMessages(msgs, keyManager->GetPrivateKey(id), id, smsgs, params.merkleBranchFactor);
             sendCB();
+            // struct timespec ts_end;
+            // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+            // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+            // auto duration = end - start;
+            // read_sign_us.add(duration);
             delete write;
         }
     }

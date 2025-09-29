@@ -804,7 +804,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       }
     }
 
-    std::set<std::string> alreadyVerifiedPolicies;
+    std::unordered_set<std::string> alreadyVerifiedPolicies;
     std::string policyId;
     //3) Validate write set for conflicts.
     for (const auto &write : txn.write_set()) {
@@ -818,6 +818,9 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
         if (!IsKeyOwned(write.key())) { //Only do OCC check for keys in this group.
           continue;
         }
+        // struct timespec ts_start;
+        // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+        // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
         if (params.sintr_params.policyCCC) {
           policyId = policyIdFunction(write.key(), write.value());
           if(alreadyVerifiedPolicies.find(policyId) == alreadyVerifiedPolicies.end()) {
@@ -828,6 +831,11 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
             alreadyVerifiedPolicies.insert(policyId);
           }
         }
+        // struct timespec ts_end;
+        // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+        // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+        // auto duration = end - start;
+        // policy_ccc_us.add(duration);
       } else {
         // add implicit policy read for gov txn writeset
         // writeset key is policy ID for gov txn
@@ -1237,8 +1245,11 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   // }
   std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
   const proto::Transaction *preparedTxn = nullptr;
+  bool exists = policyStore.get(policyId, ts, tsPolicy);
   // I don't free prepared txn bc I assume that preparedWrites is properly garbage collected
-  GetPolicy(policyId, ts, tsPolicy, true, &preparedTxn);
+  if (params.maxDepDepth > -2) {
+    preparedTxn = FindPreparedVersion(policyId, ts, exists, tsPolicy, proto::Transaction::POLICY_ID_POLICY);
+  }
   if(params.sintr_params.useOCCForPolicies) {
     // if prepared txn exists (so prepared policy exists)
     if(preparedTxn != nullptr) {

@@ -175,13 +175,21 @@ Client::~Client()
  */
 void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
       uint32_t timeout, bool retry, const std::string &txnState) {
+
+  // read_seq_num = 0;
   
   // if (client_id == 0 && exec_time_us.count > 0 && exec_time_us.count % 2000 == 0) {
   //   std::cerr << "Mean execution latency: " << exec_time_us.mean() << std::endl;
   //   std::cerr << "Mean endorsement wait latency: " << endorsement_wait_us.mean() << std::endl;
   //   std::cerr << "Mean commit latency: " << commit_time_us.mean() << std::endl;
-  //   std::cerr << "Mean query latency: " << query_time_us.mean() << std::endl;
-  //   std::cerr << "Mean query to commit latency: " << query_to_commit_us.mean() << std::endl;
+  //   std::cerr << "Mean put latency: " << put_time_us.mean() << std::endl;
+  //   std::cerr << "Mean read latency: " << read_time_us.mean() << std::endl;
+  //   std::cerr << "Mean read callback latency: " << read_callback_time.mean() << std::endl;
+  //   std::cerr << "Mean before shard get latency: " << before_shard_get.mean() << std::endl;
+  //   std::cerr << "Mean begin val sending: " << send_begin_val_us.mean() << std::endl;
+  //   std::cerr << "Mean forward read sending: " << send_forward_read_us.mean() << std::endl;
+  //   // std::cerr << "Mean query latency: " << query_time_us.mean() << std::endl;
+  //   // std::cerr << "Mean query to commit latency: " << query_to_commit_us.mean() << std::endl;
   // }
 
   // fail the current txn iff failuer timer is up and
@@ -218,21 +226,31 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     uint64_t txnStartTime = timeServer.GetTime();
     
     // begin sintr validation
-    if(!params.sintr_params.ignorePolicyUpdate) {
-      endorseClient->SetClientSeqNum(client_seq_num);
-    }
+    endorseClient->SetClientSeqNum(client_seq_num);
+    // if(!params.sintr_params.ignorePolicyUpdate) {
+    //   endorseClient->SetClientSeqNum(client_seq_num);
+    //   }
     // using policy client with default policy set to weight 0 policy
-    TxnState protoTxnState;
+    std::shared_ptr<TxnState> protoTxnState = std::make_shared<TxnState>();
+    protoTxnState->ParseFromString(txnState);
     PolicyClient *policyClient = nullptr;
     if (params.sintr_params.clientEstimatePolicy) {
       policyClient = new PolicyClient();
-      protoTxnState.ParseFromString(txnState);
-      EstimateTxnPolicy(protoTxnState, policyClient);
+      EstimateTxnPolicy(*protoTxnState, policyClient);
     }
-    std::string tsDigest = params.sintr_params.hideTimestamps ? TimestampDigest(client_id, txnStartTime) : "";
-    if(!params.sintr_params.ignorePolicyUpdate) {
-      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient), tsDigest);
-    }
+    std::shared_ptr<std::string> tsDigest = std::make_shared<std::string>(TimestampDigest(client_id, txnStartTime));
+    // if(true) {
+    // struct timespec ts_start;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t begin_val_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+
+      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, txnStartTime, std::move(policyClient), std::move(tsDigest));
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t begin_val_end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = begin_val_end - begin_val_start;
+      // send_begin_val_us.add(duration);
+    // }
 
     txn.Clear(); //txn = proto::Transaction();
     txn.set_client_id(client_id);
@@ -240,11 +258,11 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     // Optimistically choose a read timestamp for all reads in this transaction
     txn.mutable_timestamp()->set_timestamp(txnStartTime);
     txn.mutable_timestamp()->set_id(client_id);
-    if(params.sintr_params.hideTimestamps) {
-      txn.set_hashed_timestamp(tsDigest);
+    if(params.sintr_params.hideTimestamps && tsDigest != nullptr) {
+      txn.set_hashed_timestamp(*tsDigest);
     }
 
-    if (params.sintr_params.clientEstimatePolicy && IsPolicyChangeTxn(protoTxnState)) {
+    if (params.sintr_params.clientEstimatePolicy && protoTxnState != nullptr && IsPolicyChangeTxn(*protoTxnState)) {
       Debug("Begin policy change transaction from client id %lu, seq num %lu", client_id, client_seq_num);
       txn.set_policy_type(proto::Transaction::POLICY_ID_POLICY);
     }
@@ -257,6 +275,7 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     pendingWriteStatements.clear();
     point_read_cache.clear();
     scan_read_cache.clear();
+    perTxnPolicyIds.clear();
 
     ClearTxnQueries();
     //pendingQueries.clear(); //shouldn't be necessary to call, should be empty anyways
@@ -299,59 +318,86 @@ void Client::Get(const std::string &key, get_callback gcb,
 
   transport->Timer(0, [this, key, gcb, gtcb, timeout, target_group_for_put]() {
     // Latency_Start(&getLatency);
+    // uint64_t read_seq = 0;
+    // if(PROFILING_LAT){
+    //     struct timespec ts_start;
+    //     clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    //     read_start_times[read_seq_num] = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    //     read_seq = read_seq_num;
+    //     read_seq_num++;
+    // }
 
     Debug("GET[%lu:%lu] for key %s", client_id, client_seq_num,
         BytesToHex(key, 16).c_str());
 
     read_callback rcb = [gcb, this](int status, const std::string &key,
-        const std::string &val, const Timestamp &ts, const proto::Dependency &dep,
+        const std::string &val, const Timestamp &ts, std::unique_ptr<proto::Dependency> dep,
         bool hasDep, bool addReadSet,
-        const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg,
-        const proto::Dependency &policyDep, bool hasPolicyDep, const std::string &tsDigest) {
+        std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite,
+        std::unique_ptr<EndorsementPolicyMessage> policyMsg,
+        std::unique_ptr<proto::Dependency> policyDep, bool hasPolicyDep, std::unique_ptr<std::string> tsDigest) {
 
+      // struct timespec ts_start;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t rcb_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
       uint64_t ns = 0; //Latency_End(&getLatency);
       if (Message_DebugEnabled(__FILE__)) {
         Debug("GET[%lu:%lu] Callback for key %s with %lu bytes and ts %lu.%lu after %luus.",
             client_id, client_seq_num, BytesToHex(key, 16).c_str(), val.length(),
             ts.getTimestamp(), ts.getID(), ns / 1000);
-        if (hasDep) {
+        if (hasDep && dep != nullptr) {
           Debug("GET[%lu:%lu] Callback for key %s with dep ts %lu.%lu.",
               client_id, client_seq_num, BytesToHex(key, 16).c_str(),
-              dep.write().prepared_timestamp().timestamp(),
-              dep.write().prepared_timestamp().id());
+              dep->write().prepared_timestamp().timestamp(),
+              dep->write().prepared_timestamp().id());
         }
       }
       if (addReadSet) {
         Debug("Adding read to read set");
         ReadMessage *read = txn.add_read_set();
         read->set_key(key);
-        if(params.sintr_params.hideTimestamps && tsDigest != "") {
-          read->set_hashed_readtime(tsDigest);
+        if(params.sintr_params.hideTimestamps && tsDigest != nullptr && *tsDigest != "") {
+          read->set_hashed_readtime(*tsDigest);
         }
         ts.serialize(read->mutable_readtime());
       }
       // new policy can only come from server, which must correspond to addReadSet
-      if (policyMsg.IsInitialized()) {
+      if (policyMsg != nullptr && policyMsg->IsInitialized()) {
         if (Message_DebugEnabled(__FILE__)) {
-          Debug("PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %lu",client_id, client_seq_num, BytesToHex(key, 16).c_str(), policyMsg.policy_id());
+          Debug("PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %lu",client_id, client_seq_num, BytesToHex(key, 16).c_str(), policyMsg->policy_id());
         }
-        Policy *policy = policyParseClient->Parse(policyMsg.policy());
-        policyCache.Put(policyMsg.policy_id(), std::move(policy));
+        Policy *policy = policyParseClient->Parse(policyMsg->policy());
+        policyCache.Put(policyMsg->policy_id(), std::move(policy));
       }
-      if (hasDep) {
-        *txn.add_deps() = dep;
+      if (hasDep && dep != nullptr) {
+        *txn.add_deps() = *dep;
       }
-      if (!params.sintr_params.useOCCForPolicies && hasPolicyDep) {
-        *txn.add_deps() = policyDep;
+      if (!params.sintr_params.useOCCForPolicies && hasPolicyDep && policyDep != nullptr) {
+        *txn.add_deps() = *policyDep;
       }
-      if(!params.sintr_params.ignorePolicyUpdate) {
+      //if(true) {
+        // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+        // uint64_t c2c_send_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
         c2client->SendForwardReadResultMessage(
           key, val, ts, proof, signedWrite, dep, hasDep, addReadSet,
           policyDep, hasPolicyDep, tsDigest
         );
-      }
+        // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+        // uint64_t c2c_send_end = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+        // auto duration = c2c_send_end - c2c_send_start;
+        // send_forward_read_us.add(duration);
+      //}
 
       gcb(status, key, val, ts);
+      // if(PROFILING_LAT){
+      //   struct timespec ts_end;
+      //   clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      //   uint64_t read_end_time = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      //   auto duration = read_end_time - read_start_times[read_seq];
+      //   read_time_us.add(duration);
+      //   duration = read_end_time - rcb_start;
+      //   read_callback_time.add(duration);
+      // }
     };
     read_timeout_callback rtcb = gtcb;
     // Contact the appropriate shard to get the value.
@@ -370,6 +416,11 @@ void Client::Get(const std::string &key, get_callback gcb,
       }
 
       // Send the GET operation to appropriate shard.
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t before_shard_get_end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = before_shard_get_end - read_start_times[read_seq];
+      // before_shard_get.add(duration);
       bclient[i]->Get(client_seq_num, key, txn.timestamp(), readMessages,
           readQuorumSize, params.readDepSize, rcb, rtcb, timeout);
     }
@@ -379,6 +430,12 @@ void Client::Get(const std::string &key, get_callback gcb,
 void Client::Put(const std::string &key, const std::string &value,
     put_callback pcb, put_timeout_callback ptcb, uint32_t timeout) {
   transport->Timer(0, [this, key, value, pcb, ptcb, timeout]() {
+  // uint64_t put_start_time = 0;
+  // if(PROFILING_LAT){
+  //   struct timespec ts_start;
+  //   clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  //   put_start_time = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  //  }
 
     //std::cerr << "value size: " << value.size() << "; key " << BytesToHex(key,16).c_str() << std::endl;
     Debug("PUT[%lu:%lu] for key %s", client_id, client_seq_num, BytesToHex(key, 16).c_str());
@@ -426,13 +483,17 @@ void Client::Put(const std::string &key, const std::string &value,
     } else {
       if (!params.sintr_params.ignorePolicyUpdate) {
         // look in cache for policy
-        bool exists = policyCache.Get(policyIdFunction(key, value), policy);
+        std::string policyId = policyIdFunction(key, value);
+        bool exists = policyCache.Get(policyId, policy);
         if (!exists) {
           // if not found, use default policy for now
           UW_ASSERT(policyCache.Get("p#0", policy));
         }
-        Debug("Sending policy update for put using c2client in regular transaction");
-        c2client->HandlePolicyUpdate(policy);
+        if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+          Debug("Sending policy update for put using c2client in regular transaction");
+          perTxnPolicyIds.insert(policyId);
+          c2client->HandlePolicyUpdate(policy);
+        }
       }
       std::vector<int> txnGroups(txn.involved_groups().begin(), txn.involved_groups().end());
       int i = (*part)(key, nshards, -1, txnGroups) % ngroups; 
@@ -441,7 +502,7 @@ void Client::Put(const std::string &key, const std::string &value,
         txn.add_involved_groups(i);
         bclient[i]->Begin(client_seq_num);
       } 
-      if(!params.sintr_params.ignorePolicyUpdate && bclient[i]->GetPolicyShardClient()) {
+      if(bclient[i]->GetPolicyShardClient()) {
         // empty callback functions
         // This is a hack, but the downside is that it will add the key to the readset, 
         // which shouldn't happen during a blind write. It may also introduce unnecessary dependencies. 
@@ -461,6 +522,13 @@ void Client::Put(const std::string &key, const std::string &value,
         Debug("get sent for policy");
       }
       bclient[i]->Put(client_seq_num, key, value, pcb, ptcb, timeout);
+      // if(PROFILING_LAT){
+      //   struct timespec ts_end;
+      //   clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      //   uint64_t put_end_time = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      //   auto duration = put_end_time - put_start_time;
+      //   put_time_us.add(duration);
+      // }
     }
   });
 }
@@ -1424,13 +1492,14 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
     // set expected endorsement digest
     std::string digest = TransactionDigest(txn, params.hashDigest, params.sintr_params.hideTimestamps);
-    if (params.sintr_params.debugEndorseCheck && !params.sintr_params.ignorePolicyUpdate) {
+    if (params.sintr_params.debugEndorseCheck) {
       std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(txn);
       endorseClient->DebugSetExpectedTxn(std::move(debug_txn));
     }
-    if(!params.sintr_params.ignorePolicyUpdate) {
-      endorseClient->SetExpectedTxnDigest(digest);
-    }
+    // if(!params.sintr_params.ignorePolicyUpdate) {
+    //   endorseClient->SetExpectedTxnDigest(digest);
+    // }
+    endorseClient->SetExpectedTxnDigest(digest);
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;
@@ -1475,9 +1544,9 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
 
     req->waitingForEndorsementsTimeout->Reset();
-    if(params.sintr_params.ignorePolicyUpdate || !params.sintr_params.useEndorsementCB || endorseClient->IsSatisfied()) {
+    if(!params.sintr_params.useEndorsementCB) {
       Phase1(req);
-    } else if(!params.sintr_params.ignorePolicyUpdate && params.sintr_params.useEndorsementCB) {
+    } else {
       auto ecb = [this, req]() { 
         transport->Timer(0, [this, req]() {
           Phase1(req);
@@ -1491,7 +1560,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
 void Client::Phase1(PendingRequest *req) {
   // if endorsement is not satisfied yet, add back to event loop
-  if (!params.sintr_params.ignorePolicyUpdate && !params.sintr_params.useEndorsementCB && !endorseClient->IsSatisfied()) {
+  if (!params.sintr_params.useEndorsementCB && !endorseClient->IsSatisfied()) {
     transport->Timer(0, [this, req]() {
       Phase1(req);
     });
@@ -1502,7 +1571,7 @@ void Client::Phase1(PendingRequest *req) {
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
 
-  const auto &endorsements = params.sintr_params.ignorePolicyUpdate ? std::vector<std::shared_ptr<::google::protobuf::Message>>() : endorseClient->GetEndorsements();
+  const auto &endorsements = endorseClient->GetEndorsements();
 
   if(PROFILING_LAT){
     struct timespec ts_start;
@@ -1525,9 +1594,10 @@ void Client::Phase1(PendingRequest *req) {
       *txn.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
     }
   }
-  if(!params.sintr_params.ignorePolicyUpdate) {
-    endorseClient->SetEndorsementsUsed();
-  }
+  // if(!params.sintr_params.ignorePolicyUpdate) {
+  //   endorseClient->SetEndorsementsUsed();
+  // }
+  endorseClient->SetEndorsementsUsed();
 
   // copy into req
   req->txn = txn;

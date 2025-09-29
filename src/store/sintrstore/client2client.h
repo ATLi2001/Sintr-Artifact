@@ -84,14 +84,14 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // start up the sintr validation for current transaction
   // sends BeginValidateTxnMessage to peers
   // takes ownership of policyClient, which contains the estimated policy for the transaction
-  void SendBeginValidateTxnMessage(uint64_t client_seq_num, const TxnState &protoTxnState, uint64_t txnStartTime,
-    PolicyClient *policyClient, const std::string &tsDigest);
+  void SendBeginValidateTxnMessage(uint64_t client_seq_num, const std::shared_ptr<TxnState> &protoTxnState, uint64_t txnStartTime,
+    PolicyClient *policyClient, const std::shared_ptr<std::string> &tsDigest);
 
   // forward server read reply to other peers
   void SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep, 
-    const std::string &tsDigest);
+    std::unique_ptr<proto::CommittedProof> &proof, std::unique_ptr<proto::SignedMessage> &signedWrite, 
+    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, std::unique_ptr<proto::Dependency> &policyDep, bool hasPolicyDep, 
+    std::unique_ptr<std::string> &tsDigest);
   
   // forward server point query result to other peers
   void SendForwardPointQueryResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
@@ -300,10 +300,10 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void ResetTrackingState();
 
   void SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, 
-    const proto::Dependency &dep, bool hasDep, bool addReadset, const proto::Dependency &policyDep, bool hasPolicyDep,
-    const std::string &tsDigest);
-  
+    proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
+    proto::Dependency* dep, bool hasDep, bool addReadset, proto::Dependency* policyDep, bool hasPolicyDep,
+    std::string* tsDigest);
+    
   void SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     const std::string &table_name, const proto::CommittedProof &proof,
     const proto::SignedMessage &signedWrite,

@@ -474,6 +474,8 @@ class Client : public ::Client {
 
   std::unordered_map<uint64_t, uint64_t> pendingReqs_starttime;
 
+  std::unordered_set<std::string> perTxnPolicyIds;
+
   // tracking target group for get triggered from an sql write
   int target_group_for_get;
 
@@ -500,7 +502,15 @@ class Client : public ::Client {
   mean_tracker endorsement_wait_us;
   mean_tracker commit_time_us;
   mean_tracker query_time_us;
+  mean_tracker read_time_us;
+  mean_tracker put_time_us;
+  mean_tracker before_shard_get;
+  mean_tracker read_callback_time;
+  mean_tracker send_forward_read_us;
+  mean_tracker send_begin_val_us;
   mean_tracker query_to_commit_us;
+  // std::map<uint64_t, uint64_t> read_start_times;
+  // uint64_t read_seq_num;
 };
 
 } // namespace sintrstore

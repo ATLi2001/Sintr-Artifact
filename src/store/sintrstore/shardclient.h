@@ -67,11 +67,11 @@ static int successful_invoke = 0;
 
 ///////// Reads
 typedef std::function<void(int, const std::string &,
-    const std::string &, const Timestamp &, const proto::Dependency &,
+    const std::string &, const Timestamp &, std::unique_ptr<proto::Dependency>,
     bool, bool,
-    const proto::CommittedProof &, const proto::SignedMessage &,
-    const EndorsementPolicyMessage &,
-    const proto::Dependency &, bool, const std::string &)> read_callback;
+    std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
+    std::unique_ptr<EndorsementPolicyMessage>,
+    std::unique_ptr<proto::Dependency>, bool, std::unique_ptr<std::string>)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
 ////////// Queries
@@ -241,7 +241,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     uint64_t numOKReplies;
     std::map<Timestamp, std::pair<proto::Write, uint64_t>> prepared;
     std::map<Timestamp, proto::Signatures> preparedSigs;
-    proto::Dependency dep;
+    std::unique_ptr<proto::Dependency> dep;
     bool hasDep;
     read_callback gcb;
     read_timeout_callback gtcb;
@@ -255,16 +255,16 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     std::string table_name;
 
     // these correspond with maxValue, to be forwarded to peers
-    proto::CommittedProof maxCommittedProof;
+    std::unique_ptr<proto::CommittedProof> maxCommittedProof;
     // this must be a signed write... sintr doesn't work without server sigs
-    proto::SignedMessage maxWrite;
+    std::unique_ptr<proto::SignedMessage> maxWrite;
     // endorsement policy corresponding to maxValue
-    EndorsementPolicyMessage maxPolicy;
+    std::unique_ptr<EndorsementPolicyMessage> maxPolicy;
 
     Timestamp maxPolicyTs;
     // prepared policy map from timestamp to (write containing prepared policy, count)
     std::map<Timestamp, std::pair<proto::Write, uint64_t>> preparedPolicy;
-    proto::Dependency policyDep;
+    std::unique_ptr<proto::Dependency> policyDep;
     bool hasPolicyDep;
   };
 
@@ -709,6 +709,17 @@ SQLTransformer *sql_interpreter;
   proto::SyncClientProposal syncMsg;
 
   std::vector<uint64_t> verify_server_sig_ms;
+
+  mean_tracker shard_client_get;
+  mean_tracker shard_client_receive;
+  mean_tracker wait_read_us;
+  mean_tracker p1_reply_processing;
+  mean_tracker read_sig_verify;
+  mean_tracker parse_read_msg;
+  mean_tracker move_ptrs;
+
+  std::map<std::string, uint64_t> read_send_map;
+  uint64_t numTxns = 0;
 };
 
 } // namespace sintrstore

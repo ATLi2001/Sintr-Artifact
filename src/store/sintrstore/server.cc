@@ -1085,6 +1085,9 @@ void Server::LoadTableRow(const std::string &table_name, const std::vector<std::
 //Returns a signed message including i) the latest committed write (+ cert), and ii) the latest prepared write (both w.r.t to Timestamp of reader)
 void Server::HandleRead(const TransportAddress &remote,
      proto::Read &msg) {
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t read_start_time = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
   Debug("READ[%lu:%lu] for key %s with ts %lu.%lu.", msg.timestamp().id(),
       msg.req_id(), BytesToHex(msg.key(), 16).c_str(),
@@ -1350,6 +1353,12 @@ void Server::HandleRead(const TransportAddress &remote,
   }
 
   if(params.mainThreadDispatching && (!params.dispatchMessageReceive || params.parallel_reads)) FreeReadmessage(&msg);
+
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // uint64_t read_end_time = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = read_end_time - read_start_time;
+  // read_time_us.add(duration);
 }
 
 
@@ -3180,7 +3189,7 @@ void Server::Clean(const std::string &txnDigest, bool abort, bool hard) {
    mq.release();
 }
 
-void Server::GetPolicy(const std::string policyId, const Timestamp &ts, 
+void Server::GetPolicy(const std::string &policyId, const Timestamp &ts, 
     std::pair<Timestamp, PolicyStoreValue> &tsPolicy, const bool checkPrepared, const proto::Transaction **preparedTxn) {
   bool exists = policyStore.get(policyId, ts, tsPolicy);
 
@@ -3224,7 +3233,10 @@ bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transac
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
   //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
   //   std::cerr << "Mean phase 1 to reply latency: " << phase1_to_reply_us.mean() << std::endl;
-  //   std::cerr << "Mean query time latency: " << query_time_us.mean() << std::endl;
+  //   std::cerr << "Mean read latency: " << read_time_us.mean() << std::endl;
+  //   std::cerr << "Mean read sign latency: " << read_sign_us.mean() << std::endl;
+  //   std::cerr << "Policy ID mean computation: " << policy_id_us.mean() << std::endl;
+  //   std::cerr << "Policy CCC mean: " << policy_ccc_us.mean() << std::endl;
   // }
 
   PolicyClient policyClient;
@@ -3239,6 +3251,11 @@ void Server::EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const 
   //   std::cerr << "Mean new digest latency: " << new_digest_us.mean() << std::endl;
   //   std::cerr << "Mean ccc latency: " << ccc_us.mean() << std::endl;
   //   std::cerr << "Mean prepare latency: " << prepare_us.mean() << std::endl;
+  //   std::cerr << "Mean phase 1 to reply latency: " << phase1_to_reply_us.mean() << std::endl;
+  //   std::cerr << "Mean read latency: " << read_time_us.mean() << std::endl;
+  //   std::cerr << "Mean read sign latency: " << read_sign_us.mean() << std::endl;
+  //   std::cerr << "Policy ID mean computation: " << policy_id_us.mean() << std::endl;
+  //   std::cerr << "Policy CCC mean: " << policy_ccc_us.mean() << std::endl;
   // }
   
   ExtractPolicy(txn, *asyncValidatePrepare.policyClient);
@@ -3265,7 +3282,13 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       if (!IsKeyOwned(write.key())) {
         continue;
       }
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t policy_id_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
       policyId = policyIdFunction(write.key(), write.value());
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t policy_id_end = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+      // auto duration = policy_id_end - policy_id_start;
+      // policy_id_us.add(duration);
     }
     else {
       // if txn is POLICY_ID_POLICY, then writeset keys are policy ids
