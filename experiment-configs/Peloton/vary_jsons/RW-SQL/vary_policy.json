@@ -1,0 +1,23 @@
+{
+  "policy2R": {
+    "analysis_name": "peloton-rw-sql-U-policy2R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_val_client_selector": "ring"
+    }
+  },
+  "policy3R": {
+    "analysis_name": "peloton-rw-sql-U-policy3R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_val_client_selector": "ring"
+    }
+  },
+  "policy4R": {
+    "analysis_name": "peloton-rw-sql-U-policy4R",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
+      "sintr_val_client_selector": "ring"
+    }
+  }
+}
