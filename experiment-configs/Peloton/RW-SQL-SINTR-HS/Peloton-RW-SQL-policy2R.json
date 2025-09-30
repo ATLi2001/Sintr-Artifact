@@ -20,18 +20,10 @@
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
   "analysis_name": "peloton-rw-sql-U-policy2R",
-  "replication_protocol": [
-    "peloton-smr"
-  ],
-  "client_protocol_mode": [
-    "peloton-smr"
-  ],
-  "num_shards": [
-    1
-  ],
-  "num_groups": [
-    1
-  ],
+  "replication_protocol": ["peloton-smr"],
+  "client_protocol_mode": ["peloton-smr"],
+  "num_shards": [1],
+  "num_groups": [1],
   "benchmark_type": "sql_bench",
   "benchmark_name": "rw-sql",
   "benchmark_schema_file_path": "/users/dhl001/rw-sql.json",
@@ -71,11 +63,7 @@
   "__CLIENT RAND SLEEP NEEDS TO BE HIGH FOR NON CRYPTO; backoff too": true,
   "client_message_timeout": 10000,
   "run_locally": false,
-  "stats_merge_lists": [
-    "txn_groups",
-    "sig_batch",
-    "NumRetries"
-  ],
+  "stats_merge_lists": ["txn_groups", "sig_batch", "NumRetries"],
   "replication_protocol_settings": [
     {
       "local_config": "false",
@@ -144,34 +132,16 @@
   "codebase_name": "indicus",
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
-  "_client_total": [
-    [30]
-  ],
-  "_client_processes_per_client_node": [
-    [4]
-  ],
-  "_client_threads_per_process": [
-    [1]
-  ],
-"client_total": [
-    [
-      10, 20, 30, 40, 50, 60, 72, 80
-    ]
-  ],
-  "client_processes_per_client_node": [
-    [
-      4,4,4,4,4,4,4,4
-    ]
-  ],
-  "client_threads_per_process": [
-    [
-      1,1,1,1,1,1,1,1
-    ]
-  ],
+  "_client_total": [[30]],
+  "_client_processes_per_client_node": [[4]],
+  "_client_threads_per_process": [[1]],
+  "client_total": [[10, 20, 30, 40, 50, 60, 72, 80]],
+  "client_processes_per_client_node": [[4, 4, 4, 4, 4, 4, 4, 4]],
+  "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
   "client_nodes_per_server": 5,
-  "_NOTE: Don't pin hotstuff server processes":0,
+  "_NOTE: Don't pin hotstuff server processes": 0,
   "_pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
-  "pin_client_processes": [0,2,4,6],
+  "pin_client_processes": [0, 2, 4, 6],
   "client_debug_output": false,
   "_client_debug_output": "*",
   "server_debug_output": false,
@@ -189,22 +159,12 @@
   "project_name": "pequin-pg0",
   "fault_tolerance": 1,
   "server_names": [
-   
-    ["us-east-1-0", "us-east-1-1", "us-east-1-2", "eu-west-1-0"] 
-	
+    ["us-east-1-0", "us-east-1-1", "us-east-1-2", "eu-west-1-0"]
   ],
   "server_regions": [
     {
-      "us-east-1": [
-        "us-east-1-0",
-        "us-east-1-1",
-        "us-east-1-2"
-      ],
-      "eu-west-1": [
-        "eu-west-1-0",
-        "eu-west-1-1",
-        "eu-west-1-2"
-      ]
+      "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
+      "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"]
     }
   ],
   "region_rtt_latencies": {
@@ -265,24 +225,13 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Indicus-Multi"
-      ],
+      "series_titles": ["Indicus-Multi"],
       "x_var_is_config": false,
-      "x_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "mean"
-      ],
+      "x_var": ["run_stats", "combined", "tput", "mean"],
       "x_label": "Throughput (txn/s)",
       "y_label": "mean Latency (ms)",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "aggregate",
-        "combined",
-        "mean"
-      ]
+      "y_var": ["aggregate", "combined", "mean"]
     },
     {
       "name": "tput-clients",
@@ -290,22 +239,13 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Indicus-Multi"
-      ],
+      "series_titles": ["Indicus-Multi"],
       "x_var_is_config": true,
-      "x_var": [
-        "client_total"
-      ],
+      "x_var": ["client_total"],
       "x_label": "Number of Clients",
       "y_label": "Throughput (txn/s)",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "mean"
-      ]
+      "y_var": ["run_stats", "combined", "tput", "mean"]
     }
   ],
   "cdf_plots": {
@@ -355,10 +295,7 @@
   "server_bin_name": "server",
   "server_port": 7087,
   "src_directory": "/home/dhl93/Pequin-Artifact/src",
-  "make_collect_bins": [
-    "store/benchmark/async/benchmark",
-    "store/server"
-  ],
+  "make_collect_bins": ["store/benchmark/async/benchmark", "store/server"],
   "make_clean": false,
   "network_config_file_name": "shard.config",
   "remote_bin_directory_nfs_enabled": false,
