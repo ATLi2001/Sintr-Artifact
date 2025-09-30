@@ -1,51 +1,58 @@
 {
   "experiment_independent_vars": [
-    ["replication_protocol", "client_protocol_mode", "server_names",
-      "replication_protocol_settings", "server_regions", "num_shards", "num_groups",
-		"client_total",
+    [
+      "replication_protocol",
+      "client_protocol_mode",
+      "server_names",
+      "replication_protocol_settings",
+      "server_regions",
+      "num_shards",
+      "num_groups",
+      "client_total",
       "client_threads_per_process",
-      "client_processes_per_client_node"],
-    ["client_total", "client_processes_per_client_node",
-      "client_threads_per_process"]
+      "client_processes_per_client_node"
+    ],
+    [
+      "client_total",
+      "client_processes_per_client_node",
+      "client_threads_per_process"
+    ]
   ],
   "replication_protocol": ["peloton-smr"],
   "client_protocol_mode": ["peloton-smr"],
   "num_shards": [1],
   "num_groups": [1],
-  
-  "benchmark_type": "sql_bench",  
+
+  "benchmark_type": "sql_bench",
   "_analysis_name is just for convenience of naming in later analysis": 0,
   "analysis_name": "peloton-BFT-tpcc-sql-policy2",
-  
+
   "benchmark_name": "tpcc-sql",
   "benchmark_schema_file_path": "/users/dhl001/benchmark_data/sql-tpcc-tables-schema.json",
-  "bftsmart_codebase_dir" : "/users/dhl001",
-  
-   "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN":false,
-   "__server_load_time": 150,
-   "server_load_time": 48,
-   "___server_load_time": 6,
-   "____server_load_time": 12,
-   "_server_load_time": 45,
-   
- 
-  "_TPCC_SQL_ARGS_" :0,
-  	  "_note: partitioner is unused currently": 0,
-  	  "tpcc_run_sequential": false,
-	  "partitioner": "warehouse",
-	  "tpcc_num_warehouses": 20,
-	  
-	  "tpcc_stock_level_ratio": 4,
-	  "tpcc_delivery_ratio": 4,
-	  "tpcc_order_status_ratio": 4,
-	  "tpcc_payment_ratio": 44,
-	  "tpcc_new_order_ratio": 44,
-	  
-	  "tpcc_c_c_id": 0,
-  	  "tpcc_c_c_last": 0,
+  "bftsmart_codebase_dir": "/users/dhl001",
 
+  "_NOTE: Set this to 15 if using 5 warehouses + no ASAN. 60 if ASAN true. 95 with 20 wh + ASAN": false,
+  "__server_load_time": 150,
+  "server_load_time": 48,
+  "___server_load_time": 6,
+  "____server_load_time": 12,
+  "_server_load_time": 45,
 
- 
+  "_TPCC_SQL_ARGS_": 0,
+  "_note: partitioner is unused currently": 0,
+  "tpcc_run_sequential": false,
+  "partitioner": "warehouse",
+  "tpcc_num_warehouses": 20,
+
+  "tpcc_stock_level_ratio": 4,
+  "tpcc_delivery_ratio": 4,
+  "tpcc_order_status_ratio": 4,
+  "tpcc_payment_ratio": 44,
+  "tpcc_new_order_ratio": 44,
+
+  "tpcc_c_c_id": 0,
+  "tpcc_c_c_last": 0,
+
   "client_abort_backoff": 2,
   "client_retry_aborted": true,
   "client_max_attempts": -1,
@@ -56,38 +63,34 @@
   "run_locally": false,
   "stats_merge_lists": ["txn_groups", "sig_batch"],
 
-
   "replication_protocol_settings": [
-   
     {
-    
-    	"_batch_size (set by hs config)": "16",
-    	
-    	"local_config": "false",
- 	"fake_SMR": "true",
- 	"SMR_mode": 2,
-  
-        "message_transport_type": "tcp",
-	"watermark_time_delta": 30000,
-	"read_quorum": "one-honest",
-	"read_dep": "one-honest",
-	"hash_digest": true,
-	"validate_proofs": true,
-	"sign_messages": true,
-	"signature_type": 4,
-	"sig_batch": 2,
-	"sig_batch_timeout": 4,
-	"ebatch_size": 4,
-	"ebatch_tout": 4,
-	"dummy_tout":500,
-	"multi_threading": true,
+      "_batch_size (set by hs config)": "16",
+
+      "local_config": "false",
+      "fake_SMR": "true",
+      "SMR_mode": 2,
+
+      "message_transport_type": "tcp",
+      "watermark_time_delta": 30000,
+      "read_quorum": "one-honest",
+      "read_dep": "one-honest",
+      "hash_digest": true,
+      "validate_proofs": true,
+      "sign_messages": true,
+      "signature_type": 4,
+      "sig_batch": 2,
+      "sig_batch_timeout": 4,
+      "ebatch_size": 4,
+      "ebatch_tout": 4,
+      "dummy_tout": 500,
+      "multi_threading": true,
       "mainThreadDispatching": false,
       "dispatchMessageReceive": false,
-        "batch_verification": false,
-        "order_commit": true,
-        "validate_abort": true,
-        "key_path": "/usr/local/etc/indicus-keys/donna"
-      
+      "batch_verification": false,
+      "order_commit": true,
+      "validate_abort": true,
+      "key_path": "/usr/local/etc/indicus-keys/donna"
     }
   ],
   "sintr_protocol_settings": {
@@ -131,74 +134,50 @@
 
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
-  
+
   "_note: HS without batch timer cannot run with 1 client": 0,
-  "client_total": [
-    [40]
-  ],
-  "client_processes_per_client_node": [
-    [2]
-  ],
-  "client_threads_per_process": [
-    [1]
-  ],
-"_client_total": [
-    [
-      5,10,20,30,40,60
-    ]
-  ],
-  "_client_processes_per_client_node": [
-    [
-      4,4,4,4,4,4
-    ]
-  ],
-  "_client_threads_per_process": [
-    [
-      1,1,1,1,1,1
-    ]
-  ],
+  "client_total": [[40]],
+  "client_processes_per_client_node": [[2]],
+  "client_threads_per_process": [[1]],
+  "_client_total": [[5, 10, 20, 30, 40, 60]],
+  "_client_processes_per_client_node": [[4, 4, 4, 4, 4, 4]],
+  "_client_threads_per_process": [[1, 1, 1, 1, 1, 1]],
   "client_nodes_per_server": 5,
-  "_NOTE: Do not pin server processes for HOTSTUFF":0,
+  "_NOTE: Do not pin server processes for HOTSTUFF": 0,
   "_pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
-  "pin_client_processes": [0,2,4,6],
+  "pin_client_processes": [0, 2, 4, 6],
   "client_debug_output": false,
   "_client_debug_output": "*",
   "server_debug_output": false,
   "_server_debug_output": "*",
   "server_debug_stats": false,
   "client_debug_stats": false,
-  
+
   "client_experiment_length": 60,
   "client_ramp_down": 15,
   "client_ramp_up": 15,
-  
+
   "default_remote_shell": "bash",
-  
+
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_host_format_str": "client-%d-%d.%s.%s.utah.cloudlab.us",
   "_server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
   "_client_host_format_str": "client-%d-%d.%s.%s.wisc.cloudlab.us",
-  
+
   "project_name": "pequin-pg0",
-  
+
   "fault_tolerance": 1,
-  
-  
+
   "server_names": [
-   
-    ["us-east-1-0", "us-east-1-1", "us-east-1-2", "eu-west-1-0"] 
-	
+    ["us-east-1-0", "us-east-1-1", "us-east-1-2", "eu-west-1-0"]
   ],
 
   "server_regions": [
-   
     {
       "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
       "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"]
     }
   ],
-  
-   
 
   "region_rtt_latencies": {
     "us-east-1": {
@@ -207,7 +186,7 @@
       "ap-northeast-1": 160,
       "us-west-1": 63,
       "eu-central-1": 87,
-      "ap-southeast-2": 199 
+      "ap-southeast-2": 199
     },
     "eu-west-1": {
       "us-east-1": 73,
@@ -215,7 +194,7 @@
       "ap-northeast-1": 220,
       "us-west-1": 145,
       "eu-central-1": 26,
-      "ap-southeast-2":  255
+      "ap-southeast-2": 255
     },
     "ap-northeast-1": {
       "us-east-1": 160,
@@ -251,8 +230,7 @@
     }
   },
   "server_emulate_wan": false,
-  
-  
+
   "plots": [
     {
       "name": "lat-tput",
@@ -314,7 +292,7 @@
   "output_latency_scale": 1000,
   "_src_commit_hash": "threadpool_test",
   "stats_file_name": "stats.json",
-  "base_local_exp_directory":  "/home/dhl93/Pequin-Artifact/output",
+  "base_local_exp_directory": "/home/dhl93/Pequin-Artifact/output",
   "base_mounted_fs_path": "/mnt/extra",
   "base_remote_bin_directory_nfs": "/users/dhl001/indicus",
   "base_remote_exp_directory": "/mnt/extra/experiments",
@@ -330,10 +308,7 @@
   "server_bin_name": "server",
   "server_port": 7087,
   "src_directory": "/home/dhl93/Pequin-Artifact/src",
-  "make_collect_bins": [
-    "store/benchmark/async/benchmark",
-    "store/server"
-  ],
+  "make_collect_bins": ["store/benchmark/async/benchmark", "store/server"],
   "make_clean": false,
   "network_config_file_name": "shard.config",
 
@@ -341,8 +316,7 @@
   "client_combine_stats_blacklist": [],
   "client_stats_blacklist": [],
   "client_cdf_plot_blacklist": [],
-  "make_env": {
-  },
+  "make_env": {},
   "server_rdma_port": 9087,
   "rxe_cfg_path": "/media/matthelb/DATA/projects/msr-rdma/rdma-replication-meta/rdma-core/build/providers/rxe/rxe_cfg.in",
   "client_read_percentage": 0,
@@ -367,6 +341,4 @@
   "server_gc_debug_trace": false,
   "_server_wrap_command": "valgrind --tool=none %s",
   "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s"
-
-
 }
