@@ -1233,7 +1233,6 @@ void Server::HandleRead(const TransportAddress &remote,
 
       if (msg.include_policy()) {
         // now check preparedWrites for policy ids
-        const proto::Transaction *mostRecentPolicyTxn;
         std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
         GetPolicy(preparedPolicyId, ts, tsPolicy, false);
         // if GetPolicy returns a prepared policy then it has no proof
@@ -1253,7 +1252,6 @@ void Server::HandleRead(const TransportAddress &remote,
   } else if(isPolicyKey(msg.key())) {
     Warning("IS POLICY KEY");
     Debug("Getting policy for %s", msg.key().c_str());
-    const proto::Transaction *mostRecentPolicyTxn;
     std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
     GetPolicy(msg.key(), ts, tsPolicy, false);
     std::string policyVal = "";

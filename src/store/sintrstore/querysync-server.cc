@@ -411,7 +411,6 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
           *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
         }
     } else if(include_policy && !write->has_committed_value()) {
-        const proto::Transaction *mostRecentPolicyTxn;
         std::string preparedPolicyId = policyIdFunction(query->primary_enc_key(), "");
         std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
         GetPolicy(preparedPolicyId, ts, tsPolicy, false);

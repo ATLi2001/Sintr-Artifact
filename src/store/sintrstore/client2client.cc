@@ -517,6 +517,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
         continue;
       }
       beginValSent.insert(i);
+      Debug("SENDING TO CLIENT %lu from client id %lu seq num %lu", i, client_id, client_seq_num);
       transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
     }
     // sanity check - policy should be satisfied by the clients we are sending to
@@ -732,14 +733,14 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     // this will contain the prepared txn dependency
     if (hasDep) {
       UW_ASSERT(dep.IsInitialized());
-      *fwdReadResult.mutable_dep() = std::move(dep);
+      *fwdReadResult.mutable_dep() = dep;
       // must be oneof write or signed write
       *fwdPointQueryResultMsgToSend->mutable_write() = proto::Write();
     }
     else {
       if (params.validateProofs) {
         if (proof.IsInitialized()) {
-          *fwdPointQueryResultMsgToSend->mutable_proof() = std::move(proof);
+          *fwdPointQueryResultMsgToSend->mutable_proof() = proof;
         }
         // if no proof then it is possible the value is empty
         else {
@@ -749,7 +750,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
 
       // depending on if signatures are enabled and if the value is non empty
       if(params.signedMessages && value.length() != 0) {
-        *fwdPointQueryResultMsgToSend->mutable_signed_write() = std::move(signedWrite);
+        *fwdPointQueryResultMsgToSend->mutable_signed_write() = signedWrite;
       } else {
         // this should only happen if value is empty
         UW_ASSERT(value.length() == 0);
@@ -777,7 +778,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     // create_hmac_us.add(duration);
   }
   else {
-    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
+    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = fwdReadResult;
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
@@ -1726,20 +1727,6 @@ bool Client2Client::ReadSigHelper(const proto::ForwardReadResult &fwdReadResult,
         return false;
       }
     }
-      // if(params.sintr_params.c2cUseAsynchVal) {
-      //   asyncValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
-      //     keyManager, verifier, curr_client_id, curr_client_seq_num);
-      // } else {
-      //   if (!ValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
-      //     keyManager, verifier)) {
-      //     Debug(
-      //       "Invalid dependency on forwarded read result from client id %lu, seq num %lu",
-      //       curr_client_id, 
-      //       curr_client_seq_num
-      //     );
-      //     return false;
-      //   }
-      // }
     write = fwdReadResult.dep().write();
   }
   else {
