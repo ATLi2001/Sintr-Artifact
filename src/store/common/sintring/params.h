@@ -64,7 +64,7 @@ typedef struct SintrParameters {
   const bool serverSkipEndorsementCheck; // server skips endorsement check completely
   const bool policyCCC; // perform CCC on policies
   const bool optimisticReceiveEndorsement; // receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)
-  const bool ignorePolicyUpdate; // ignore policy updates during a transaction
+  const bool ignorePolicyUpdate; // ignore policy updates during a transaction, does not forward gets if enabled
   const bool clientEstimatePolicy; // client estimates policy at start of transaction
   const bool hashQueryGenId; // hash query general id
   const bool separateTransport; // enable separate transport object for c2c communication

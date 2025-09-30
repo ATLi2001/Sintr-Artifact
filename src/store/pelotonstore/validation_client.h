@@ -80,6 +80,7 @@ class ValidationClient : public ::ValidationClientCommon {
 
   // return completed transaction for requested id
   std::unique_ptr<TransactionMessage> GetCompletedTxnMsg(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+  void SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
  private:
   struct PendingValidationSQLRequest {

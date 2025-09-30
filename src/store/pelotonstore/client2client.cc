@@ -38,15 +38,16 @@
 
 namespace pelotonstore {
 
-Client2Client::Client2Client(transport::Configuration *config, transport::Configuration *clients_config, Transport *transport,
+Client2Client::Client2Client(transport::Configuration *clients_config, Transport *transport,
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool signMessages, bool validateProofs,
       SintrParameters sintr_params, KeyManager *keyManager,
       EndorsementClient *endorseClient, ClientSelector *valClientSelector, std::mt19937 &rand,
       const std::vector<std::string> &keys) :
       Client2ClientCommon(client_id, clients_config, transport, group, sintr_params, endorseClient, valClientSelector, rand, keys),
-      config(config), nshards(nshards), ngroups(ngroups), signMessages(signMessages), validateProofs(validateProofs), keyManager(keyManager) {
+      nshards(nshards), ngroups(ngroups), signMessages(signMessages), validateProofs(validateProofs), keyManager(keyManager) {
 
   valClient = new ValidationClient(transport, client_id, sintr_params);
+  Warning("CLIENT2CLIENT PELOTON CREATED FOR CLIENT ID %d", client_id);
 }
 
 Client2Client::~Client2Client() {
@@ -55,8 +56,13 @@ Client2Client::~Client2Client() {
 
 void Client2Client::ReceiveMessage(const TransportAddress &remote,
       const std::string &type, const std::string &data, void *meta_data) {
-
-  if (type == beginValTxnMsg.GetTypeName()) {
+  if (type == sendPing.GetTypeName()) {
+    PingMessage ping;
+    Debug("Ping received");
+    ping.ParseFromString(data);
+    HandlePingMessage(ping);
+  }
+  else if (type == beginValTxnMsg.GetTypeName()) {
     ManageDispatchBeginValidateTxnMessage(remote, data);
   }
   else if (type == fwdSQLResultMsg.GetTypeName()) {
@@ -143,19 +149,19 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
 }
 
 void Client2Client::SendForwardSQLResultMessage(const std::string &sql_gen_id, const std::string &sql_result,
-    proto::SignedMessage *signedMessage) {
+    proto::SignedMessage *signedMessage, TransactionMessage *txn_msg) {
 
   if (!sintr_params.c2cSendThread) {
     SendForwardSQLResultMessageHelper(
       sql_gen_id, sql_result,
-      *signedMessage
+      signedMessage, txn_msg
     );
   }
   else {
     std::function<void*(void)> f = [=]() {
       this->SendForwardSQLResultMessageHelper(
         sql_gen_id, sql_result,
-        *signedMessage
+        signedMessage, txn_msg
       );
       return (void*) true;
     };
@@ -166,7 +172,7 @@ void Client2Client::SendForwardSQLResultMessage(const std::string &sql_gen_id, c
 }
 
 void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen_id, const std::string &sql_result,
-      proto::SignedMessage &signedMessage) {
+      proto::SignedMessage *signedMessage, TransactionMessage *txn_msg) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardSQLResultMessage *fwdSQLResultMsgToSend = new proto::ForwardSQLResultMessage();
@@ -175,6 +181,7 @@ void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen
   fwdSQLResult->set_sql_result(sql_result);
   fwdSQLResult->set_client_id(client_id);
   fwdSQLResult->set_client_seq_num(client_seq_num);
+  fwdSQLResult->set_allocated_txn_msg(txn_msg); //TODO: Figure out a better way to move this than copying
 
   // copy into sentFwdResultState
   sentFwdResultState->fwdMsgUnderlying = fwdSQLResult;
@@ -191,7 +198,7 @@ void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen
   }
 
   if (validateProofs) {
-    *fwdSQLResultMsgToSend->mutable_signed_fwd_sql_result() = std::move(signedMessage);
+    fwdSQLResultMsgToSend->set_allocated_server_sql_sig(signedMessage);
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
@@ -320,6 +327,7 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   ValidationTransaction *valTxn = valParseClient->Parse(txnState);
   TransportAddress *remoteCopy = remote.clone();
   ValidationInfo *valInfo = new ValidationInfo(curr_client_id, curr_client_seq_num, std::move(valTxn), std::move(remoteCopy));
+  valClient->SetTxnTimestamp(curr_client_id, curr_client_seq_num);
   validationQueue.push(valInfo);
 }
 
@@ -521,7 +529,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
 
   if (validateProofs && signMessages) {
     if (!sintr_params.parallelQuerySigsCheck) {
-      if (!CheckQuerySigHelper(fwdSQLResultMsg.server_sql_sig(), sql_gen_id, sql_result, sql_txn_msg)) {
+      if (sql_result != "" && !CheckQuerySigHelper(fwdSQLResultMsg.server_sql_sig(), sql_gen_id, sql_result, sql_txn_msg)) {
+        // if the sql result is empty most likely the server aborted the sql request
         Debug(
           "Invalid server signature on forwarded sql result from client id %lu, seq num %lu",
           curr_client_id,
@@ -536,7 +545,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
         this, curr_client_id, curr_client_seq_num, signedMessage=fwdSQLResultMsg.server_sql_sig(),
         sql_gen_id, sql_result, sql_txn_msg
       ]() {
-        bool is_valid = CheckQuerySigHelper(signedMessage, sql_gen_id, sql_result, sql_txn_msg);
+        bool is_valid = sql_result == "" || CheckQuerySigHelper(signedMessage, sql_gen_id, sql_result, sql_txn_msg);
+        // dont check validity if sql result is empty, most likely means query was aborted
         if (!is_valid) {
           Debug(
             "Invalid server signature on forwarded sql result from client id %lu, seq num %lu",
@@ -545,8 +555,8 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult
           );
           return (void*) false;
         }
-
-        valClient->NotifyForwardQueryResultValid(curr_client_id, curr_client_seq_num);
+        if(sql_result != "") valClient->NotifyForwardQueryResultValid(curr_client_id, curr_client_seq_num);
+        // only notify and commit if sql result isn't empty?
         return (void*) true;
       };
 
@@ -580,7 +590,7 @@ bool Client2Client::CheckQuerySigHelper(const proto::SignedMessage &signedMessag
 
   // next make sure that we have matches
   if (validated_result.sql_gen_id() != sql_gen_id) {
-    Debug("Mismatch in sql gen id for forwarded sql result");
+    Debug("Mismatch in sql gen id for forwarded sql result %s vs %s", BytesToHex(sql_gen_id, 16).c_str(), BytesToHex(validated_result.sql_gen_id(), 16).c_str());
     return false;
   }
 
@@ -635,6 +645,17 @@ void Client2Client::ValidationThreadFunction() {
 
     if (sintr_params.debugEndorseCheck) {
       finishValTxnMsg.set_allocated_val_txn_msg(txn_msg.release());
+    }
+    if (false) {
+      Debug("Trying to send validation txn: [%lu:%lu]", curr_client_id, curr_client_seq_num);
+      for (const auto &read : txn_msg->readset()) {
+        Debug("Validation read key: %s", read.key().c_str());
+      }
+      for (const auto &write : txn_msg->writeset()) {
+        Debug("Validation write key: %s", write.key().c_str());
+        Debug("Validation write value: %s", write.value().c_str());
+
+      }
     }
 
     transport->SendMessage(this, *valInfo->remote, finishValTxnMsg);

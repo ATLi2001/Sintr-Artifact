@@ -93,7 +93,13 @@ void ValidationClient::SQLRequest(std::string &statement, sql_callback scb,
   );
   if(itr != a->second->pendingForwardedSQLResults.end()) {
     sql::QueryResultProtoWrapper* res = new sql::QueryResultProtoWrapper(itr->second);
-    scb(REPLY_OK, res);
+    if(itr->second != "") {
+      scb(REPLY_OK, res);
+    } else {
+      Debug("RETURNING REPLY FAIL FOR QUERY %s HERE", BytesToHex(pendingSQLReq->sql_gen_id, 16).c_str());
+      Debug("txn %s should abort", txn_id.c_str());
+      scb(REPLY_FAIL, res);
+    }
     delete pendingSQLReq;
     a->second->pendingForwardedSQLResults.erase(itr);
     return;
@@ -223,11 +229,11 @@ void ValidationClient::ProcessForwardSQLResult(uint64_t txn_client_id, uint64_t 
   auto editTxnStateCB = [](AllValidationTxnState *allValTxnState, proto::ForwardSQLResult &&fwdSQLResult) {
     ++allValTxnState->numProcessedForwardQuery;
     for (auto &read : fwdSQLResult.mutable_txn_msg()->readset()) {
-      Debug("read key: %s", read.key().c_str());
+      Debug("process forward read key: %s", read.key().c_str());
       *allValTxnState->txn_msg->add_readset() = std::move(read);
     }
     for (auto &write : fwdSQLResult.mutable_txn_msg()->writeset()) {
-      Debug("write key: %s", write.key().c_str());
+      Debug("process forward write key: %s", write.key().c_str());
       *allValTxnState->txn_msg->add_writeset() = std::move(write);
     }
   };
@@ -279,7 +285,13 @@ void ValidationClient::ProcessForwardSQLResult(uint64_t txn_client_id, uint64_t 
 
   sql::QueryResultProtoWrapper *q_result = new sql::QueryResultProtoWrapper(curr_sql_result);
   editTxnStateCB(a->second, std::move(fwdSQLResult));
-  req->vscb(REPLY_OK, q_result);
+  if(curr_sql_result != "") {
+    req->vscb(REPLY_OK, q_result);
+  } else {
+    Debug("RETURNING REPLY FAIL FOR QUERY %s", BytesToHex(curr_sql_gen_id, 16).c_str());
+    Debug("txn %s should abort", curr_txn_id.c_str());
+    req->vscb(REPLY_FAIL, q_result);
+  }
   // no need to delete q_result since the query callback will take care of it
 
   // remove from vector
@@ -292,7 +304,9 @@ void ValidationClient::NotifyForwardQueryResultValid(uint64_t txn_client_id, uin
   std::string curr_txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
   allValTxnStatesMap::accessor a;
   if (!allValTxnStates.find(a, curr_txn_id)) {
-    Panic("cannot find transaction %s in allValTxnStates", curr_txn_id.c_str());
+    Debug("cannot find transaction %s in allValTxnStates, transaction may have been aborted", curr_txn_id.c_str());
+    // Just debug because it's possible txn aborts before query sigs are all validated...
+    return;
   }
   ++a->second->numValidForwardQuery;
   Debug(
@@ -324,6 +338,15 @@ std::unique_ptr<TransactionMessage> ValidationClient::GetCompletedTxnMsg(uint64_
 
   allValTxnStates.erase(a);
   return txn_msg;
+}
+
+void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
+  std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+  allValTxnStatesMap::accessor a;
+  const bool isNewKey = allValTxnStates.insert(a, txn_id);
+  if (isNewKey) {
+    a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num);
+  } 
 }
 
 } // namespace pelotonstore

@@ -51,7 +51,7 @@ namespace pelotonstore {
 
 // status, key, value
 
-typedef std::function<void(int, const std::string&, TransactionMessage*)> sql_rpc_callback;
+typedef std::function<void(int, const std::string&, TransactionMessage*, proto::SignedMessage*)> sql_rpc_callback;
 typedef std::function<void(int)> sql_rpc_timeout_callback;
 
 typedef std::function<void(int)> try_commit_callback;
@@ -67,7 +67,7 @@ class ShardClient : public TransportReceiver {
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
       bool signMessages, bool validateProofs, bool signClientProposals,
       KeyManager *keyManager, Stats* stats,
-      bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "");
+      bool fake_SMR = false, uint64_t SMR_mode = 0, const std::string& PG_BFTSMART_config_path = "", bool sintrUnsafe = false);
   ~ShardClient();
 
   void ReceiveMessage(const TransportAddress &remote, const std::string &type, const std::string &data, void *meta_data);
@@ -75,7 +75,8 @@ class ShardClient : public TransportReceiver {
   void Query(const std::string &query, uint64_t client_id, uint64_t client_seq_num, sql_rpc_callback srcb, sql_rpc_timeout_callback srtcb,  uint32_t timeout);
 
   void Commit(uint64_t client_id, uint64_t client_seq_num, TransactionMessage *txn_msg,
-    try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout);
+    try_commit_callback tccb, try_commit_timeout_callback tctcb, uint32_t timeout,
+    const std::vector<std::shared_ptr<::google::protobuf::Message>> &endorsements);
 
   void Abort(uint64_t client_id, uint64_t client_seq_num);
 
@@ -96,6 +97,7 @@ class ShardClient : public TransportReceiver {
   bool signMessages;
   bool validateProofs;
   bool signClientProposals;
+  bool sintrUnsafe;
   KeyManager *keyManager;
 
   // If this flag is set, then we are simulating a fake SMR in which we only care about the reply from a single replica ("leader").
