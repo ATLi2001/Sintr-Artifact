@@ -736,7 +736,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
       rcb(REPLY_OK, key, write.value(), Timestamp(), nullptr,
           false, false,
           nullptr, nullptr, nullptr,
-          nullptr, false, nullptr);
+          nullptr);
       return true;
     }
   }
@@ -750,7 +750,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
       rcb(REPLY_OK, key, readValues[key], read.readtime(), nullptr,
           false, false,
           nullptr, nullptr, nullptr,
-          nullptr, false, std::move(std::make_unique<std::string>(read.hashed_readtime())));
+          std::move(std::make_unique<std::string>(read.hashed_readtime())));
       return true;
     }
   }
@@ -971,9 +971,6 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
         if (preparedItr->second.second >= req->rds) {
           req->maxTs = preparedItr->first;
           req->maxValue = preparedItr->second.first.prepared_value();
-          if (preparedItr->second.first.has_prepared_policy()) {
-            // req->maxPolicy = preparedItr->second.first.prepared_policy();
-          }
           // if we are going to be forwarding a prepared value, no need for committed proof and signed write
           // req->maxCommittedProof.Clear();
           // req->maxWrite.Clear();
@@ -1186,21 +1183,6 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
     }
   }
 
-  // also check prepared policy only if we are not using OCC for policies
-  if (!params.sintr_params.useOCCForPolicies && params.maxDepDepth > -2 && write->has_prepared_policy()) {
-    Timestamp preparedPolicyTs(params.sintr_params.hideTimestamps ? reply.prepared_policy_timestamp() : write->prepared_policy_timestamp());
-    Debug("[group %i] ReadReply for %lu with prepared policy id %lu and ts %lu.%lu.", 
-        group, reply.req_id(), write->prepared_policy().policy_id(), preparedPolicyTs.getTimestamp(), preparedPolicyTs.getID());
-    
-    auto preparedPolicyItr = req->preparedPolicy.find(preparedPolicyTs);
-    if (preparedPolicyItr == req->preparedPolicy.end()) {
-      req->preparedPolicy.insert(std::make_pair(preparedPolicyTs, std::make_pair(*write, 1)));
-    }
-    else if (preparedPolicyItr->second.first == *write) {
-      preparedPolicyItr->second.second += 1;
-    }
-  }
-
   if (req->numReplies >= req->rqs) {
     if (params.maxDepDepth > -2) {
       for (auto preparedItr = req->prepared.rbegin();
@@ -1221,9 +1203,6 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
               req->maxWrite->Clear();
             }
           }
-          if (!params.sintr_params.useOCCForPolicies && preparedItr->second.first.has_prepared_policy()) {
-            req->maxPolicy = std::make_unique<EndorsementPolicyMessage>(preparedItr->second.first.prepared_policy());
-          }
           if(req->dep == nullptr) {
             req->dep = std::make_unique<proto::Dependency>();
           }
@@ -1234,28 +1213,6 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
           req->dep->set_involved_group(group);
           req->hasDep = true;
           break;
-        }
-      }
-      // also do prepared policy map
-      if(!params.sintr_params.useOCCForPolicies) {
-        for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
-            preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
-          if (preparedPolicyItr->first < req->maxPolicyTs) {
-            break;
-          }
-
-          if (preparedPolicyItr->second.second >= req->rds) {
-            req->maxPolicyTs = preparedPolicyItr->first;
-            if (preparedPolicyItr->second.first.has_prepared_policy()) {
-              req->maxPolicy = std::make_unique<EndorsementPolicyMessage>(preparedPolicyItr->second.first.prepared_policy());
-            }
-            *req->policyDep->mutable_write() = preparedPolicyItr->second.first;
-            req->policyDep->set_involved_group(group);
-            // need to manually edit digest
-            req->policyDep->mutable_write()->set_prepared_txn_digest(preparedPolicyItr->second.first.prepared_policy_txn_digest());
-            req->hasPolicyDep = true;
-            break;
-          }
         }
       }
     }
@@ -1290,7 +1247,7 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
 
       req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, std::move(req->dep),req->hasDep && !req->get_from_put, !req->get_from_put,
         std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy),
-        std::move(req->policyDep), std::move(req->hasPolicyDep), std::move(tsDigest));
+        std::move(tsDigest));
     }
     else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
       std::string &prev_read = it->second;
@@ -1312,8 +1269,7 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
       // auto duration = end_time-start_time;
       // shard_client_receive.add(duration);
       req->gcb(REPLY_OK, req->key, prev_read, req->maxTs, std::move(req->dep), false, false, //Don't add to read set.
-        nullptr, nullptr, nullptr,
-        std::move(req->policyDep), false, nullptr); 
+        nullptr, nullptr, nullptr, nullptr); 
     } 
     delete req;
   }

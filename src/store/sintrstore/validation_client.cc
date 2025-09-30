@@ -654,8 +654,7 @@ void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_clie
 }
 
 void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
-    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset,
-    const proto::Dependency &policyDep, bool hasPolicyDep) {
+    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset) {
   std::string curr_key = fwdReadResult.key();
   std::string curr_value = fwdReadResult.value();
   Timestamp curr_ts;
@@ -674,7 +673,7 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
 
   // lambda for editing txn state
   auto editTxnStateCB = [
-    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset, &policyDep, hasPolicyDep, &hashed_ts
+    this, &curr_key, &curr_value, &curr_ts, &dep, hasDep, addReadset, &hashed_ts
   ](AllValidationTxnState *allValTxnState) {
     if (addReadset) {
       Debug("ADDING TO NUMPENDING READS HERE %s FOR client seq num %lu", curr_key.c_str(), allValTxnState->txn_client_seq_num);
@@ -686,9 +685,6 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     }
     if (hasDep) {
       AddDep(allValTxnState, dep);
-    }
-    if (hasPolicyDep) {
-      AddDep(allValTxnState, policyDep);
     }
   };
 

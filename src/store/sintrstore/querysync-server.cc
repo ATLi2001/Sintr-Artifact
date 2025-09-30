@@ -414,38 +414,17 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
         const proto::Transaction *mostRecentPolicyTxn;
         std::string preparedPolicyId = policyIdFunction(query->primary_enc_key(), "");
         std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
-        if(params.sintr_params.useOCCForPolicies) {
-          GetPolicy(preparedPolicyId, ts, tsPolicy, false);
+        GetPolicy(preparedPolicyId, ts, tsPolicy, false);
+        if(params.sintr_params.hideTimestamps) {
+            pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
+            tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
         } else {
-          GetPolicy(preparedPolicyId, ts, tsPolicy, true, &mostRecentPolicyTxn);
+            tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
         }
-        // if GetPolicy returns a prepared policy then it has no proof
-        if (tsPolicy.second.proof == nullptr) {
-            // this shouldn't trigger if useOCCForPolicies is true
-            UW_ASSERT(!params.sintr_params.useOCCForPolicies);
-            Debug("Prepared policy id write with most recent ts %lu.%lu.",
-                    tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-            if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
-                tsPolicy.first.serialize(pointQueryReply->mutable_prepared_policy_timestamp());
-            } else {
-                tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_prepared_policy_timestamp());
-            }
-            pointQueryReply->mutable_write()->mutable_prepared_policy()->set_policy_id(preparedPolicyId);
-            tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-            *pointQueryReply->mutable_write()->mutable_prepared_policy_txn_digest() = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
-        } else {
-            if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
-                tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
-            } else {
-                tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
-            }
-            pointQueryReply->mutable_write()->mutable_committed_policy()->set_policy_id(preparedPolicyId);
-            tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_committed_policy()->mutable_policy());
-            if (params.validateProofs) {
-                *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
-            }
+        pointQueryReply->mutable_write()->mutable_committed_policy()->set_policy_id(preparedPolicyId);
+        tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_committed_policy()->mutable_policy());
+        if (params.validateProofs) {
+            *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
         }
     }
 
@@ -864,33 +843,17 @@ void Server::GetQueryPolicies(QueryReadSetMgr &queryReadSetMgr, QueryMetaData *q
         std::string policyId = policyIdFunction(read.key(), "");
         if (prev_policies.find(policyId) == prev_policies.end()) {
             std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
-            const proto::Transaction *mostRecentPolicyTxn;
-            if (params.sintr_params.useOCCForPolicies) {
-                GetPolicy(policyId, query_md->ts, tsPolicy, false);
-            }
-            else {
-                GetPolicy(policyId, query_md->ts, tsPolicy, true, &mostRecentPolicyTxn);
-            }
+            GetPolicy(policyId, query_md->ts, tsPolicy, false);
             // garbage collection is handled by google protobuf
             proto::QueryPolicy *query_policy = queryResultReply->add_query_policy();
             // don't need to hide this ts because client should not forward query policy
             tsPolicy.first.serialize(query_policy->mutable_policy_timestamp());
             query_policy->mutable_endorsement_policy()->set_policy_id(policyId);
             tsPolicy.second.policy->SerializeToProtoMessage(query_policy->mutable_endorsement_policy()->mutable_policy());
-            // if GetPolicy returns a prepared policy then it has no proof
-            if (tsPolicy.second.proof == nullptr) {
-                // this shouldn't trigger if useOCCForPolicies is true
-                UW_ASSERT(!params.sintr_params.useOCCForPolicies);
-                Debug("Prepared policy id write with most recent ts %lu.%lu.",
-                      tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-                *query_policy->mutable_prepared_policy_txn_digest() = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
-            }
-            else {
-                Debug("Committed policy id write with most recent ts %lu.%lu.",
-                      tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-                if (params.validateProofs) {
-                    *query_policy->mutable_policy_proof() = *tsPolicy.second.proof;
-                }
+            Debug("Committed policy id write with most recent ts %lu.%lu.",
+                tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
+            if (params.validateProofs) {
+                *query_policy->mutable_policy_proof() = *tsPolicy.second.proof;
             }
             prev_policies.insert(policyId);
         }

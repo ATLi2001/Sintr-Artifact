@@ -71,7 +71,7 @@ typedef std::function<void(int, const std::string &,
     bool, bool,
     std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
     std::unique_ptr<EndorsementPolicyMessage>,
-    std::unique_ptr<proto::Dependency>, bool, std::unique_ptr<std::string>)> read_callback;
+    std::unique_ptr<std::string>)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
 ////////// Queries
@@ -225,10 +225,10 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
   struct PendingQuorumGet {
     PendingQuorumGet(uint64_t reqId) : reqId(reqId),
         numReplies(0UL), numOKReplies(0UL), hasDep(false),
-        firstCommittedReply(true), hasPolicyDep(false) { }
+        firstCommittedReply(true) { }
     PendingQuorumGet() : reqId(0UL),
         numReplies(0UL), numOKReplies(0UL), hasDep(false),
-        firstCommittedReply(true), hasPolicyDep(false) { }
+        firstCommittedReply(true) { }
     ~PendingQuorumGet() { }
     uint64_t reqId;
     std::string key;
@@ -263,9 +263,6 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
 
     Timestamp maxPolicyTs;
     // prepared policy map from timestamp to (write containing prepared policy, count)
-    std::map<Timestamp, std::pair<proto::Write, uint64_t>> preparedPolicy;
-    std::unique_ptr<proto::Dependency> policyDep;
-    bool hasPolicyDep;
   };
 
   struct Result_mgr {

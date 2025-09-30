@@ -63,7 +63,6 @@ message PointQueryResultReply {
   optional TimestampMessage committed_pq_timestamp = 8;
   optional TimestampMessage prepared_pq_timestamp = 9;
   optional TimestampMessage committed_policy_timestamp = 10;
-  optional TimestampMessage prepared_policy_timestamp = 11;
 }
 //==> moved to sintr-proto.proto
 // message ReadSet { 
@@ -113,8 +112,7 @@ message QueryResultReply {
 message QueryPolicy {
   optional EndorsementPolicyMessage endorsement_policy = 1;
   optional TimestampMessage policy_timestamp = 2;
-  optional bytes prepared_policy_txn_digest = 3;
-  optional CommittedProof policy_proof = 4;
+  optional CommittedProof policy_proof = 3;
 }
 
 message FailQueryMsg {

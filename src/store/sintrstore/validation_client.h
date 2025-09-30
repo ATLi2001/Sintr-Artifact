@@ -101,8 +101,7 @@ class ValidationClient : public ::ValidationClientCommon {
 
   // either fill one of the pending validation gets or put into readset for future validation get
   void ProcessForwardReadResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
-    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset,
-    const proto::Dependency &policyDep, bool hasPolicyDep);
+    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset);
 
   // either fill one of the pending validation queries or put into readset for future validation query
   void ProcessForwardPointQueryResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 

@@ -335,7 +335,7 @@ void Client::Get(const std::string &key, get_callback gcb,
         bool hasDep, bool addReadSet,
         std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite,
         std::unique_ptr<EndorsementPolicyMessage> policyMsg,
-        std::unique_ptr<proto::Dependency> policyDep, bool hasPolicyDep, std::unique_ptr<std::string> tsDigest) {
+        std::unique_ptr<std::string> tsDigest) {
 
       // struct timespec ts_start;
       // clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -372,15 +372,12 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasDep && dep != nullptr) {
         *txn.add_deps() = *dep;
       }
-      if (!params.sintr_params.useOCCForPolicies && hasPolicyDep && policyDep != nullptr) {
-        *txn.add_deps() = *policyDep;
-      }
       //if(true) {
         // clock_gettime(CLOCK_MONOTONIC, &ts_start);
         // uint64_t c2c_send_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
         c2client->SendForwardReadResultMessage(
           key, val, ts, proof, signedWrite, dep, hasDep, addReadSet,
-          policyDep, hasPolicyDep, tsDigest
+          tsDigest
         );
         // clock_gettime(CLOCK_MONOTONIC, &ts_start);
         // uint64_t c2c_send_end = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;

@@ -1250,41 +1250,17 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   if (params.maxDepDepth > -2) {
     preparedTxn = FindPreparedVersion(policyId, ts, exists, tsPolicy, proto::Transaction::POLICY_ID_POLICY);
   }
-  if(params.sintr_params.useOCCForPolicies) {
-    // if prepared txn exists (so prepared policy exists)
-    if(preparedTxn != nullptr) {
-      Debug("[%s] ABSTAIN wr conflict prepared policy for policy ID associated with txn:"
-        " prepared policy ts %lu.%lu < this txn's ts %lu.%lu.",
-        BytesToHex(txnDigest, 16).c_str(),
-        tsPolicy.first.getTimestamp(), tsPolicy.first.getID(),
-        ts.getTimestamp(), ts.getID());
-      stats.Increment("cc_abstains", 1);
-      stats.Increment("cc_abstains_wr_conflict", 1);
-      Debug("Prepared txn digest: %s", BytesToHex(preparedTxn->txndigest(), 16).c_str());
-      abstain_conflict = preparedTxn;
-      return proto::ConcurrencyControl::ABSTAIN;
-    }
-  } else {
-    // if prepared policy exists, add dependency to prepared policy if it already doesn't exist, then return wait
-    Panic("Must use OCC for policies, MVTSO for policy CC is not supported");
-    // if(preparedTxn != nullptr) {
-    //   bool depExists = false;
-    //   for(const auto &dep: depSet){
-    //     if(dep.write().prepared_txn_digest() == preparedTxn->txndigest()) {
-    //       depExists = true;
-    //       break;
-    //     }
-    //   }
-    //   if(!depExists) {
-    //     Debug("Adding new dependency on policy");
-    //     auto new_dep = txn.mutable_merged_read_set()->add_deps();
-    //     new_dep->mutable_write()->set_prepared_txn_digest(std::move(preparedTxn->txndigest()));
-    //     new_dep->set_involved_group(groupIdx);  
-    //   }
-    //   Debug("Waiting for prepared policy to commit");
-    //   stats.Increment("cc_waits", 1);
-    //   return proto::ConcurrencyControl::WAIT;        
-    // }
+  if(preparedTxn != nullptr) {
+    Debug("[%s] ABSTAIN wr conflict prepared policy for policy ID associated with txn:"
+      " prepared policy ts %lu.%lu < this txn's ts %lu.%lu.",
+      BytesToHex(txnDigest, 16).c_str(),
+      tsPolicy.first.getTimestamp(), tsPolicy.first.getID(),
+      ts.getTimestamp(), ts.getID());
+    stats.Increment("cc_abstains", 1);
+    stats.Increment("cc_abstains_wr_conflict", 1);
+    Debug("Prepared txn digest: %s", BytesToHex(preparedTxn->txndigest(), 16).c_str());
+    abstain_conflict = preparedTxn;
+    return proto::ConcurrencyControl::ABSTAIN;
   }
   // hack to return commit if neither check fails
   implicitPolicyReads.insert(std::make_pair(policyId, tsPolicy.first));

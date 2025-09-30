@@ -905,31 +905,27 @@ void ShardClient::HandleQueryResult(proto::QueryResultReply &queryResult){
 
         pendingQuery->done = true;
         // since the query is done, check if it has any policies
-        // TODO: Add support for prepared policies (when params.sintr_params.useOCCForPolicies is false)
         if(queryResult.query_policy_size() > 0) {
             for(const auto &policy : queryResult.query_policy()) {
-                // since useOCCForPolicies is true policy should have a policy proof
                 std::string policyId = policy.endorsement_policy().policy_id();
-                if(params.sintr_params.useOCCForPolicies || policy.has_policy_proof()) {
-                    if (params.validateProofs) {
-                        std::string committedPolicyTxnDigest = TransactionDigest(policy.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
-                        std::string policyObjectStr;
-                        policy.endorsement_policy().policy().SerializeToString(&policyObjectStr);
-                        if (!ValidateTransactionWrite(policy.policy_proof(), &committedPolicyTxnDigest,
-                            policyId, policyObjectStr, policy.policy_timestamp(),
-                            config, params.signedMessages, keyManager, verifier,
-                            params.sintr_params.hideTimestamps ?
-                            TimestampDigest(policy.policy_timestamp()) : "")) {
-                            Debug("[group %i] Failed to validate committed policy for query %s.",
-                                group, queryResult.result().query_gen_id().c_str());
-                            return;
-                        }
-                        Debug("[group %i] QueryReply for %lu with committed policy id %s.", group, queryResult.req_id(),policyId);
-                        Timestamp policyTs(policy.policy_timestamp());
-                        if(pendingQuery->queryPolicyMap.find(policyId) == pendingQuery->queryPolicyMap.end() || 
-                            pendingQuery->queryPolicyMap[policyId].second < policyTs) {
-                            pendingQuery->queryPolicyMap[policyId] = std::make_pair(policy.endorsement_policy(), policyTs);
-                        }
+                if (params.validateProofs) {
+                    std::string committedPolicyTxnDigest = TransactionDigest(policy.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
+                    std::string policyObjectStr;
+                    policy.endorsement_policy().policy().SerializeToString(&policyObjectStr);
+                    if (!ValidateTransactionWrite(policy.policy_proof(), &committedPolicyTxnDigest,
+                        policyId, policyObjectStr, policy.policy_timestamp(),
+                        config, params.signedMessages, keyManager, verifier,
+                        params.sintr_params.hideTimestamps ?
+                        TimestampDigest(policy.policy_timestamp()) : "")) {
+                        Debug("[group %i] Failed to validate committed policy for query %s.",
+                            group, queryResult.result().query_gen_id().c_str());
+                        return;
+                    }
+                    Debug("[group %i] QueryReply for %lu with committed policy id %s.", group, queryResult.req_id(),policyId);
+                    Timestamp policyTs(policy.policy_timestamp());
+                    if(pendingQuery->queryPolicyMap.find(policyId) == pendingQuery->queryPolicyMap.end() || 
+                        pendingQuery->queryPolicyMap[policyId].second < policyTs) {
+                        pendingQuery->queryPolicyMap[policyId] = std::make_pair(policy.endorsement_policy(), policyTs);
                     }
                 }
             }
@@ -1354,21 +1350,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         
     }
 
-    // also check prepared policy
-    if (params.maxDepDepth > -2 && write->has_prepared_policy()) {
-        Timestamp preparedPolicyTs(params.sintr_params.hideTimestamps ? reply.prepared_policy_timestamp() : write->prepared_policy_timestamp());
-        Debug("[group %i] ReadReply for %lu with prepared policy id %lu and ts %lu.%lu.", 
-            group, reply.req_id(), write->prepared_policy().policy_id(), preparedPolicyTs.getTimestamp(), preparedPolicyTs.getID());
-        
-        auto preparedPolicyItr = req->preparedPolicy.find(preparedPolicyTs);
-        if (preparedPolicyItr == req->preparedPolicy.end()) {
-            req->preparedPolicy.insert(std::make_pair(preparedPolicyTs, std::make_pair(*write, 1)));
-        }
-        else if (preparedPolicyItr->second.first == *write) {
-            preparedPolicyItr->second.second += 1;
-        }
-    }
-    
+    // also check prepared policy    
     
     if (req->numReplies >= readQuorumSize) {
         if (params.maxDepDepth > -2) {
@@ -1412,9 +1394,6 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     if(req->maxWrite != nullptr) {
                     req->maxWrite->Clear();
                     }
-                    // if (preparedItr->second.first.has_prepared_policy()) {
-                    //     req->maxPolicy = preparedItr->second.first.prepared_policy();
-                    // }
                     if(req->dep == nullptr) {
                         req->dep = std::make_unique<proto::Dependency>();
                     }
@@ -1431,23 +1410,6 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     }
                     req->dep->set_involved_group(group);
                     req->hasDep = true;
-                    break;
-                }
-            }
-            // also do prepared policy map
-            // should not run if useOCCForPolicies is true.
-            for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
-                preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
-                
-                if (preparedPolicyItr->first < req->maxPolicyTs) {
-                    break;
-                }
-
-                if (preparedPolicyItr->second.second >= req->rds) {
-                    req->maxPolicyTs = preparedPolicyItr->first;
-                    if (preparedPolicyItr->second.first.has_prepared_policy()) {
-                        // req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
-                    }
                     break;
                 }
             }

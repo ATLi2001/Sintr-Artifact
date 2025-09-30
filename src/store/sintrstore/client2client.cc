@@ -190,25 +190,27 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   UW_ASSERT(params.sintr_params.maxClientsConnect < clients_config->n);
   // total number of clients should always be more than the max amount of clients to contact
   for(int i = 1; i <= params.sintr_params.maxClientsConnect; i++) {
+    std::unique_lock lk(tcpMutex);
     sendDone = false;
     replyDone = false;
+    lk.unlock();
     //TODO: Currently assumes selector is a ring selector
     uint64_t target = (client_id + i) % clients_config->n;
     uint64_t reply_to = (clients_config->n + client_id - i) % clients_config->n;
-    Debug("Target: %lu Reply to: %lu", target, reply_to);
-    Debug("Client %lu sending ping to client %lu", client_id, target);
+    Warning("Target: %lu Reply to: %lu", target, reply_to);
+    Warning("Client %lu sending ping to client %lu", client_id, target);
     if(target != client_id) {
       Debug("PING SALT for target: %lu and is send true %d", sendPing.salt(), sendPing.send_msg());
       transport->SendMessageToReplica(this, target, sendPing);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    Debug("Client %lu sending another ping to client %lu", client_id, reply_to);
+    Warning("Client %lu sending another ping to client %lu", client_id, reply_to);
     if(reply_to != client_id && reply_to != target) {
       Debug("PING SALT for replyTo: %lu and is send true %d", replyPing.salt(), replyPing.send_msg());
       transport->SendMessageToReplica(this, reply_to, replyPing);
     }
     // need to wait for replies as well
-    std::unique_lock lk(tcpMutex);
+    lk.lock();
     if(!cvSend.wait_for(lk, std::chrono::seconds(5), [this]{return sendDone;})) {
       Panic("Timeout: Sent ping not responded to");
     }
@@ -217,7 +219,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     }
     lk.unlock();
   }
-  Debug("FINISHED SENDING AND RECEIVING PINGS");
+  Warning("FINISHED SENDING AND RECEIVING PINGS");
 }
 
 Client2Client::~Client2Client() {
@@ -319,8 +321,8 @@ bool Client2Client::MySendPing(size_t replica, const PingMessage &ping, bool ini
 void Client2Client::HandlePingMessage(const PingMessage &ping) {
   // someone else's ping
   if (ping.salt() != client_id) {
-    Debug("client %lu RECEIVED ping from %lu", client_id, ping.salt());
-    MySendPing(ping.salt(), ping, false);
+    Warning("client %lu RECEIVED ping from %lu", client_id, ping.salt());
+    transport->SendMessageToReplica(this, ping.salt(), ping);
   }
   else {
     // our own ping
@@ -328,14 +330,18 @@ void Client2Client::HandlePingMessage(const PingMessage &ping) {
     if(ping.send_msg()) {
       if(params.sintr_params.maxClientsConnect > 0) {
         Debug("Received own ping for send");
+        std::unique_lock lk(tcpMutex);
         sendDone = true;
         cvSend.notify_one();
+        lk.unlock();
       }
     } else {
       if(params.sintr_params.maxClientsConnect > 0) {
         Debug("Received own ping for receive");
+        std::unique_lock lk(tcpMutex);
         replyDone = true;
         cvReply.notify_one();
+        lk.unlock();
       }
     }
     // struct timespec ts_end;
@@ -527,26 +533,25 @@ void Client2Client::ResetTrackingState() {
 
 void Client2Client::SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
     std::unique_ptr<proto::CommittedProof> &proof, std::unique_ptr<proto::SignedMessage> &signedWrite, 
-    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, std::unique_ptr<proto::Dependency> &policyDep, bool hasPolicyDep, 
+    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, 
     std::unique_ptr<std::string> &tsDigest) {
   
   proto::CommittedProof *proofPtr = proof.release();
   proto::Dependency *depPtr = dep.release();
   proto::SignedMessage *signedWritePtr = signedWrite.release();
-  proto::Dependency *policyDepPtr = policyDep.release();
   std::string *tsDigestPtr = tsDigest.release();
 
   if (!params.sintr_params.c2cSendThread) {
     SendForwardReadResultMessageHelper(key, value, ts, proofPtr, signedWritePtr,
-      depPtr, hasDep, addReadset, policyDepPtr, hasPolicyDep, tsDigestPtr);
+      depPtr, hasDep, addReadset, tsDigestPtr);
   }
   else {
     auto f = [this, key, value, ts, proof = std::move(proofPtr),
-      signedWrite = std::move(signedWritePtr), dep = std::move(depPtr), policyDep = std::move(policyDepPtr),
-      tsDigest = std::move(tsDigestPtr), hasDep, hasPolicyDep, addReadset]() {
+      signedWrite = std::move(signedWritePtr), dep = std::move(depPtr),
+      tsDigest = std::move(tsDigestPtr), hasDep, addReadset]() {
       this->SendForwardReadResultMessageHelper(
         key, value, ts, proof, signedWrite, dep, hasDep, addReadset,
-        policyDep, hasPolicyDep, tsDigest
+        tsDigest
       );
       return (void*) true;
     };
@@ -557,7 +562,7 @@ void Client2Client::SendForwardReadResultMessage(const std::string &key, const s
 
 void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
-    proto::Dependency* dep, bool hasDep, bool addReadset, proto::Dependency* policyDep, bool hasPolicyDep,
+    proto::Dependency* dep, bool hasDep, bool addReadset,
     std::string* tsDigest) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
@@ -607,12 +612,6 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
       }
     }
 
-    // separately include policy change txn dependency if there is one
-    if (hasPolicyDep && policyDep != nullptr) {
-      UW_ASSERT(policyDep->IsInitialized());
-      fwdReadResult.set_allocated_policy_dep(policyDep);
-      policyDep = nullptr;
-    }
   }
 
   if(proof != nullptr) {
@@ -631,11 +630,6 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     delete dep;
     dep = nullptr;
   }
-  if(policyDep != nullptr) {
-    delete policyDep;
-    policyDep = nullptr;
-  }
-
   // copy into sentFwdResultState
   sentFwdResultState->fwdReadResult = fwdReadResult;
 
@@ -1326,14 +1320,6 @@ void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::
       CheckPreparedCommittedEvidence(fwdReadResult, fwdReadResultMsg);
     }
   }
-  bool hasPolicyDep = false;
-  proto::Dependency policyDep;
-  if(!params.sintr_params.useOCCForPolicies) {
-    hasPolicyDep = fwdReadResult->has_policy_dep();
-    if (hasPolicyDep) {
-      policyDep = fwdReadResult->policy_dep();
-    }
-  }
 
   Debug(
     "HandleForwardReadResult: from client id %lu, seq num %lu, key %s, value %s", 
@@ -1345,7 +1331,7 @@ void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::
   // tell valClient about this forwardedReadResult
   valClient->ProcessForwardReadResult(
     curr_client_id, curr_client_seq_num, *fwdReadResult,
-    fwdReadResult->dep(), fwdReadResult->has_dep(), addReadset, policyDep, hasPolicyDep
+    fwdReadResult->dep(), fwdReadResult->has_dep(), addReadset
   );
 }
 

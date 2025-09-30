@@ -90,7 +90,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   // forward server read reply to other peers
   void SendForwardReadResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
     std::unique_ptr<proto::CommittedProof> &proof, std::unique_ptr<proto::SignedMessage> &signedWrite, 
-    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, std::unique_ptr<proto::Dependency> &policyDep, bool hasPolicyDep, 
+    std::unique_ptr<proto::Dependency> &dep, bool hasDep, bool addReadset, 
     std::unique_ptr<std::string> &tsDigest);
   
   // forward server point query result to other peers
@@ -301,7 +301,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   void SendForwardReadResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
     proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
-    proto::Dependency* dep, bool hasDep, bool addReadset, proto::Dependency* policyDep, bool hasPolicyDep,
+    proto::Dependency* dep, bool hasDep, bool addReadset,
     std::string* tsDigest);
     
   void SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
