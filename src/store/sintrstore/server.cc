@@ -3209,7 +3209,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
   Timestamp ts(txn->timestamp());
-  std::set<std::string> policiesChecked;
+  std::unordered_set<std::string> policiesChecked;
 
   for (const auto &write : txn->write_set()) {
     if (write.is_table_col_version()) {
@@ -3250,7 +3250,6 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
 
   if (params.sintr_params.checkPolicyLeak) {
     policiesChecked.clear();
-    std::string policyId;
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
       if (read.is_table_col_version()) {
@@ -3262,7 +3261,7 @@ void Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
         continue;
       }
 
-      policyId = policyIdFunction(read.key(), "");
+      std::string policyId = policyIdFunction(read.key(), "");
       if(policiesChecked.find(policyId) != policiesChecked.end()) {
         continue;
       } else {
