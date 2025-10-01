@@ -1952,6 +1952,10 @@ std::string TimestampDigest(const Timestamp &ts) {
   return TimestampDigest(ts.getID(), ts.getTimestamp());
 }
 
+std::string TimestampDigest(const TimestampMessage &ts) {
+  return TimestampDigest(ts.id(), ts.timestamp());
+}
+
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS) {
   blake3_hasher hasher;
   blake3_hasher_init(&hasher);
@@ -1965,7 +1969,7 @@ std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timesta
 
 //should hashing be parallelized?
 //ignores txnDigest field --> this is not part of protocol contents, just a hack for storage.
-std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS) {
+std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS, bool hashEndorsements) {
   if (hashDigest) {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
@@ -2116,6 +2120,12 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
           blake3_hasher_update(&hasher, (unsigned char *) &val[0], val.length());
         }
       }
+    }
+
+    if(hashEndorsements && txn.has_endorsements()) {
+      std::string endorsements;
+      txn.endorsements().SerializeToString(&endorsements);
+      blake3_hasher_update(&hasher, (unsigned char *) &endorsements[0], endorsements.length());
     }
 
     blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);

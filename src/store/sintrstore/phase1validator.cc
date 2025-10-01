@@ -73,10 +73,7 @@ bool Phase1Validator::ProcessMessage(const proto::ConcurrencyControl &cc, bool f
       //TODO: This is not set up to handle proofs in case of ReadSet Caching
       Debug("[group %d] ABORT (with conflict).", group);
       
-      std::string committedTxnDigest = TransactionDigest(cc.committed_conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-      if(params.sintr_params.hashEndorsements) {
-        committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, cc.committed_conflict().txn(), params.hashDigest);
-      }
+      std::string committedTxnDigest = TransactionDigest(cc.committed_conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       if (params.validateProofs && !ValidateCommittedConflict(cc.committed_conflict(), &committedTxnDigest, txn, txnDigest,
         params.signedMessages, keyManager, config, verifier, params.sintr_params.policyFunctionName)) {
         Debug("[group %d] Invalid committed_conflict for Phase1Reply.",group);
@@ -143,11 +140,7 @@ bool Phase1Validator::EquivocateVotes(const proto::ConcurrencyControl &cc) {
     case proto::ConcurrencyControl::ABORT: {
       // when there's a committed conflict, there's no hope for equivocation
       std::string committedTxnDigest = TransactionDigest(
-          cc.committed_conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-          
-      if(params.sintr_params.hashEndorsements) {
-        committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, cc.committed_conflict().txn(), params.hashDigest);
-      }
+          cc.committed_conflict().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       //TODO: RECOMMENT, just testing
       if (params.validateProofs && !ValidateCommittedConflict(cc.committed_conflict(),
             &committedTxnDigest, txn, txnDigest, params.signedMessages,

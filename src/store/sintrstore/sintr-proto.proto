@@ -92,13 +92,7 @@ message Write {
     TimestampMessage prepared_timestamp = 9;
     bytes hashed_prepared_ts = 10;
   }
-  optional EndorsementPolicyMessage prepared_policy = 11;
-  oneof prepared_policy_ts_oneof {
-    TimestampMessage prepared_policy_timestamp = 12;
-    bytes hashed_prepared_policy_ts = 13;
-  }
-  optional bytes prepared_txn_digest = 14;
-  optional bytes prepared_policy_txn_digest = 15;
+  optional bytes prepared_txn_digest = 11;
 }
 
 message ReadReply {
@@ -114,7 +108,6 @@ message ReadReply {
   optional TimestampMessage prepared_timestamp = 8;
 
   optional TimestampMessage committed_policy_timestamp = 9;
-  optional TimestampMessage prepared_policy_timestamp = 10;
 }
 
 message DepTs {
@@ -508,9 +501,8 @@ message ForwardReadResult {
     bytes hashed_timestamp = 6;
   }
   optional Dependency dep = 7;
-  optional Dependency policy_dep = 8;
-  optional string table_name = 9;
-  optional bool add_readset = 10;
+  optional string table_name = 8;
+  optional bool add_readset = 9;
 }
 
 message ForwardReadResultMessage {

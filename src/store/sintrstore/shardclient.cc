@@ -78,7 +78,15 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote,
       HandleReadReplyMulti(curr_read);
     }
     else{
+      // struct timespec ts_start;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
       readReply.ParseFromString(data);
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = end - start;
+      // parse_read_msg.add(duration);
       HandleReadReply(readReply);
     }
   } else if (type == phase1Reply.GetTypeName()) {
@@ -153,6 +161,17 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote,
 void ShardClient::Begin(uint64_t id) {
   Debug("[group %i] BEGIN: %lu", group, id);
 
+  // read_send_map.clear();
+  // if(client_id == 0 && numTxns % 2000 == 0 && numTxns > 0) {
+  //   std::cerr << "Mean shard get latency: " << shard_client_get.mean() << std::endl;
+  //   std::cerr << "Mean shard client recieve latency: " << shard_client_receive.mean() << std::endl;
+  //   std::cerr << "Mean wait read latency: " << wait_read_us.mean() << std::endl;
+  //   std::cerr << "Mean p1 reply processing latency: " << p1_reply_processing.mean() << std::endl;
+  //   std::cerr << "Mean read sig verify latency: " << read_sig_verify.mean() << std::endl;
+  //   std::cerr << "Mean read parse latency: " << parse_read_msg.mean() << std::endl;
+  //   std::cerr << "Mean move pointers latency: " << move_ptrs.mean() << std::endl;
+  // }
+  // numTxns++;
   txn.Clear();
   readValues.clear(); 
 }
@@ -167,6 +186,10 @@ void ShardClient::Get(uint64_t id, const std::string &key,
     Debug("[group %i] read from buffer.", group);
     return;
   }
+
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start_get = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
   uint64_t reqId = lastReqId++;
   PendingQuorumGet *pendingGet = new PendingQuorumGet(reqId);
@@ -194,6 +217,11 @@ void ShardClient::Get(uint64_t id, const std::string &key,
   }
 
   Debug("[group %i] Sent GET [%lu : %lu]", group, id, reqId);
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // read_send_map[key] = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = read_send_map[key] - start_get;
+  // shard_client_get.add(duration);
 }
 
 void ShardClient::Put(uint64_t id, const std::string &key,
@@ -705,10 +733,10 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
     if (write.key() == key) {
       Debug("[group %i] Key %s was written with val %s.", group,
           BytesToHex(key, 16).c_str(), BytesToHex(write.value(), 16).c_str());
-      rcb(REPLY_OK, key, write.value(), Timestamp(), proto::Dependency(),
+      rcb(REPLY_OK, key, write.value(), Timestamp(), nullptr,
           false, false,
-          proto::CommittedProof(), std::string(), std::string(), EndorsementPolicyMessage(),
-          proto::Dependency(), false);
+          nullptr, nullptr, nullptr,
+          nullptr);
       return true;
     }
   }
@@ -719,10 +747,10 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
           BytesToHex(key, 16).c_str(), read.readtime().timestamp(),
           read.readtime().id());
       std::cerr << "already added (buffer) key " << BytesToHex(key, 16) << "to read set" << std::endl;
-      rcb(REPLY_OK, key, readValues[key], read.readtime(), proto::Dependency(),
+      rcb(REPLY_OK, key, readValues[key], read.readtime(), nullptr,
           false, false,
-          proto::CommittedProof(), std::string(), std::string(), EndorsementPolicyMessage(),
-          proto::Dependency(), false);
+          nullptr, nullptr, nullptr,
+          std::move(std::make_unique<std::string>(read.hashed_readtime())));
       return true;
     }
   }
@@ -842,12 +870,8 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
       }
 
       std::string committedTxnDigest = TransactionDigest(
-          reply->proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
+          reply->proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
 
-      if(params.sintr_params.hashEndorsements) {
-        Debug("USING TXN DIGEST IN READ REPLY CB1");
-        committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, reply->proof().txn(), params.hashDigest);
-      }
 
      auto mcb = [this, reply, req, write](void* result) mutable {
        if(!result){
@@ -865,7 +889,7 @@ void ShardClient::HandleReadReplyCB1(proto::ReadReply*reply){
     params.sintr_params.hideTimestamps ? reply->committed_timestamp() : write->committed_timestamp(),
     config, params.signedMessages, keyManager, verifier, mcb, transport,
     true,
-    params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply->committed_timestamp())) : "");
+    params.sintr_params.hideTimestamps ? write->hashed_committed_ts() : "");
     return;
   }
 }
@@ -896,18 +920,18 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
       req->maxTs = replyTs;
       req->maxValue = write->committed_value();
       if (reply->has_proof()) {
-        req->maxCommittedProof = reply->proof();
+        // req->maxCommittedProof = reply->proof();
       }
       if (reply->has_signed_write()) {
-        reply->signed_write().SerializeToString(&req->maxSerializedWrite);
-        req->maxSerializedWriteTypeName = reply->signed_write().GetTypeName();
+        // reply->signed_write().SerializeToString(&req->maxSerializedWrite);
+        // req->maxSerializedWriteTypeName = reply->signed_write().GetTypeName();
       }
       else {
-        reply->write().SerializeToString(&req->maxSerializedWrite);
-        req->maxSerializedWriteTypeName = reply->write().GetTypeName();
+        // reply->write().SerializeToString(&req->maxSerializedWrite);
+        // req->maxSerializedWriteTypeName = reply->write().GetTypeName();
       }
       if (write->has_committed_policy()) {
-        req->maxPolicy = write->committed_policy();
+        // req->maxPolicy = write->committed_policy();
       }
     }
     req->firstCommittedReply = false;
@@ -947,18 +971,14 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
         if (preparedItr->second.second >= req->rds) {
           req->maxTs = preparedItr->first;
           req->maxValue = preparedItr->second.first.prepared_value();
-          if (preparedItr->second.first.has_prepared_policy()) {
-            req->maxPolicy = preparedItr->second.first.prepared_policy();
-          }
           // if we are going to be forwarding a prepared value, no need for committed proof and signed write
-          req->maxCommittedProof.Clear();
-          req->maxSerializedWrite.clear();
-          req->maxSerializedWriteTypeName.clear();
-          *req->dep.mutable_write() = preparedItr->second.first;
+          // req->maxCommittedProof.Clear();
+          // req->maxWrite.Clear();
+          *req->dep->mutable_write() = preparedItr->second.first;
           if (params.validateProofs && params.signedMessages && params.verifyDeps) {
-            *req->dep.mutable_write_sigs() = req->preparedSigs[preparedItr->first];
+            *req->dep->mutable_write_sigs() = req->preparedSigs[preparedItr->first];
           }
-          req->dep.set_involved_group(group);
+          req->dep->set_involved_group(group);
           req->hasDep = true;
           break;
         }
@@ -969,13 +989,13 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
     *read->mutable_key() = req->key;
     req->maxTs.serialize(read->mutable_readtime());
     readValues[req->key] = req->maxValue;
-    if(params.sintr_params.hideTimestamps) {
-      removeTsfromTx(req->maxCommittedProof.mutable_txn());
-    }
-    req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->dep,
-        req->hasDep && !req->get_from_put, !req->get_from_put,
-        req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
-        proto::Dependency(), false); // deprecated so just add dummy params here
+    // if(params.sintr_params.hideTimestamps) {
+    //   removeTsfromTx(req->maxCommittedProof.mutable_txn());
+    // }
+    // req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->dep,
+    //     req->hasDep && !req->get_from_put, !req->get_from_put,
+    //     req->maxCommittedProof, proto::SignedMessage(), req->maxPolicy,
+    //     proto::Dependency(), false, ""); // deprecated so just add dummy params here
     delete req; //XXX VERY IMPORTANT: dont delete while something is still dispatched for this reqId
     //could cause segfault. Need to keep a counter of things that are dispatched and only delete
     //once its gone. (dont need counter: just check in each callback if req still in map.!)
@@ -987,12 +1007,15 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
 
 
 /* Callback from a group replica on get operation completion. */
-void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
+void ShardClient::HandleReadReply(proto::ReadReply &reply) {
 
   // if (verify_server_sig_ms.size() > 0 && verify_server_sig_ms.size() % 2000 == 0) {
   //   double mean_verify_latency = std::accumulate(verify_server_sig_ms.begin(), verify_server_sig_ms.end(), 0.0) / verify_server_sig_ms.size();
   //   std::cerr << "Mean verify server signature latency: " << mean_verify_latency << std::endl;
   // }
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start_time = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
   auto itr = this->pendingGets.find(reply.req_id());
   if (itr == this->pendingGets.end()) {
@@ -1008,9 +1031,9 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     // consecutive_reads++;
     // skip = (consecutive_reads % 3 == 0) ? true : false;
     if (reply.has_signed_write()) {
-      // struct timespec ts_start;
-      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
-      // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+      // struct timespec ts_start2;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start2);
+      // uint64_t start = ts_start2.tv_sec * 1000 * 1000 + ts_start2.tv_nsec / 1000;
       if (!skip && !verifier->Verify(keyManager->GetPublicKey(reply.signed_write().process_id()),
               reply.signed_write().data(), reply.signed_write().signature())) {
         Debug("[group %i] Failed to validate signature for write.", group);
@@ -1019,7 +1042,8 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       // struct timespec ts_end;
       // clock_gettime(CLOCK_MONOTONIC, &ts_end);
       // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
-      // auto duration = end - start;
+      // auto duration_verify = end - start;
+      // read_sig_verify.add(duration_verify);
       // verify_server_sig_ms.push_back(duration);
 
       if(!validatedPrepared.ParseFromString(reply.signed_write().data())) {
@@ -1063,17 +1087,13 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
         return;
       }
 
-      std::string committedTxnDigest = TransactionDigest(reply.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
+      std::string committedTxnDigest = TransactionDigest(reply.proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
       // we want to use the txn digest hack in the txn to verify the read reply proof...
       // TODO: maybe find a better way to pass the txn digest
-      if(params.sintr_params.hashEndorsements) {
-        committedTxnDigest = EndorsedTxnDigest(committedTxnDigest, reply.proof().txn(), params.hashDigest);
-        Debug("USING TXN DIGEST IN PROOF FOR READ REPLY %s", BytesToHex(committedTxnDigest, 16).c_str());
-      }
       if (!ValidateTransactionWrite(reply.proof(), &committedTxnDigest,
           req->key, write->committed_value(), params.sintr_params.hideTimestamps ? reply.committed_timestamp() : write->committed_timestamp(),
           config, params.signedMessages, keyManager, verifier,
-          params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_timestamp())) : "")) {
+          params.sintr_params.hideTimestamps ? write->hashed_committed_ts() : "")) {
         Debug("[group %i] Failed to validate committed value for read %lu.",group, reply.req_id());
         // invalid replies can be treated as if we never received a reply from a crashed replica
         return;
@@ -1086,18 +1106,21 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     if (req->firstCommittedReply || req->maxTs < replyTs) {
       req->maxTs = replyTs;
       req->maxValue = write->committed_value();
-      if (!params.sintr_params.ignorePolicyUpdate && reply.has_proof()) {
-        req->maxCommittedProof = reply.proof();
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t move_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+      if (reply.has_proof()) {
+        req->maxCommittedProof = std::unique_ptr<proto::CommittedProof>(reply.release_proof());
       }
-      if (!params.sintr_params.ignorePolicyUpdate && reply.has_signed_write()) {
-        reply.signed_write().SerializeToString(&req->maxSerializedWrite);
-        req->maxSerializedWriteTypeName = reply.signed_write().GetTypeName();
+      if (reply.has_signed_write()) {
+        req->maxWrite = std::unique_ptr<proto::SignedMessage>(reply.release_signed_write());
+      } else if(!reply.has_signed_write()) {
+        Panic("No signed write for reply in sintr");
       }
-      else if(!params.sintr_params.ignorePolicyUpdate) {
-        // reply.write() must exist
-        reply.write().SerializeToString(&req->maxSerializedWrite);
-        req->maxSerializedWriteTypeName = reply.write().GetTypeName();
-      }
+      // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      // uint64_t move_end = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+      // auto duration = move_end - move_start;
+      // move_ptrs.add(duration);
+      // don't send any write otherwise...
     }
 
     // if write has a committed policy, verify it
@@ -1111,18 +1134,14 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
           return;
         }
 
-        std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-        if(params.sintr_params.hashEndorsements) {
-          Debug("USING TXN DIGEST IN POLICY PROOF READ REPLY");
-          committedPolicyTxnDigest = EndorsedTxnDigest(committedPolicyTxnDigest, reply.policy_proof().txn(), params.hashDigest);
-        }
+        std::string committedPolicyTxnDigest = TransactionDigest(reply.policy_proof().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
         std::string policyObjectStr;
         write->committed_policy().policy().SerializeToString(&policyObjectStr);
         if (!ValidateTransactionWrite(reply.policy_proof(), &committedPolicyTxnDigest,
             write->committed_policy().policy_id(), policyObjectStr,
             params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
             config, params.signedMessages, keyManager, verifier,
-            params.sintr_params.hideTimestamps ? TimestampDigest(Timestamp(reply.committed_policy_timestamp())) : "")) {
+            params.sintr_params.hideTimestamps ? write->hashed_committed_policy_ts() : "")) {
           Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
           return;
         }
@@ -1132,12 +1151,8 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
       Timestamp policyTs(params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp());
       if (req->firstCommittedReply || req->maxPolicyTs < policyTs) {
         req->maxPolicyTs = policyTs;
-        req->maxPolicy = write->committed_policy();
+        req->maxPolicy = std::make_unique<EndorsementPolicyMessage>(write->committed_policy());
       }
-    }
-    else {
-      // if no policy returned then either never request them or not the right period yet
-      UW_ASSERT(params.sintr_params.readIncludePolicy == 0 || reply.req_id() % params.sintr_params.readIncludePolicy != 0);
     }
 
     req->firstCommittedReply = false;
@@ -1148,6 +1163,9 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
   if (params.maxDepDepth > -2 &&
       write->has_prepared_value() && (write->has_prepared_timestamp() || reply.has_prepared_timestamp()) && write->has_prepared_txn_digest()) {
     Timestamp preparedTs(params.sintr_params.hideTimestamps ? reply.prepared_timestamp() : write->prepared_timestamp());
+    // if(params.sintr_params.hideTimestamps) {
+    //   UW_ASSERT(TimestampDigest(reply.prepared_timestamp()) == write->hashed_prepared_ts());
+    // }
     Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", 
         group, reply.req_id(), write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
     auto preparedItr = req->prepared.find(preparedTs);
@@ -1165,21 +1183,6 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     }
   }
 
-  // also check prepared policy
-  if (params.maxDepDepth > -2 && write->has_prepared_policy()) {
-    Timestamp preparedPolicyTs(params.sintr_params.hideTimestamps ? reply.prepared_policy_timestamp() : write->prepared_policy_timestamp());
-    Debug("[group %i] ReadReply for %lu with prepared policy id %lu and ts %lu.%lu.", 
-        group, reply.req_id(), write->prepared_policy().policy_id(), preparedPolicyTs.getTimestamp(), preparedPolicyTs.getID());
-    
-    auto preparedPolicyItr = req->preparedPolicy.find(preparedPolicyTs);
-    if (preparedPolicyItr == req->preparedPolicy.end()) {
-      req->preparedPolicy.insert(std::make_pair(preparedPolicyTs, std::make_pair(*write, 1)));
-    }
-    else if (preparedPolicyItr->second.first == *write) {
-      preparedPolicyItr->second.second += 1;
-    }
-  }
-
   if (req->numReplies >= req->rqs) {
     if (params.maxDepDepth > -2) {
       for (auto preparedItr = req->prepared.rbegin();
@@ -1193,42 +1196,23 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
           if (preparedItr->second.first.has_prepared_value()) {
             req->maxValue = preparedItr->second.first.prepared_value();
             // if we are going to be forwarding a prepared value, no need for committed proof and signed write
-            req->maxCommittedProof.Clear();
-            req->maxSerializedWrite.clear();
-            req->maxSerializedWriteTypeName.clear();
+            if(req->maxCommittedProof != nullptr) {
+              req->maxCommittedProof->Clear();
+            }
+            if(req->maxWrite != nullptr) {
+              req->maxWrite->Clear();
+            }
           }
-          if (preparedItr->second.first.has_prepared_policy()) {
-            req->maxPolicy = preparedItr->second.first.prepared_policy();
+          if(req->dep == nullptr) {
+            req->dep = std::make_unique<proto::Dependency>();
           }
-          *req->dep.mutable_write() = preparedItr->second.first;
+          *req->dep->mutable_write() = preparedItr->second.first;
           if (params.validateProofs && params.signedMessages && params.verifyDeps) {
-            *req->dep.mutable_write_sigs() = req->preparedSigs[preparedItr->first];
+            *req->dep->mutable_write_sigs() = req->preparedSigs[preparedItr->first];
           }
-          req->dep.set_involved_group(group);
+          req->dep->set_involved_group(group);
           req->hasDep = true;
           break;
-        }
-      }
-      // also do prepared policy map
-      if(!params.sintr_params.useOCCForPolicies) {
-        for (auto preparedPolicyItr = req->preparedPolicy.rbegin();
-            preparedPolicyItr != req->preparedPolicy.rend(); ++preparedPolicyItr) {
-          if (preparedPolicyItr->first < req->maxPolicyTs) {
-            break;
-          }
-
-          if (preparedPolicyItr->second.second >= req->rds) {
-            req->maxPolicyTs = preparedPolicyItr->first;
-            if (preparedPolicyItr->second.first.has_prepared_policy()) {
-              req->maxPolicy = preparedPolicyItr->second.first.prepared_policy();
-            }
-            *req->policyDep.mutable_write() = preparedPolicyItr->second.first;
-            req->policyDep.set_involved_group(group);
-            // need to manually edit digest
-            req->policyDep.mutable_write()->set_prepared_txn_digest(preparedPolicyItr->second.first.prepared_policy_txn_digest());
-            req->hasPolicyDep = true;
-            break;
-          }
         }
       }
     }
@@ -1245,28 +1229,47 @@ void ShardClient::HandleReadReply(const proto::ReadReply &reply) {
     const auto [it, first_read] = readValues.emplace(req->key, req->maxValue); // readValues.insert(std::make_pair(req->key, req->maxValue));
     
     if(first_read){ //for first read
-       ReadMessage *read = txn.add_read_set();
+      ReadMessage *read = txn.add_read_set();
       *read->mutable_key() = req->key;
       req->maxTs.serialize(read->mutable_readtime());
-      if(params.sintr_params.hideTimestamps) {
-        removeTsfromTx(req->maxCommittedProof.mutable_txn());
+      if(params.sintr_params.hideTimestamps && req->maxCommittedProof != nullptr) {
+        removeTsfromTx(req->maxCommittedProof->mutable_txn());
       }
-      req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->dep,req->hasDep && !req->get_from_put, !req->get_from_put,
-        req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
-        req->policyDep, req->hasPolicyDep);
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t end_time = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = end_time - start_time;
+      // shard_client_receive.add(duration);
+      // duration = start_time - read_send_map[req->key];
+      // wait_read_us.add(duration);
+      std::unique_ptr<std::string> tsDigest =
+        params.sintr_params.hideTimestamps ? std::make_unique<std::string>(TimestampDigest(req->maxTs)) : std::make_unique<std::string>("");
+
+      req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, std::move(req->dep),req->hasDep && !req->get_from_put, !req->get_from_put,
+        std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy),
+        std::move(tsDigest));
     }
     else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
       std::string &prev_read = it->second;
       req->maxTs = Timestamp();
       if(!params.sintr_params.ignorePolicyUpdate) {
-        req->maxCommittedProof.Clear();
-        req->maxSerializedWrite.clear();
-        req->maxSerializedWriteTypeName.clear();
-        req->maxPolicy.Clear();
+        if(req->maxCommittedProof != nullptr) {
+          req->maxCommittedProof->Clear();
+        }
+        if(req->maxWrite != nullptr) {
+          req->maxWrite->Clear();
+        }
+        if(req->maxPolicy != nullptr) {
+          req->maxPolicy->Clear();
+        }
       }
-      req->gcb(REPLY_OK, req->key, prev_read, req->maxTs, req->dep, false, false, //Don't add to read set.
-        req->maxCommittedProof, req->maxSerializedWrite, req->maxSerializedWriteTypeName, req->maxPolicy,
-        req->policyDep, false); 
+      // struct timespec ts_end;
+      // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+      // uint64_t end_time = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+      // auto duration = end_time-start_time;
+      // shard_client_receive.add(duration);
+      req->gcb(REPLY_OK, req->key, prev_read, req->maxTs, std::move(req->dep), false, false, //Don't add to read set.
+        nullptr, nullptr, nullptr, nullptr); 
     } 
     delete req;
   }
@@ -1284,7 +1287,8 @@ void ShardClient::HandlePhase1Reply(proto::Phase1Reply &reply) {
 
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
     // uint64_t p1_end = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
-    // Notice("P1 processing took %d us", p1_end - p1_reply);
+    // auto duration = p1_end-p1_reply;
+    // p1_reply_processing.add(duration);
 }
 
 void ShardClient::ProcessP1R(proto::Phase1Reply &reply, bool FB_path, PendingFB *pendingFB, const std::string *txnDigest){
@@ -1821,11 +1825,7 @@ void ShardClient::Phase1Decision(
 
       //TODO: dont process redundant digests
       if(!TransactionsConflict(pendingPhase1->txn_, *txn, params.sintr_params.policyFunctionName)) continue;
-      std::string txnDigest(TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps));
-      if(params.sintr_params.hashEndorsements) {
-        Debug("USING TXN DIGEST IN TXN FOR FB");
-        txnDigest = EndorsedTxnDigest(txnDigest, *txn, params.hashDigest);
-      }
+      std::string txnDigest(TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements));
 
       if(params.signClientProposals) p1->set_allocated_txn(txn); 
       pendingPhase1->ConflictCB(txnDigest, p1);
@@ -2006,11 +2006,7 @@ void ShardClient::HandlePhase1Relay(proto::RelayP1 &relayP1){
   // }
  
   //std::string txnDigest(TransactionDigest(*txn, params.hashDigest));
-  std::string txnDigest(TransactionDigest(relayP1.p1().txn(), params.hashDigest, params.sintr_params.hideTimestamps));
-  if(params.sintr_params.hashEndorsements) {
-    Debug("USING TXN DIGEST IN HANDLE PHASE1 RELAY");
-    txnDigest = EndorsedTxnDigest(txnDigest, relayP1.p1().txn(), params.hashDigest);
-  }
+  std::string txnDigest(TransactionDigest(relayP1.p1().txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements));
   //if(params.signClientProposals) delete txn;
   //if(params.signClientProposals) relayP1.mutable_p1()->set_allocated_txn(txn);
 
