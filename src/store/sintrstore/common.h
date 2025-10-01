@@ -403,10 +403,6 @@ bool ValidateDependency(const proto::Dependency &dep,
     const transport::Configuration *config, uint64_t readDepSize,
     KeyManager *keyManager, Verifier *verifier);
 
-int validateKeyAndTS(const proto::CommittedProof &proof, const std::string *txnDigest,
-  const std::string &key, const std::string &val, const Timestamp &timestamp,
-  const std::string &tsDigest);
-
 bool operator==(const proto::Write &pw1, const proto::Write &pw2);
 
 bool operator!=(const proto::Write &pw1, const proto::Write &pw2);

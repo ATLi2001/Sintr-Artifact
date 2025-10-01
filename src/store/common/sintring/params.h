@@ -135,6 +135,10 @@ typedef struct SintrParameters {
         if(maxClientsConnect > 0 && !separateTransport) {
             Warning("Max clients connect parameter is greater than 0, but separate transport is not enabled");
         }
+
+        if(!useOCCForPolicies) {
+            Warning("Use OCC for policies must be true, we do not support reading from prepared policy transactions");
+        }
     }
 
 } SintrParameters;

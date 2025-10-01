@@ -209,8 +209,6 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_separate_transport=%s' % str(config['sintr_protocol_settings']['sintr_separate_transport']).lower()
             if 'sintr_max_clients_connect' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_max_clients_connect=%s' % str(config['sintr_protocol_settings']['sintr_max_clients_connect']).lower()
-            if 'sintr_c2c_use_asynch_val' in config['sintr_protocol_settings']:
-                client_command += ' --sintr_c2c_use_asynch_val=%s' % str(config['sintr_protocol_settings']['sintr_c2c_use_asynch_val']).lower()
             if 'sintr_use_endorsement_cb' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_use_endorsement_cb=%s' % str(config['sintr_protocol_settings']['sintr_use_endorsement_cb']).lower()
 

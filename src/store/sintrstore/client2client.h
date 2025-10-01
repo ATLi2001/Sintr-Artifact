@@ -216,48 +216,6 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::string query_read_set_hash;
   };
 
-  struct AsyncReadSigCheck {
-  AsyncReadSigCheck(uint32_t _quorumSize, mainThreadCallback mcb, int groupTotals,
-    proto::CommitDecision _decision) :  quorumSize(_quorumSize),
-    mcb(std::move(mcb)), groupTotals(groupTotals), decision(_decision),
-    terminate(false), callback(true), num_skips(0) { 
-        groupCounts.empty();
-    }
-    ~AsyncReadSigCheck() { deleteMessages(); }
-
-    std::mutex objMutex;
-    std::vector<std::string*> ccMsgs;
-
-    void deleteMessages(){
-      for(auto ccMsg : ccMsgs){
-        FreeMessageString(ccMsg);//delete ccMsg;
-      }
-    }
-
-    const uint32_t quorumSize;
-    //std::function<void(bool)> mainThreadCallback;
-    mainThreadCallback mcb;
-
-    std::map<uint64_t, uint32_t> groupCounts;
-    int groupTotals;
-    int groupsVerified = 0;
-
-    proto::CommitDecision decision;
-    //proto::Transaction *txn;
-    //std::set<int> groupsVerified;
-
-    uint32_t num_skips;
-    uint32_t deletable;
-    bool terminate;
-    bool callback;
-  };
-
-  struct AsyncPreparedReadCheck {
-    AsyncPreparedReadCheck(uint32_t _quorumSize) : quorumSize(_quorumSize) {}
-    std::atomic<size_t> num_finished{0};
-    std::atomic<bool> called_val_client{false};
-    uint32_t quorumSize;
-  };
 
 
   struct SentFwdResultState {
