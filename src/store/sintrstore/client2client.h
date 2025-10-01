@@ -372,21 +372,6 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   void CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage,
     const std::set<uint64_t> &dst_client_ids);
 
-  void asyncValidateP1RepliesC2C(proto::CommitDecision decision, bool fast, const proto::Transaction *txn, const std::string *txnDigest,
-    const proto::GroupedSignatures &groupedSigs, KeyManager *keyManager, const transport::Configuration *config, int64_t myProcessId,
-    proto::ConcurrencyControl::Result myResult, Verifier *verifier, mainThreadCallback mcb);
-
-  void asyncValidateP1RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result);
-
-  void asyncValidateP2RepliesC2C(proto::CommitDecision decision, uint64_t view, const proto::Transaction *txn, const std::string *txnDigest,
-    const proto::GroupedSignatures &groupedSigs, KeyManager *keyManager, const transport::Configuration *config, int64_t myProcessId,
-    proto::CommitDecision myDecision, Verifier *verifier, mainThreadCallback mcb);
-
-  void asyncValidateP2RepliesC2CCallback(const std::shared_ptr<AsyncReadSigCheck> &asyncReadSigCheck, uint32_t groupId, void* result);
-
-  void asyncValidateDependency(const proto::Dependency &dep, const transport::Configuration *config, uint64_t readDepSize,
-    KeyManager *keyManager, Verifier *verifier, const uint64_t &client_id, const uint64_t &client_seq_num);
-
   const uint64_t client_id; // Unique ID for this client.
   Transport *transport; // Transport layer.
   // client to server transport configuration state

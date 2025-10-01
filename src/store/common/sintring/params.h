@@ -69,7 +69,6 @@ typedef struct SintrParameters {
   const bool hashQueryGenId; // hash query general id
   const bool separateTransport; // enable separate transport object for c2c communication
   const uint32_t maxClientsConnect; // max number of clients that a single client connects to
-  const bool c2cUseAsynchVal; // use asynch validation for transaction writes in C2C
   const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
@@ -80,7 +79,7 @@ typedef struct SintrParameters {
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
-    bool c2cUseAsynchVal, bool useEndorsementCB) :
+    bool useEndorsementCB) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -111,7 +110,6 @@ typedef struct SintrParameters {
     hashQueryGenId(hashQueryGenId),
     separateTransport(separateTransport),
     maxClientsConnect(maxClientsConnect),
-    c2cUseAsynchVal(c2cUseAsynchVal),
     useEndorsementCB(useEndorsementCB)
      {
         // either sort write set or send blind write message to get endorsement matches

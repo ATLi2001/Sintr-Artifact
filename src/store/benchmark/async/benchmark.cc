@@ -488,7 +488,6 @@ DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction d
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
 DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
 DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
-DEFINE_bool(sintr_c2c_use_asynch_val, false, "use asynchronous validation for transaction writes in c2client");
 DEFINE_bool(sintr_use_endorsement_cb, true, "use endorsement cb instead of busy waiting");
 // given an estimated txn policy, how many other clients to contact?
 const std::string sintr_client_validation_args[] = {
@@ -1750,7 +1749,6 @@ int main(int argc, char **argv) {
         FLAGS_sintr_hash_query_gen_id,
         FLAGS_sintr_separate_transport,
         FLAGS_sintr_max_clients_connect,
-        FLAGS_sintr_c2c_use_asynch_val,
         FLAGS_sintr_use_endorsement_cb
       );
 
