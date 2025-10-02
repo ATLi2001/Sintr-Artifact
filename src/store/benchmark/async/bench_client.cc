@@ -185,6 +185,9 @@ void BenchmarkClient::IncrementSent(int result) {
           gettimeofday(&startMeasureTime, NULL);
           startMeasureTime.tv_sec -= ns / 1000000000ULL;
           startMeasureTime.tv_usec -= (ns % 1000000000ULL) / 1000ULL;
+          // comment this in if we are tracking aborts over time
+          // because then aborts will be recorded during warmup period
+          // so this can be used to filter them out
           //std::cout << "#start," << startMeasureTime.tv_sec << "," << startMeasureTime.tv_usec << std::endl;
         }
         uint64_t currNanos = curr.tv_sec * 1000000000ULL + curr.tv_nsec;

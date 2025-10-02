@@ -128,19 +128,27 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
 
         for log_file in os.listdir(logs_dir):
             log_path = os.path.join(logs_dir, log_file)
+            # if we are tracking aborts over time, we need to ignore lines before #start
+            # started = False
             with open(log_path, "r") as f:
                 for line in f:
                     line = line.strip()
+                    # if "#start" in line:
+                    #     started = True
+                    #     continue
+                    # if not started:
+                    #     continue
                     if not line or "#end" in line:
                         break
                     operation, latency, timestamp, client_id = line.split(",")
-                    data_rows.append([analysis_name, operation, timestamp, client_id])
+                    data_rows.append([analysis_name, operation, latency, timestamp, client_id])
 
     # Create DataFrame once from all collected data
-    out_df = pd.DataFrame(data_rows, columns=["experiment_name", "operation", "commit_timestamp_ns", "client_id"])
+    out_df = pd.DataFrame(data_rows, columns=["experiment_name", "operation", "latency_ns", "commit_timestamp_ns", "client_id"])
 
     # Convert timestamp column to numeric for proper sorting
     out_df["commit_timestamp_ns"] = pd.to_numeric(out_df["commit_timestamp_ns"], errors='coerce')
+    out_df["latency_ns"] = pd.to_numeric(out_df["latency_ns"], errors='coerce')
 
     out_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
     return out_df
@@ -411,11 +419,14 @@ def create_tput_time_plot(df, output_dir, now_string):
 
     policy_change_time_s = -1
     tput_interval_s = 2
+    plot_abort = False
+    plot_latency = False
     for experiment_name, group in df.groupby(["experiment_name"]):
         # group by client_id and normalize each client's time to start at 0
         # then combine all clients' data
         # this ensures that we are not affected by clock skew between clients
         combined_group = pd.DataFrame()
+        combined_abort = pd.DataFrame()
         for client_id, client_group in group.groupby("client_id"):
             client_group = client_group.sort_values(by=["commit_timestamp_ns"])
             t0 = client_group["commit_timestamp_ns"].iloc[0]
@@ -427,18 +438,33 @@ def create_tput_time_plot(df, output_dir, now_string):
                     policy_change_time_s = policy_change["commit_timestamp_ns"].iloc[0]
                     print(f"{experiment_name[0]}: policy change at {policy_change_time_s:.2f}s")
 
-            combined_group = pd.concat([combined_group, client_group])
+            combined_group = pd.concat([combined_group, client_group.loc[client_group["operation"] != "abort"]])
+            combined_abort = pd.concat([combined_abort, client_group.loc[client_group["operation"] == "abort"]])
 
         # calculate throughput at intervals
         time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
         combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
         # throughput is number of transactions in bin
         tput = combined_group.groupby("time_bin").size() / tput_interval_s
+        # average latency in bin in ms
+        latency = combined_group.groupby("time_bin")["latency_ns"].mean() / 1e6
 
         overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
         print(f"{experiment_name[0]}: avg tput {overall_tput:.2f} txn/s")
 
         ax.plot(time_bins[1:], tput, "-", label=experiment_name[0])
+
+        if plot_latency:
+            # also plot latency over time on secondary y-axis
+            ax_lat = ax.twinx()
+            ax_lat.set_ylabel("Latency (ms)", color="green")
+            ax_lat.plot(time_bins[1:], latency, "--", label=f"{experiment_name[0]} latency", color="green")
+            ax_lat.tick_params(axis='y', labelcolor="green")
+
+        if plot_abort:
+            ax2 = ax.twinx()
+            ax2.set_ylabel("Aborts", color="red")
+            ax2.plot(combined_abort["commit_timestamp_ns"], np.repeat(1, len(combined_abort)), "o", label=f"{experiment_name[0]} aborts", color="red")
 
     if policy_change_time_s > 0:
         ax.axvline(x=policy_change_time_s, color="black", linestyle="--", label="Policy Change")

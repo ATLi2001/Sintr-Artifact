@@ -77,6 +77,11 @@ class BenchmarkClient {
   
   Stats stats;
   Transport &transport;
+
+  // if we want to track aborts over time 
+  // we need the id accessible to sync transaction bench client
+  // const uint64_t id;
+
  private:
   void Finish();
   void WarmupDone();
