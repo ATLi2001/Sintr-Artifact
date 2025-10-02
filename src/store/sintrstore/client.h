@@ -159,7 +159,7 @@ class Client : public ::Client {
       queryMsg.set_retry_version(0);
       if(client->params.sintr_params.hideTimestamps) {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
-          TimestampDigest(Timestamp(client->txn.timestamp())), client->params.sintr_params.hashQueryGenId);
+          TimestampDigest(client->txn.timestamp()), client->params.sintr_params.hashQueryGenId);
       } else {
         query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "", client->params.sintr_params.hashQueryGenId);
       }
@@ -238,8 +238,7 @@ class Client : public ::Client {
   void PointQueryResultCallback(PendingQuery *pendingQuery,  
                             int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                             const proto::Dependency &dep, bool hasDep, bool addReadSet,
-                            const proto::CommittedProof &proof, const std::string &serializedWrite, 
-                            const std::string &serializedWriteTypeName, const EndorsementPolicyMessage &policyMsg); 
+                            const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                             std::vector<proto::SignedMessage *> *query_sigs, // take ownership
@@ -475,6 +474,8 @@ class Client : public ::Client {
 
   std::unordered_map<uint64_t, uint64_t> pendingReqs_starttime;
 
+  std::unordered_set<std::string> perTxnPolicyIds;
+
   // tracking target group for get triggered from an sql write
   int target_group_for_get;
 
@@ -501,7 +502,15 @@ class Client : public ::Client {
   mean_tracker endorsement_wait_us;
   mean_tracker commit_time_us;
   mean_tracker query_time_us;
+  mean_tracker read_time_us;
+  mean_tracker put_time_us;
+  mean_tracker before_shard_get;
+  mean_tracker read_callback_time;
+  mean_tracker send_forward_read_us;
+  mean_tracker send_begin_val_us;
   mean_tracker query_to_commit_us;
+  // std::map<uint64_t, uint64_t> read_start_times;
+  // uint64_t read_seq_num;
 };
 
 } // namespace sintrstore

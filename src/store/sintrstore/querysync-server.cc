@@ -384,7 +384,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
             if(params.sintr_params.hideTimestamps && write->has_committed_timestamp()) {
                 const auto& ts_msg = write->committed_timestamp();
                 *pointQueryReply->mutable_committed_pq_timestamp() = ts_msg;
-                write->set_hashed_committed_ts(TimestampDigest(Timestamp(ts_msg))); // clears write->committed_timestamp
+                write->set_hashed_committed_ts(TimestampDigest(ts_msg)); // clears write->committed_timestamp
             }
         }
     }
@@ -392,7 +392,7 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
     if(write->has_prepared_value() && params.sintr_params.hideTimestamps && write->has_prepared_timestamp()) {
         const auto& ts_msg = write->prepared_timestamp();
         *pointQueryReply->mutable_prepared_pq_timestamp() = ts_msg;
-        write->set_hashed_prepared_ts(TimestampDigest(Timestamp(ts_msg)));
+        write->set_hashed_prepared_ts(TimestampDigest(ts_msg));
     }
 
     if(include_policy && write->has_committed_value()) {
@@ -411,45 +411,19 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
           *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
         }
     } else if(include_policy && !write->has_committed_value()) {
-        const proto::Transaction *mostRecentPolicyTxn;
         std::string preparedPolicyId = policyIdFunction(query->primary_enc_key(), "");
         std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
-        if(params.sintr_params.useOCCForPolicies) {
-          GetPolicy(preparedPolicyId, ts, tsPolicy, false);
+        GetPolicy(preparedPolicyId, ts, tsPolicy, false);
+        if(params.sintr_params.hideTimestamps) {
+            pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
+            tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
         } else {
-          GetPolicy(preparedPolicyId, ts, tsPolicy, true, &mostRecentPolicyTxn);
+            tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
         }
-        // if GetPolicy returns a prepared policy then it has no proof
-        if (tsPolicy.second.proof == nullptr) {
-            // this shouldn't trigger if useOCCForPolicies is true
-            UW_ASSERT(!params.sintr_params.useOCCForPolicies);
-            Debug("Prepared policy id write with most recent ts %lu.%lu.",
-                    tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-            if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_prepared_policy_ts(TimestampDigest(tsPolicy.first));
-                tsPolicy.first.serialize(pointQueryReply->mutable_prepared_policy_timestamp());
-            } else {
-                tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_prepared_policy_timestamp());
-            }
-            pointQueryReply->mutable_write()->mutable_prepared_policy()->set_policy_id(preparedPolicyId);
-            tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_prepared_policy()->mutable_policy());
-            std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
-            if(params.sintr_params.hashEndorsements) {
-                tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
-            }
-            *pointQueryReply->mutable_write()->mutable_prepared_policy_txn_digest() = tempDigest;
-        } else {
-            if(params.sintr_params.hideTimestamps) {
-                pointQueryReply->mutable_write()->set_hashed_committed_policy_ts(TimestampDigest(tsPolicy.first));
-                tsPolicy.first.serialize(pointQueryReply->mutable_committed_policy_timestamp());
-            } else {
-                tsPolicy.first.serialize(pointQueryReply->mutable_write()->mutable_committed_policy_timestamp());
-            }
-            pointQueryReply->mutable_write()->mutable_committed_policy()->set_policy_id(preparedPolicyId);
-            tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_committed_policy()->mutable_policy());
-            if (params.validateProofs) {
-                *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
-            }
+        pointQueryReply->mutable_write()->mutable_committed_policy()->set_policy_id(preparedPolicyId);
+        tsPolicy.second.policy->SerializeToProtoMessage(pointQueryReply->mutable_write()->mutable_committed_policy()->mutable_policy());
+        if (params.validateProofs) {
+            *pointQueryReply->mutable_policy_proof() = *tsPolicy.second.proof;
         }
     }
 
@@ -868,37 +842,17 @@ void Server::GetQueryPolicies(QueryReadSetMgr &queryReadSetMgr, QueryMetaData *q
         std::string policyId = policyIdFunction(read.key(), "");
         if (prev_policies.find(policyId) == prev_policies.end()) {
             std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
-            const proto::Transaction *mostRecentPolicyTxn;
-            if (params.sintr_params.useOCCForPolicies) {
-                GetPolicy(policyId, query_md->ts, tsPolicy, false);
-            }
-            else {
-                GetPolicy(policyId, query_md->ts, tsPolicy, true, &mostRecentPolicyTxn);
-            }
+            GetPolicy(policyId, query_md->ts, tsPolicy, false);
             // garbage collection is handled by google protobuf
             proto::QueryPolicy *query_policy = queryResultReply->add_query_policy();
             // don't need to hide this ts because client should not forward query policy
             tsPolicy.first.serialize(query_policy->mutable_policy_timestamp());
             query_policy->mutable_endorsement_policy()->set_policy_id(policyId);
             tsPolicy.second.policy->SerializeToProtoMessage(query_policy->mutable_endorsement_policy()->mutable_policy());
-            // if GetPolicy returns a prepared policy then it has no proof
-            if (tsPolicy.second.proof == nullptr) {
-                // this shouldn't trigger if useOCCForPolicies is true
-                UW_ASSERT(!params.sintr_params.useOCCForPolicies);
-                Debug("Prepared policy id write with most recent ts %lu.%lu.",
-                      tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-                std::string tempDigest = TransactionDigest(*mostRecentPolicyTxn, params.hashDigest, params.sintr_params.hideTimestamps);
-                if (params.sintr_params.hashEndorsements) {
-                    tempDigest = EndorsedTxnDigest(tempDigest, *mostRecentPolicyTxn, params.hashDigest);
-                }
-                *query_policy->mutable_prepared_policy_txn_digest() = tempDigest;
-            }
-            else {
-                Debug("Committed policy id write with most recent ts %lu.%lu.",
-                      tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
-                if (params.validateProofs) {
-                    *query_policy->mutable_policy_proof() = *tsPolicy.second.proof;
-                }
+            Debug("Committed policy id write with most recent ts %lu.%lu.",
+                tsPolicy.first.getTimestamp(), tsPolicy.first.getID());
+            if (params.validateProofs) {
+                *query_policy->mutable_policy_proof() = *tsPolicy.second.proof;
             }
             prev_policies.insert(policyId);
         }
@@ -918,11 +872,11 @@ void Server::SendQueryReply(QueryMetaData *query_md){
     if(params.sintr_params.hideTimestamps) {
         for(auto &read : *result->mutable_query_read_set()->mutable_read_set()){
             if(!read.has_hashed_readtime()) {
-                read.set_hashed_readtime(TimestampDigest(Timestamp(read.readtime())));
+                read.set_hashed_readtime(TimestampDigest(read.readtime()));
             }
         }
         for(auto &pred: *result->mutable_query_read_set()->mutable_read_predicates()) {
-            pred.set_hashed_table_version(TimestampDigest(Timestamp(pred.table_version())));
+            pred.set_hashed_table_version(TimestampDigest(pred.table_version()));
         }
     }
 
@@ -1358,12 +1312,9 @@ void Server::ProcessSuppliedTxn(const std::string &txn_id, proto::TxnInfo &txn_i
         else{
             //Confirm that replica supplied correct transaction.     //TODO: Note: Since one should do this anyways, there is no point in storing txn_id as part of supply message.
                 // TODO: for the hack of storing digest in txn, think if it's safe to do server side...
-                std::string tempDigest = TransactionDigest(proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps);
-                if(params.sintr_params.hashEndorsements) {
-                    tempDigest = EndorsedTxnDigest(tempDigest, proof->txn(), params.hashDigest);
-                }
-                if(txn_id != tempDigest){
-                    Debug("Tx-id: [%s], TxDigest: [%s]", txn_id, tempDigest);
+                if(txn_id != TransactionDigest(proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements)){
+                    Debug("Tx-id: [%s], TxDigest: [%s]", BytesToHex(txn_id, 16).c_str(),
+                        BytesToHex(TransactionDigest(proof->txn(), params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements), 16).c_str());
                     Panic("Supplied Wrong Txn for given tx-id");
                     delete proof;
                     stop = true;
@@ -1578,23 +1529,14 @@ void Server::ProcessSuppliedTxn(const std::string &txn_id, proto::TxnInfo &txn_i
         }
 
         //Check whether txn matches requested tx-id
-        std::string tempOldDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
-        std::string tempDigest;
-        bool txnIdMatch;
-        if(params.sintr_params.hashEndorsements) {
-            tempDigest = EndorsedTxnDigest(tempOldDigest, *txn, params.hashDigest);
-            txnIdMatch = (txn_id == tempDigest);
-        }
-        else {
-            // avoid copying tempOldDigest into tempDigest
-            txnIdMatch = (txn_id == tempOldDigest);
-        }
+        std::string tempOldDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps, params.sintr_params.hashEndorsements);
+        bool txnIdMatch = (txn_id == tempOldDigest);
 
         if(!txnIdMatch){
             Debug(
                 "Tx-id: [%s], TxDigest: [%s]",
                 BytesToHex(txn_id, 16).c_str(),
-                params.sintr_params.hashEndorsements ? BytesToHex(tempDigest, 16).c_str() : BytesToHex(tempOldDigest, 16).c_str()
+                BytesToHex(tempOldDigest, 16).c_str()
             );
             Panic("Supplied Wrong Txn for given tx-id");
             if(params.signClientProposals) delete txn;

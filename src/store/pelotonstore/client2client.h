@@ -58,9 +58,11 @@
 
 namespace pelotonstore {
 
+typedef std::function<void()> endorsement_callback;
+
 class Client2Client : public Client2ClientCommon {
  public:
-  Client2Client(transport::Configuration *config, transport::Configuration *clients_config, Transport *transport,
+  Client2Client(transport::Configuration *clients_config, Transport *transport,
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool signMessages, bool validateProofs,
       SintrParameters sintr_params, KeyManager *keyManager,
       EndorsementClient *endorseClient, ClientSelector *valClientSelector, std::mt19937 &rand,
@@ -78,11 +80,12 @@ class Client2Client : public Client2ClientCommon {
   
   // forward sql results to other clients
   void SendForwardSQLResultMessage(const std::string &sql_gen_id, const std::string &sql_result,
-    proto::SignedMessage *signedMessage);
+    proto::SignedMessage *signedMessage, TransactionMessage *txn_msg);
 
   void SetFailureFlag(bool f) {
     failureActive = f;
   }
+  void SetEndorsementCallback(endorsement_callback endorse_cb);
 
  private:
   virtual const ::google::protobuf::Message *GetSentBeginValTxnMsg() const override;
@@ -91,7 +94,7 @@ class Client2Client : public Client2ClientCommon {
     PolicyClient *policyClient);
   
   void SendForwardSQLResultMessageHelper(const std::string &sql_gen_id, const std::string &sql_result,
-    proto::SignedMessage &signedMessage);
+    proto::SignedMessage *signedMessage, TransactionMessage *txn_msg);
 
   void ManageDispatchBeginValidateTxnMessage(const TransportAddress &remote, const std::string &data);
   void ManageDispatchForwardSQLResultMessage(const TransportAddress &remote, const std::string &data);
@@ -126,8 +129,8 @@ class Client2Client : public Client2ClientCommon {
   void CreateHMACedMessage(const ::google::protobuf::Message &msg, proto::SignedMessage& signedMessage,
     const std::set<uint64_t> &dst_client_ids);
 
-  // client to server transport configuration state
-  transport::Configuration *config;
+  void SetEndorsementCallbackHelper(endorsement_callback endorse_cb);
+
   // Number of shards.
   uint64_t nshards;
   // Number of replica groups.
@@ -148,6 +151,7 @@ class Client2Client : public Client2ClientCommon {
   proto::BeginValidateTxnMessage beginValTxnMsg;
   proto::ForwardSQLResultMessage fwdSQLResultMsg;
   proto::FinishValidateTxnMessage finishValTxnMsg;
+  endorsement_callback endorse_cb;
 };
 
 // contains necessary information for ValidationClient to validate

@@ -949,7 +949,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   // given policy id and timestamp, get the policy by filling tsPolicy
   // if checkPrepared is true, also check preparedWrites for change policy
   // if preparedTxn is not null, return the transaction that prepared the policy
-  void GetPolicy(const std::string policyId, const Timestamp &ts,
+  void GetPolicy(const std::string &policyId, const Timestamp &ts,
     std::pair<Timestamp, PolicyStoreValue> &tsPolicy, const bool checkPrepared = false,
     const proto::Transaction **preparedTxn = nullptr);
 
@@ -1131,7 +1131,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   // parallel endorsement check helper
   bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
 
-  proto::ConcurrencyControl::Result policyCheckHelper(proto::Transaction &txn, const WriteMessage &write, const Timestamp &ts,
+  proto::ConcurrencyControl::Result policyCheckHelper(const std::string &policyId, const Timestamp &ts,
     const DepSet &depSet, const std::string &txnDigest, const proto::Transaction* &abstain_conflict,
     std::set<std::pair<std::string, Timestamp>> &implicitPolicyReads);
   // Global objects.
@@ -1462,6 +1462,10 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   mean_tracker prepare_us;
   mean_tracker phase1_to_reply_us;
   mean_tracker query_time_us;
+  mean_tracker read_time_us;
+  mean_tracker read_sign_us;
+  mean_tracker policy_id_us;
+  mean_tracker policy_ccc_us;
 };
 
 } // namespace sintrstore

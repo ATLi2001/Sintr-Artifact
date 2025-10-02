@@ -858,7 +858,7 @@ int main(int argc, char **argv) {
         FLAGS_sintr_policy_CCC, false, false, true,
         FLAGS_sintr_hash_query_gen_id,
         false,
-        0
+        0, false
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
@@ -1092,11 +1092,30 @@ int main(int argc, char **argv) {
        // Peloton SMR
   case PROTO_PELOTON_SMR: {
       Notice("Using [%s] server config", FLAGS_local_config ? "LOCAL" : "REMOTE");
+      ::SintrParameters sintr_params(
+        0, false,
+        FLAGS_sintr_sign_finish_validation,
+        false, false,
+        FLAGS_sintr_policy_function_name,
+        FLAGS_sintr_policy_config_path, 0, CLIENT_VALIDATION_HEURISTIC::EXACT,
+        FLAGS_sintr_check_policy_leak, false, 0, false, false,
+        FLAGS_sintr_parallel_endorsement_check,
+        FLAGS_sintr_use_occ_for_policies,
+        FLAGS_sintr_hash_endorsements, false, false, true,
+        FLAGS_sintr_hide_timestamps, 1,
+        FLAGS_sintr_server_skip_endorsement_check,
+        FLAGS_sintr_policy_CCC, false, false, true,
+        FLAGS_sintr_hash_query_gen_id,
+        false,
+        0
+      );
+
    
       server = new pelotonstore::Server(config, &keyManager, FLAGS_data_file_path, 
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
                                      FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-                                     FLAGS_indicus_watermark_time_delta, part, tport, FLAGS_local_config, FLAGS_pg_SMR_mode);
+                                     FLAGS_indicus_watermark_time_delta, part, tport, FLAGS_local_config, FLAGS_pg_SMR_mode,
+                                     sintr_params);
 
       replica = new pelotonstore::Replica(config, &keyManager,
                                        dynamic_cast<pelotonstore::App *>(server),

@@ -101,8 +101,7 @@ class ValidationClient : public ::ValidationClientCommon {
 
   // either fill one of the pending validation gets or put into readset for future validation get
   void ProcessForwardReadResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
-    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset,
-    const proto::Dependency &policyDep, bool hasPolicyDep);
+    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset);
 
   // either fill one of the pending validation queries or put into readset for future validation query
   void ProcessForwardPointQueryResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
@@ -111,6 +110,8 @@ class ValidationClient : public ::ValidationClientCommon {
     const proto::ForwardQueryResult &fwdQueryResult, bool addReadset);
   // for the parallel query sig check case, should be later notified of validity
   void NotifyForwardQueryResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+  // for parallel reads/point queries
+  void NotifyForwardReadResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
   void ProcessBlindWrite(uint64_t txn_client_id, uint64_t txn_client_seq_num);
 
@@ -204,15 +205,14 @@ class ValidationClient : public ::ValidationClientCommon {
     // this tracks the readset/writeset etc. of the transaction
     proto::Transaction *txn;
     // this tracks the locally buffered key-value pairs
-    std::map<std::string, std::string> readValues;
+    std::unordered_map<std::string, std::string> readValues;
     // this tracks the pending validation gets
     std::vector<PendingValidationGet *> pendingGets;
     std::vector<PendingValidationQuery *> pendingQueries;
 
     std::vector<std::string> pendingWriteStatements; //Just a temp cache to keep Translated Write statements in scope during a TX.
-    std::map<std::string, std::string> point_read_cache; // Cache the read results from point reads. 
-    std::map<std::string, std::string> scan_read_cache; //Cache results from scan reads (only for Select *)
-    std::map<std::string, std::string> queryIDToCmd; // map for query gen ID to query command
+    std::vector<std::pair<std::string, std::string>> point_read_cache; // Cache the read results from point reads. 
+    std::vector<std::pair<std::string, std::string>> scan_read_cache; //Cache results from scan reads (only for Select *)
 
     // vector of keys to ensure that only readset keys in transaction are added
     std::vector<std::pair<std::string, std::pair<std::string, Timestamp>>> pendingForwardedRead;
@@ -230,12 +230,17 @@ class ValidationClient : public ::ValidationClientCommon {
     // track all reads that should have been seen by the transaction
     std::set<std::string> seenReads;
     // queriesAddedToReadset should match seenQueries
-    std::set<std::string> seenQueries;
+    std::set<std::string> seenQueries; //TODO: maybe change to just set if more efficient to compare ordered sets
     std::set<std::string> queriesAddedToReadset;
 
+    std::vector<std::pair<std::string, std::string>> cachedReads;
+
     uint64_t numProcessedForwardQuery = 0;
+    uint64_t numPendingReads = 0;
+    uint64_t numValidReads = 0;
     uint64_t numValidForwardQuery = 0;
     bool commitWaitOnValidForwardQuery = false;
+    bool aborted = false;
     commit_callback ccb;
     commit_timeout_callback ctcb;
   };
@@ -272,7 +277,7 @@ class ValidationClient : public ::ValidationClientCommon {
   typedef tbb::concurrent_hash_map<std::string, AllValidationTxnState *> allValTxnStatesMap;
   allValTxnStatesMap allValTxnStates;
   // map from thread id to (SQL Transformer) that stores a sql interpreter for each validation thread
-  std::map<std::thread::id, SQLTransformer*> threadValtoSQL;
+  std::unordered_map<std::thread::id, SQLTransformer*> threadValtoSQL;
 
   uint64_t query_fin_us;
   uint64_t get_fin_us;

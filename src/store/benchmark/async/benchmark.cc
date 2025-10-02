@@ -488,6 +488,7 @@ DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction d
 DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
 DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
 DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
+DEFINE_bool(sintr_use_endorsement_cb, true, "use endorsement cb instead of busy waiting");
 // given an estimated txn policy, how many other clients to contact?
 const std::string sintr_client_validation_args[] = {
 	"client-validation-exact",
@@ -1138,7 +1139,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (mode == PROTO_SINTR && sintr_val_client_selector_type == VAL_CLIENT_SELECTOR_UNKNOWN) {
+  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) && sintr_val_client_selector_type == VAL_CLIENT_SELECTOR_UNKNOWN) {
     std::cerr << "Unknown sintr validation client selector." << std::endl;
     return 1;
   }
@@ -1369,12 +1370,12 @@ int main(int argc, char **argv) {
   config = new transport::Configuration(configStream);
 
   std::ifstream clientsConfigStream(FLAGS_clients_config_path);
-  if (mode == PROTO_SINTR && clientsConfigStream.fail()) {
+  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) && clientsConfigStream.fail()) {
     std::cerr << "Did not provide valid clients config path for Sintr: " << FLAGS_clients_config_path
               << std::endl;
     return -1;
   }
-  else if(mode == PROTO_SINTR) {
+  else if(mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) {
     clients_config = new transport::Configuration(clientsConfigStream);
   }
 
@@ -1610,6 +1611,19 @@ int main(int argc, char **argv) {
       case PROTO_HOTSTUFF:
       case PROTO_PG_SMR:
       case PROTO_PELOTON_SMR:
+        switch(sintr_val_client_selector_type) {
+            case VAL_CLIENT_SELECTOR_RING:
+              sintrValClientSelector = nullptr;
+              break;
+            case VAL_CLIENT_SELECTOR_UNIFORM:
+              sintrValClientSelector = new UniformClientSelector(client_total);
+              break;
+            case VAL_CLIENT_SELECTOR_ZIPF:
+              sintrValClientSelector = new ZipfClientSelector(client_total, FLAGS_sintr_val_client_selector_zipf);
+              break;
+            default:
+              NOT_REACHABLE();
+        }
       case PROTO_BFTSMART:
       case PROTO_AUGUSTUS_SMART:
       case PROTO_AUGUSTUS:
@@ -1751,7 +1765,8 @@ int main(int argc, char **argv) {
         FLAGS_sintr_client_estimate_policy,
         FLAGS_sintr_hash_query_gen_id,
         FLAGS_sintr_separate_transport,
-        FLAGS_sintr_max_clients_connect
+        FLAGS_sintr_max_clients_connect,
+        FLAGS_sintr_use_endorsement_cb
       );
 
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
@@ -1956,14 +1971,46 @@ int main(int argc, char **argv) {
 
     // Peloton SMR
     case PROTO_PELOTON_SMR: {
+          ::SintrParameters sintr_params(
+            FLAGS_sintr_max_val_threads,
+            FLAGS_sintr_sign_fwd_read_results,
+            FLAGS_sintr_sign_finish_validation,
+            FLAGS_sintr_debug_endorse_check,
+            FLAGS_sintr_client_check_evidence,
+            FLAGS_sintr_policy_function_name,
+            FLAGS_sintr_policy_config_path,
+            FLAGS_sintr_read_include_policy,
+            sintr_client_validation, true,
+            FLAGS_sintr_client_pin_cores,
+            FLAGS_sintr_min_enable_pull_policies,
+            FLAGS_sintr_c2c_send_thread,
+            FLAGS_sintr_c2c_receive_thread,
+            FLAGS_sintr_parallel_endorsement_check,
+            false,
+            FLAGS_sintr_hash_endorsements,
+            FLAGS_sintr_parallel_query_sigs_check,
+            FLAGS_sintr_blind_write_message,
+            FLAGS_sintr_sort_writeset,
+            FLAGS_sintr_hide_timestamps,
+            FLAGS_sintr_max_client_sig_check_threads,
+            false, true,
+            FLAGS_sintr_optimistic_receive_endorsement,
+            FLAGS_sintr_client_ignore_policy_update,
+            FLAGS_sintr_client_estimate_policy,
+            FLAGS_sintr_hash_query_gen_id,
+            FLAGS_sintr_separate_transport,
+            FLAGS_sintr_max_clients_connect
+          );
         client = new pelotonstore::Client(*config, clientId, FLAGS_num_shards,
                                        FLAGS_num_groups, closestReplicas,
-																			  tport, part,
+																			  tport, c2cport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
                                        FLAGS_indicus_sign_client_proposals,
-                                       keyManager,
-																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
+                                       keyManager, sintr_params,
+                                       TrueTime(FLAGS_clock_skew, FLAGS_clock_error), clients_config,
+                                       sintrValClientSelector, FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode,
+                                       FLAGS_bftsmart_codebase_dir, keys);
         break;
     }
 

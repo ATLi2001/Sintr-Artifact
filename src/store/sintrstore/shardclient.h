@@ -67,11 +67,11 @@ static int successful_invoke = 0;
 
 ///////// Reads
 typedef std::function<void(int, const std::string &,
-    const std::string &, const Timestamp &, const proto::Dependency &,
+    const std::string &, const Timestamp &, std::unique_ptr<proto::Dependency>,
     bool, bool,
-    const proto::CommittedProof &, const std::string &, const std::string &,
-    const EndorsementPolicyMessage &,
-    const proto::Dependency &, bool)> read_callback;
+    std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
+    std::unique_ptr<EndorsementPolicyMessage>,
+    std::unique_ptr<std::string>)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
 ////////// Queries
@@ -81,7 +81,7 @@ typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string
   const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
   const proto::Dependency &, bool, bool,
-  const proto::CommittedProof &, const std::string &, const std::string &,
+  const proto::CommittedProof &, const proto::SignedMessage &,
   const EndorsementPolicyMessage &)> point_result_callback;  //TODO: This == Get callback.
 
 typedef std::function<void(int)> result_timeout_callback;
@@ -225,10 +225,10 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
   struct PendingQuorumGet {
     PendingQuorumGet(uint64_t reqId) : reqId(reqId),
         numReplies(0UL), numOKReplies(0UL), hasDep(false),
-        firstCommittedReply(true), hasPolicyDep(false) { }
+        firstCommittedReply(true) { }
     PendingQuorumGet() : reqId(0UL),
         numReplies(0UL), numOKReplies(0UL), hasDep(false),
-        firstCommittedReply(true), hasPolicyDep(false) { }
+        firstCommittedReply(true) { }
     ~PendingQuorumGet() { }
     uint64_t reqId;
     std::string key;
@@ -241,7 +241,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     uint64_t numOKReplies;
     std::map<Timestamp, std::pair<proto::Write, uint64_t>> prepared;
     std::map<Timestamp, proto::Signatures> preparedSigs;
-    proto::Dependency dep;
+    std::unique_ptr<proto::Dependency> dep;
     bool hasDep;
     read_callback gcb;
     read_timeout_callback gtcb;
@@ -255,18 +255,14 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     std::string table_name;
 
     // these correspond with maxValue, to be forwarded to peers
-    proto::CommittedProof maxCommittedProof;
-    // this may be a proto::Write or signed version of it
-    std::string maxSerializedWrite;
-    std::string maxSerializedWriteTypeName;
+    std::unique_ptr<proto::CommittedProof> maxCommittedProof;
+    // this must be a signed write... sintr doesn't work without server sigs
+    std::unique_ptr<proto::SignedMessage> maxWrite;
     // endorsement policy corresponding to maxValue
-    EndorsementPolicyMessage maxPolicy;
+    std::unique_ptr<EndorsementPolicyMessage> maxPolicy;
 
     Timestamp maxPolicyTs;
     // prepared policy map from timestamp to (write containing prepared policy, count)
-    std::map<Timestamp, std::pair<proto::Write, uint64_t>> preparedPolicy;
-    proto::Dependency policyDep;
-    bool hasPolicyDep;
   };
 
   struct Result_mgr {
@@ -539,7 +535,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
   void GetTimeout(uint64_t reqId);
 
   /* Callbacks for hearing back from a shard for an operation. */
-  void HandleReadReply(const proto::ReadReply &readReply);
+  void HandleReadReply(proto::ReadReply &readReply);
   void HandlePhase1Reply(proto::Phase1Reply &phase1Reply);
   void ProcessP1R(proto::Phase1Reply &reply, bool FB_path = false, PendingFB *pendingFB = nullptr, const std::string *txnDigest = nullptr);
   void HandleP1REquivocate(const proto::Phase1Reply &phase1Reply);
@@ -710,6 +706,17 @@ SQLTransformer *sql_interpreter;
   proto::SyncClientProposal syncMsg;
 
   std::vector<uint64_t> verify_server_sig_ms;
+
+  mean_tracker shard_client_get;
+  mean_tracker shard_client_receive;
+  mean_tracker wait_read_us;
+  mean_tracker p1_reply_processing;
+  mean_tracker read_sig_verify;
+  mean_tracker parse_read_msg;
+  mean_tracker move_ptrs;
+
+  std::map<std::string, uint64_t> read_send_map;
+  uint64_t numTxns = 0;
 };
 
 } // namespace sintrstore
