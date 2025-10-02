@@ -7,6 +7,7 @@ ROOTDIR="$HOME/Pequin-Artifact"
 OUTPUT_DIR="$ROOTDIR/output"
 EXPERIMENT_RESULTS_DIR="$ROOTDIR/experiment-results"
 COLLECT_DIR="$EXPERIMENT_RESULTS_DIR/original"
+COLLECT_LOGS=0
 
 mkdir -p $COLLECT_DIR
 
@@ -28,6 +29,11 @@ for subdir in "$OUTPUT_DIR"/*; do
                         cp "$subsubsubdir"/out/stats.json "$target_dir"
                         cp "$subsubsubdir"/*.config "$target_dir"
                         cp "$subsubsubdir"/*.json "$target_dir"
+
+                        if [ $COLLECT_LOGS -eq 1 ]; then
+                            mkdir -p "$target_dir/logs"
+                            cp "$subsubsubdir"/out/client-*/*stdout*.log "$target_dir/logs"
+                        fi
                     fi
                 done
             fi

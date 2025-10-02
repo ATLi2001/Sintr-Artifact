@@ -29,8 +29,8 @@
 
 namespace rwsql {
 
-RWSQLPolicyChange::RWSQLPolicyChange(uint64_t table, uint32_t policy_weight) 
-  : SyncTransaction(10000), RWSQLBasePolicyChange(table, policy_weight) {}
+RWSQLPolicyChange::RWSQLPolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name) 
+  : SyncTransaction(10000), RWSQLBasePolicyChange(table, policy_weight, policy_function_name) {}
 
 RWSQLPolicyChange::~RWSQLPolicyChange() {}
 

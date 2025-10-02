@@ -31,15 +31,17 @@
 #include <random>
 #include <thread>
 #include <sys/time.h>
+// #include <sstream>
 
 SyncTransactionBenchClient::SyncTransactionBenchClient(SyncClient &client,
     Transport &transport, uint64_t id, int numRequests, int expDuration,
     uint64_t delay, int warmupSec, int cooldownSec, int tputInterval,
     uint64_t abortBackoff, bool retryAborted, uint64_t maxBackoff,
-    int64_t maxAttempts, uint64_t timeout, const std::string &latencyFilename)
+    int64_t maxAttempts, uint64_t timeout, const std::string &latencyFilename,
+    uint64_t policyChangeTime)
     : BenchmarkClient(transport, id, numRequests, expDuration, delay,
-        warmupSec, cooldownSec, tputInterval, latencyFilename), client(client),
-    abortBackoff(abortBackoff), retryAborted(retryAborted), maxBackoff(maxBackoff),
+        warmupSec, cooldownSec, tputInterval, latencyFilename, policyChangeTime),
+    client(client), abortBackoff(abortBackoff), retryAborted(retryAborted), maxBackoff(maxBackoff),
     maxAttempts(maxAttempts), timeout(timeout), currTxn(nullptr),
     currTxnAttempts(0UL) {
 }
@@ -91,6 +93,15 @@ void SyncTransactionBenchClient::SendNext(transaction_status_t *result) {
       currTxn = nullptr;
       break;
     } else {
+
+      // if we want to track aborts over time
+      // struct timespec curr;
+      // clock_gettime(CLOCK_MONOTONIC, &curr);
+      // uint64_t currNanos = curr.tv_sec * 1000000000ULL + curr.tv_nsec;
+      // std::stringstream msg;
+      // msg << "abort,0," << currNanos << ',' << id << std::endl;
+      // std::cout << msg.str();
+      // std::cout.flush();
       
       stats.Increment(GetLastOp() + "_" + std::to_string(*result), 1);
       uint64_t backoff = 0;

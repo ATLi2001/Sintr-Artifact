@@ -324,6 +324,9 @@ class IndicusCodebase(ExperimentCodebase):
         if 'client_rand_sleep' in config:
             client_command += ' --delay %d' % config['client_rand_sleep']
 
+        if 'policy_change_time' in config:
+            client_command += ' --policy_change_time %d' % config['policy_change_time']
+
         if 'partitioner' in config:
             client_command += ' --partitioner %s' % config['partitioner']
 
@@ -369,6 +372,11 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --scan_as_point=%s' % (str(config['scan_as_point']).lower())
                 client_command += ' --scan_as_point_parallel=%s' % (str(config['scan_as_point_parallel']).lower())
                 client_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
+
+                if 'rw_sql_policy_change_table' in config:
+                    client_command += ' --rw_sql_policy_change_table %d' % config['rw_sql_policy_change_table']
+                if 'rw_sql_new_policy_weight' in config:
+                    client_command += ' --rw_sql_new_policy_weight %d' % config['rw_sql_new_policy_weight']
 
         elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql':
             client_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']

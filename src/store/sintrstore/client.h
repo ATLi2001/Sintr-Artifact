@@ -422,9 +422,9 @@ class Client : public ::Client {
   Client2Client *c2client;
   // collect endorsements for current transaction
   EndorsementClient *endorseClient;
-  PolicyParseClient *policyParseClient;
+  PolicyParseClient policyParseClient;
   policy_id_function policyIdFunction;
-  PolicyCache policyCache;
+  std::unique_ptr<PolicyCache> policyCache;
   Partitioner *part;
   bool syncCommit;
   const bool pingReplicas;

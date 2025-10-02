@@ -57,7 +57,7 @@ def create_config_from_base(base_config_json, changes_dict):
             else:
                 new_config[key] = value
         else:
-            print(f"Warning: Key '{key}' not found in base configuration. Skipping.")
+            new_config[key] = value
     return new_config
 
 

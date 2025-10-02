@@ -30,6 +30,7 @@
 #include "store/common/policy/policy.h"
 #include "store/benchmark/async/tpcc/tpcc-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_schema.h"
+#include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/common/table_kv_encoder.h"
 #include "lib/message.h"
 
@@ -57,6 +58,14 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
         default:
           return "p#0";
       }
+    };
+  }
+  else if (policy_function_name == "rw_sql_policy_change_grouped") {
+    return [policy_function_name](const std::string &key, const std::string &value) -> std::string {
+      std::string table_name;
+      std::vector<std::string> primary_key_column_values;
+      DecodeTableRow(key, table_name, primary_key_column_values);
+      return rwsql::GetPolicyIdForTable(table_name, policy_function_name);
     };
   }
   // DEPRECATED: tpcc cannot support warehouse based policies

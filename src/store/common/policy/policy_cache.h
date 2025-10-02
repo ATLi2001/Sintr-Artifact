@@ -30,25 +30,28 @@
 #include "store/common/policy/policy.h"
 #include <map>
 #include <string>
+#include <memory>
 
 class PolicyCache {
  public:
-  PolicyCache();
-  ~PolicyCache();
-  
-  // initialize the policy cache with the given map; takes ownership of policies (policies should be allocated on heap)
-  void Initialize(std::map<std::string, Policy *> &&policies);
+  PolicyCache() {};
+  ~PolicyCache() {};
+
   // is empty
   bool IsEmpty() const;
   // return true if policy exists for key, false otherwise
   // given a reference to a policy pointer, update it with the policy in the cache
   // does not allocate a new policy object
-  bool Get(const std::string &policyId, const Policy *&policy) const;
+  const Policy *Get(const std::string &policyId) const;
+  // take ownership and remove from underlying map
+  std::unique_ptr<Policy> Take(const std::string &policyId);
   // update the mapping from policy id to policy; takes ownership of policy (policy should be allocated on heap)
-  void Put(const std::string &policyId, Policy *&&policy);
+  void Put(const std::string &policyId, std::unique_ptr<Policy> policy);
+  // return all keys
+  std::vector<std::string> GetAllKeys() const;
 
  private:
-  std::map<std::string, Policy *> policyCache;
+  std::map<std::string, std::unique_ptr<Policy>> policyCache;
 };
 
 #endif /* _POLICY_CACHE_H_ */

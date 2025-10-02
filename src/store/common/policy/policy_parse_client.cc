@@ -36,8 +36,8 @@
 #include <sstream>
 
 
-std::map<std::string, Policy *> PolicyParseClient::ParseConfigFile(const std::string &configFilePath) {
-  std::map<std::string, Policy *> policies;
+std::unique_ptr<PolicyCache> PolicyParseClient::ParseConfigFile(const std::string &configFilePath) {
+  std::unique_ptr<PolicyCache> policyCache = std::make_unique<PolicyCache>();
 
   std::ifstream policyStoreFile(configFilePath);
   if (policyStoreFile.fail()) {
@@ -66,66 +66,62 @@ std::map<std::string, Policy *> PolicyParseClient::ParseConfigFile(const std::st
       i++;
     }
 
-    // create policy
-    Policy *policy = Create(policyType, args);
-
     // add to policies
-    auto result = policies.insert(std::make_pair(policyId, policy));
-    if (!result.second) {
-      Panic("Policy id %s occurs twice in config file", policyId);
+    if (policyCache->Get(policyId) != nullptr) {
+      Panic("Policy id %s occurs twice in config file", policyId.c_str());
     }
+    policyCache->Put(policyId, Create(policyType, args));
   }
-
-  return policies;
+  return policyCache;
 }
 
-Policy *PolicyParseClient::Create(const std::string &policyType, const std::vector<std::string> &policyArgs) {
+std::unique_ptr<Policy> PolicyParseClient::Parse(const PolicyObject &protoPolicy) {
+  switch (protoPolicy.policy_type()) {
+    case PolicyObject::WEIGHT_POLICY: {
+      WeightPolicyMessage weightPolicyMsg;
+      weightPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      return std::make_unique<WeightPolicy>(weightPolicyMsg.weight());
+    }
+    case PolicyObject::AND_POLICY: {
+      ANDPolicyMessage andPolicyMsg;
+      andPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      std::set<uint64_t> client_ids(andPolicyMsg.client_ids().begin(), andPolicyMsg.client_ids().end());
+      return std::make_unique<ANDPolicy>(client_ids);
+    }
+    case PolicyObject::OR_POLICY: {
+      ORPolicyMessage orPolicyMsg;
+      orPolicyMsg.ParseFromString(protoPolicy.policy_data());
+      std::set<uint64_t> client_ids(orPolicyMsg.client_ids().begin(), orPolicyMsg.client_ids().end());
+      return std::make_unique<ORPolicy>(client_ids);
+    }
+    default:
+      Panic("Received unexpected policy type: %d", protoPolicy.policy_type());
+  }
+}
+
+std::unique_ptr<Policy> PolicyParseClient::Create(const std::string &policyType, const std::vector<std::string> &policyArgs) {
   switch (GetPolicyTypeEnum(policyType)) {
     case POLICY_TYPE_WEIGHT: {
       if (policyArgs.size() != 1) {
         Panic("Weight policy requires exactly one argument");
       }
-      return new WeightPolicy(std::stoull(policyArgs[0]));
+      return std::make_unique<WeightPolicy>(std::stoull(policyArgs[0]));
     }
     case POLICY_TYPE_AND: {
       std::set<uint64_t> client_ids;
       for (const std::string &arg : policyArgs) {
         client_ids.insert(std::stoull(arg));
       }
-      return new ANDPolicy(client_ids);
+      return std::make_unique<ANDPolicy>(client_ids);
     }
     case POLICY_TYPE_OR: {
       std::set<uint64_t> client_ids;
       for (const std::string &arg : policyArgs) {
         client_ids.insert(std::stoull(arg));
       }
-      return new ORPolicy(client_ids);
+      return std::make_unique<ORPolicy>(client_ids);
     }
     default:
       Panic("Received unexpected policy type: %s", policyType.c_str());
-  }
-}
-
-Policy *PolicyParseClient::Parse(const PolicyObject &protoPolicy) {
-  switch (protoPolicy.policy_type()) {
-    case PolicyObject::WEIGHT_POLICY: {
-      WeightPolicyMessage weightPolicyMsg;
-      weightPolicyMsg.ParseFromString(protoPolicy.policy_data());
-      return new WeightPolicy(weightPolicyMsg.weight());
-    }
-    case PolicyObject::AND_POLICY: {
-      ANDPolicyMessage andPolicyMsg;
-      andPolicyMsg.ParseFromString(protoPolicy.policy_data());
-      std::set<uint64_t> client_ids(andPolicyMsg.client_ids().begin(), andPolicyMsg.client_ids().end());
-      return new ANDPolicy(client_ids);
-    }
-    case PolicyObject::OR_POLICY: {
-      ORPolicyMessage orPolicyMsg;
-      orPolicyMsg.ParseFromString(protoPolicy.policy_data());
-      std::set<uint64_t> client_ids(orPolicyMsg.client_ids().begin(), orPolicyMsg.client_ids().end());
-      return new ORPolicy(client_ids);
-    }
-    default:
-      Panic("Received unexpected policy type: %d", protoPolicy.policy_type());
   }
 }

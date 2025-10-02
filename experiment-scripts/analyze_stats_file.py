@@ -31,15 +31,17 @@ import argparse
 import time
 
 
-ORIGINAL_STATS_DIR = "experiment-results/original"
-OUTPUT_CSV_DIR = "experiment-results/analyzed/csv"
-OUTPUT_PLOT_DIR = "experiment-results/analyzed/plots"
+BASE_DIR = "experiment-results"
+ORIGINAL_STATS_DIR = f"{BASE_DIR}/original"
+OUTPUT_CSV_DIR = f"{BASE_DIR}/analyzed/csv"
+OUTPUT_PLOT_DIR = f"{BASE_DIR}/analyzed/plots"
 ANALYSIS_TYPES = [
     "latency_throughput",
     "sig_nosig_tput_bar",
     "sig_nosig_lat_bar",
     "overheads_lat_cum_bar",
     "overheads_lat_grouped_bar",
+    "throughput_time",
 ]
 
 
@@ -63,7 +65,7 @@ def read_original_stats(original_stats_dir):
                         analysis_name = f"{protocol}-{benchmark}"
                     num_clients = config["client_total"]
                     # create a unique name for the stats file
-                    unique_name = f"{analysis_name}_{num_clients}_{subdir}"
+                    unique_name = (analysis_name, num_clients, subdir)
 
                     with open(os.path.join(original_stats_dir, subdir, "stats.json"), "r") as stats_file:
                         stats = json.load(stats_file)
@@ -78,7 +80,7 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
         if "run_stats" not in stat_json or "combined" not in stat_json["run_stats"]:
             print(f"Skipping {name} as it does not contain run_stats or combined data.")
             continue
-        experiment_name, num_clients, timestamp = name.split("_")
+        experiment_name, num_clients, timestamp = name
         num_clients = int(num_clients)
         out_df.loc[len(out_df)] = [
             experiment_name,
@@ -93,6 +95,62 @@ def stats_to_csv(stats_dicts, output_dir, now_string):
 
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.csv"), index=False)
 
+    return out_df
+
+
+# collect all the logs in the original_stats_dir into a csv file
+# logs are formatted as operation,latency,timestamp,client_id
+def logs_to_csv(original_stats_dir, output_dir, now_string):
+    # more efficient to use list to collect data, then create dataframe
+    data_rows = []
+
+    for subdir in os.listdir(original_stats_dir):
+        subdir_path = os.path.join(original_stats_dir, subdir)
+
+        # Get analysis name
+        analysis_name = None
+        for file in os.listdir(subdir_path):
+            if file != "stats.json" and file.endswith(".json"):
+                with open(os.path.join(subdir_path, file), "r") as config_file:
+                    config = json.load(config_file)
+                    if "analysis_name" in config:
+                        analysis_name = config["analysis_name"]
+                    else:
+                        protocol = config["client_protocol_mode"]
+                        benchmark = config["benchmark_name"]
+                        analysis_name = f"{protocol}-{benchmark}"
+                    break
+
+        # Process log files
+        logs_dir = os.path.join(subdir_path, "logs")
+        if not os.path.exists(logs_dir):
+            continue
+
+        for log_file in os.listdir(logs_dir):
+            log_path = os.path.join(logs_dir, log_file)
+            # if we are tracking aborts over time, we need to ignore lines before #start
+            # started = False
+            with open(log_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    # if "#start" in line:
+                    #     started = True
+                    #     continue
+                    # if not started:
+                    #     continue
+                    if not line or "#end" in line:
+                        break
+                    operation, latency, timestamp, client_id = line.split(",")
+                    data_rows.append([analysis_name, operation, latency, timestamp, client_id])
+
+    # Create DataFrame once from all collected data
+    out_df = pd.DataFrame(data_rows, columns=["experiment_name", "operation", "latency_ns", "commit_timestamp_ns", "client_id"])
+
+    # Convert timestamp column to numeric for proper sorting
+    out_df["commit_timestamp_ns"] = pd.to_numeric(out_df["commit_timestamp_ns"], errors='coerce')
+    out_df["latency_ns"] = pd.to_numeric(out_df["latency_ns"], errors='coerce')
+
+    out_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
     return out_df
 
 
@@ -350,6 +408,71 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
         grouped_yerr=grouped_err
     )
 
+def create_tput_time_plot(df, output_dir, now_string):
+    fig, ax = plt.subplots(layout="constrained")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Throughput (txn/s)")
+    ax.grid(True)
+
+    df["commit_timestamp_ns"] = df["commit_timestamp_ns"].astype(float)
+    df["commit_timestamp_ns"] = df["commit_timestamp_ns"] / 1e9
+
+    policy_change_time_s = -1
+    tput_interval_s = 2
+    plot_abort = False
+    plot_latency = False
+    for experiment_name, group in df.groupby(["experiment_name"]):
+        # group by client_id and normalize each client's time to start at 0
+        # then combine all clients' data
+        # this ensures that we are not affected by clock skew between clients
+        combined_group = pd.DataFrame()
+        combined_abort = pd.DataFrame()
+        for client_id, client_group in group.groupby("client_id"):
+            client_group = client_group.sort_values(by=["commit_timestamp_ns"])
+            t0 = client_group["commit_timestamp_ns"].iloc[0]
+            client_group["commit_timestamp_ns"] = client_group["commit_timestamp_ns"] - t0
+            if int(client_id) == 0:
+                # find policy change time
+                policy_change = client_group[client_group["operation"] == "policy_change"]
+                if len(policy_change) > 0:
+                    policy_change_time_s = policy_change["commit_timestamp_ns"].iloc[0]
+                    print(f"{experiment_name[0]}: policy change at {policy_change_time_s:.2f}s")
+
+            combined_group = pd.concat([combined_group, client_group.loc[client_group["operation"] != "abort"]])
+            combined_abort = pd.concat([combined_abort, client_group.loc[client_group["operation"] == "abort"]])
+
+        # calculate throughput at intervals
+        time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
+        combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
+        # throughput is number of transactions in bin
+        tput = combined_group.groupby("time_bin").size() / tput_interval_s
+        # average latency in bin in ms
+        latency = combined_group.groupby("time_bin")["latency_ns"].mean() / 1e6
+
+        overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
+        print(f"{experiment_name[0]}: avg tput {overall_tput:.2f} txn/s")
+
+        ax.plot(time_bins[1:], tput, "-", label=experiment_name[0])
+
+        if plot_latency:
+            # also plot latency over time on secondary y-axis
+            ax_lat = ax.twinx()
+            ax_lat.set_ylabel("Latency (ms)", color="green")
+            ax_lat.plot(time_bins[1:], latency, "--", label=f"{experiment_name[0]} latency", color="green")
+            ax_lat.tick_params(axis='y', labelcolor="green")
+
+        if plot_abort:
+            ax2 = ax.twinx()
+            ax2.set_ylabel("Aborts", color="red")
+            ax2.plot(combined_abort["commit_timestamp_ns"], np.repeat(1, len(combined_abort)), "o", label=f"{experiment_name[0]} aborts", color="red")
+
+    if policy_change_time_s > 0:
+        ax.axvline(x=policy_change_time_s, color="black", linestyle="--", label="Policy Change")
+
+    fig.legend(loc="outside lower center", ncol=2)
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
+    plt.close()
+
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -395,6 +518,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
+    parser.add_argument(
+        "-l", "--logs",
+        type=str,
+        required=False,
+        help="Path to directory that contains logs to analyze for throughput over time plot. If provided, generates plot from these logs instead of going through original_stats_dir."
+    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -420,3 +549,9 @@ if __name__ == "__main__":
         create_overheads_lat_cum_bar_plot(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[4]:
         create_overheads_lat_grouped_bar_plot(df, args.output_plot_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[5]:
+        if args.logs:
+            logs_df = pd.read_csv(args.logs)
+        else:
+            logs_df = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
+        create_tput_time_plot(logs_df, args.output_plot_dir, now_string)

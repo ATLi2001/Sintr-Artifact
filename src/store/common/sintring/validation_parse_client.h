@@ -36,14 +36,16 @@
 // this class takes TxnState proto message into the underlying validation transaction
 class ValidationParseClient {
  public:
-  ValidationParseClient(uint32_t timeout,
-    const std::vector<std::string> &keys = std::vector<std::string>()): timeout(timeout), keys(keys) {}
+  ValidationParseClient(uint32_t timeout, const std::string &policy_function_name,
+    const std::vector<std::string> &keys = std::vector<std::string>())
+    : timeout(timeout), policy_function_name(policy_function_name), keys(keys) {}
   ~ValidationParseClient(){}
 
   ValidationTransaction *Parse(const TxnState& txnState);
 
  private:
   uint32_t timeout;
+  std::string policy_function_name;
   const std::vector<std::string> &keys;
   // even though validation transactions don't use randomness, need it for some constructors
   std::mt19937 rand;

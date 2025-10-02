@@ -27,10 +27,12 @@
 #define _POLICY_PARSE_CLIENT_H_
 
 #include "store/common/policy/policy.h"
+#include "store/common/policy/policy_cache.h"
 #include "store/common/common-proto.pb.h"
 
 #include <string>
 #include <map>
+#include <memory>
 
 
 class PolicyParseClient {
@@ -39,11 +41,13 @@ class PolicyParseClient {
   ~PolicyParseClient(){}
 
   // read in a config file and return a map from policy_id to policy object
-  std::map<std::string, Policy *> ParseConfigFile(const std::string &configFilePath);
-  // given a policy type and arguments, create a new policy object
-  Policy *Create(const std::string &policyType, const std::vector<std::string> &policyArgs);
+  std::unique_ptr<PolicyCache> ParseConfigFile(const std::string &configFilePath);
   // given a proto policy object, create a new policy object
-  Policy *Parse(const PolicyObject &protoPolicy);
+  std::unique_ptr<Policy> Parse(const PolicyObject &protoPolicy);
+
+ private:
+  // given a policy type and arguments, create a new policy object
+  std::unique_ptr<Policy> Create(const std::string &policyType, const std::vector<std::string> &policyArgs);
 };
 
 #endif

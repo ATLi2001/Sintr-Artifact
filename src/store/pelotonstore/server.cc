@@ -78,16 +78,12 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager, s
   LoadPolicyStore(sintr_params.policyConfigPath);
 
   policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
-  policyParseClient = new PolicyParseClient();
 
   Notice("Peloton Server Id: %d", idx);
 }
 
 Server::~Server() {
   delete table_store;
-  for (const auto &p : policiesToFree) {
-    delete p;
-  }
 }
 
 
@@ -639,10 +635,13 @@ void Server::LoadTableRows(const std::string &table_name, const std::vector<std:
 
 //TODO: Move to common folder
 void Server::LoadPolicyStore(const std::string &policyStorePath) {
-  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(policyStorePath);
-  for (const auto &p : policies) {
-    policyStore.put(p.first, p.second, Timestamp());
-    policiesToFree.push_back(p.second);
+  std::unique_ptr<PolicyCache> policies = policyParseClient.ParseConfigFile(policyStorePath);
+  std::vector<std::string> policyIds = policies->GetAllKeys();
+
+  for (const auto &p : policyIds) {
+    std::unique_ptr<Policy> policy = policies->Take(p);
+    policyStore.put(p, policy.get(), Timestamp());
+    policiesToFree.push_back(std::move(policy));
   }
 }
 
@@ -678,7 +677,7 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
 
     Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
 
-    std::pair<Timestamp, Policy*> tsPolicy;
+    std::pair<Timestamp, const Policy*> tsPolicy;
     policyStore.get(policyId, ts, tsPolicy);
     policyClient.AddPolicy(tsPolicy.second);
   }
@@ -698,7 +697,7 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
       std::string policyId = policyIdFunction(read.key(), "");
       Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
       // changing to use read key timestamp for reading policy
-      std::pair<Timestamp, Policy*> tsPolicy;
+      std::pair<Timestamp, const Policy*> tsPolicy;
       policyStore.get(policyId, ts, tsPolicy);
 
       if (!policyClient.IsImpliedBy(tsPolicy.second)) {

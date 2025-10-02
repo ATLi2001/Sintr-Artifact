@@ -44,14 +44,15 @@ DEFINE_LATENCY(op);
 
 BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 		int numRequests, int expDuration, uint64_t delay, int warmupSec,
-    int cooldownSec, int tputInterval, const std::string &latencyFilename) :
+    int cooldownSec, int tputInterval, const std::string &latencyFilename,
+    uint64_t policyChangeTime) :
     id(id),
     tputInterval(tputInterval),
     transport(transport),
     rand(id),
     numRequests(numRequests), expDuration(expDuration),	delay(delay),
     warmupSec(warmupSec), cooldownSec(cooldownSec),
-    latencyFilename(latencyFilename) {
+    latencyFilename(latencyFilename), policyChangeTime(policyChangeTime) {
 	if (delay != 0) {
 		Notice("Delay between requests: %ld ms", delay);
 	} else {
@@ -60,6 +61,7 @@ BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 	started = false;
 	done = false;
   cooldownStarted = false;
+  isNextPolicyChange = false;
   if (numRequests > 0) {
 	  latencies.reserve(numRequests);
   }
@@ -102,6 +104,12 @@ void BenchmarkClient::TimeInterval() {
 }
 
 void BenchmarkClient::WarmupDone() {
+  if (policyChangeTime > 0) {
+    Notice("Will change transaction policy after %lu seconds", policyChangeTime);
+    transport.Timer(policyChangeTime * 1000, [this]() {
+      isNextPolicyChange = true;
+    });
+  }
   started = true;
   Notice("Completed warmup period of %d seconds with %d requests", warmupSec, n);
   n = 0;
@@ -177,6 +185,9 @@ void BenchmarkClient::IncrementSent(int result) {
           gettimeofday(&startMeasureTime, NULL);
           startMeasureTime.tv_sec -= ns / 1000000000ULL;
           startMeasureTime.tv_usec -= (ns % 1000000000ULL) / 1000ULL;
+          // comment this in if we are tracking aborts over time
+          // because then aborts will be recorded during warmup period
+          // so this can be used to filter them out
           //std::cout << "#start," << startMeasureTime.tv_sec << "," << startMeasureTime.tv_usec << std::endl;
         }
         uint64_t currNanos = curr.tv_sec * 1000000000ULL + curr.tv_nsec;

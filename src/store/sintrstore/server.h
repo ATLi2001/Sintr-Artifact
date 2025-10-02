@@ -190,7 +190,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     const proto::CommittedProof *proof;
   };
   struct PolicyStoreValue {
-    Policy *policy;
+    const Policy *policy;
     const proto::CommittedProof *proof;
   };
 
@@ -958,7 +958,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
         std::function<void(proto::ConcurrencyControl::Result, const proto::CommittedProof *,
           const proto::Transaction *, bool)> phase1_cb,
         TransportAddress *remote) : 
-        done(false), total_validations(total_validations), completed_validations(0), 
+        done(false), total_validations(total_validations), completed_validations(0), policyLeak(false),
         phase1_cb(phase1_cb), delay_prepare_cb(nullptr), ccDone(false),
         committedProof(nullptr), abstain_conflict(nullptr), remote(remote), cbDone(false) {
       policyClient = new PolicyClient();
@@ -973,10 +973,35 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       delete remote;
     }
 
+    // if policy leak detected, no point in doing endorsement validations
+    // return bool indicating if done (cc also finished)
+    bool SetPolicyLeak() {
+      std::lock_guard<std::mutex> lock(validation_state_mutex);
+      policyLeak = true;
+
+      if (ccDone) {
+        done = true;
+      }
+      else {
+        UW_ASSERT(!cbDone);
+      }
+
+      // if have not called callback yet
+      if (!cbDone) {
+        // if policy leak, directly call phase1_cb with ABSTAIN
+        phase1_cb(proto::ConcurrencyControl::ABSTAIN, nullptr, nullptr, true);
+        cbDone = true;
+      }
+
+      return done;
+    }
+
     // endorsement from endorser_id with result valid
     // if valid, add endorser_id to endorsers
     // return bool indicating if done (cc and all validations finished)
     bool AddCompletedValidation(bool valid, uint64_t endorser_id) {
+      // endorsements only start if ExtractPolicy succeeded
+      UW_ASSERT(!policyLeak);
       std::lock_guard<std::mutex> lock(validation_state_mutex);
       if (valid) {
         endorsers.insert(endorser_id);
@@ -1026,8 +1051,13 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
       this->abstain_conflict = abstain_conflict;
       this->delay_prepare_cb = delay_prepare_cb;
 
-      // if endorsements are also done, then overall done
-      if (completed_validations == total_validations) {
+      // if policy leak, the cc result does not matter and should be done
+      if (policyLeak) {
+        done = true;
+        UW_ASSERT(cbDone);
+      }
+      else if (completed_validations == total_validations) {
+        // if endorsements are also done, then overall done
         done = true;
 
         // if have not called callback yet
@@ -1063,6 +1093,8 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
     PolicyClient *policyClient;
     const uint32_t total_validations;
     uint32_t completed_validations;
+    // true if ExtractPolicy failed
+    bool policyLeak;
 
     // phase1_cb is std::bind of HandlePhase1CB with everything except 
     // a result, committedProof, abstain conflict, and failEndorsementCheck
@@ -1087,7 +1119,8 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   // parallelizable version
   void EndorsementCheck(AsyncValidatePrepare &asyncValidatePrepare, const std::string &txnDigest, const proto::Transaction *txn);
   // policyClient tracks policy from transaction writeset
-  void ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient);
+  // return false if policy leak check fails
+  bool ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyClient);
   // validate endorsements have valid signatures and matching data, and satisfy the policyClient policy
   // client id is for the client that initiated the transaction
   bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
@@ -1235,12 +1268,12 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
 
   VersionedKVStoreGeneric<std::string, Timestamp, Value> store;
   VersionedKVStoreGeneric<std::string, Timestamp, PolicyStoreValue> policyStore;
-  // not sure if VersionedKvStoreGeneric will actually free the policy pointers, so store separately and free on destruction
-  std::vector<Policy *> policiesToFree;
+  // VersionedKvStoreGeneric only has const policy pointers so it will not free itself, must store separately to free on destruction
+  std::vector<std::unique_ptr<Policy>> policiesToFree;
   // policy_function policyFunction;
   policy_id_function policyIdFunction;
 
-  PolicyParseClient *policyParseClient;
+  PolicyParseClient policyParseClient;
 
   // Key -> V
   //std::unordered_map<std::string, std::set<std::tuple<Timestamp, Timestamp, const proto::CommittedProof *>>> committedReads;

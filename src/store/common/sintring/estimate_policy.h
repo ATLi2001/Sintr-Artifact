@@ -39,6 +39,7 @@
 class EstimatePolicy {
  public:
   EstimatePolicy() {}
+  EstimatePolicy(const std::string &policy_function_name) : policy_function_name(policy_function_name) {}
   ~EstimatePolicy(){}
   // takes in transaction state, policy, and endorsement client and returns an estimated policy
   void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache) const;
@@ -48,7 +49,9 @@ class EstimatePolicy {
     As this is a prototype, we'll implement the tables-to-policy ID mapping function in the Sintr client code. 
     Application developers should implement it in their own client code (e.g., tpcc) and then use it within Sintr.
   */
-  std::string TableToPolicyID(const int &t, const std::string &txn_bench) const;
+  std::string TableToPolicyID(const uint64_t t, const std::string &txn_bench) const;
+
+  std::string policy_function_name;
 };
 
 #endif

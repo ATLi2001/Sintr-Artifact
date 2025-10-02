@@ -58,9 +58,9 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
   
   // separate verifier from main client instance
   clients_verifier = new BasicVerifier(transport);
-  
-  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params); 
-  valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
+
+  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params);
+  valParseClient = new ValidationParseClient(10000, params.sintr_params.policyFunctionName, keys); // TODO: pass arg for timeout length
   Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 
   if(params.sintr_params.maxClientsConnect > 0) {
@@ -523,6 +523,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     // sanity check - policy should be satisfied by the clients we are sending to
     UW_ASSERT(policyClient->IsSatisfied(beginValSent));
   }
+  Debug("Sent begin validate txn message to %lu clients", beginValSent.size() - 1);
 }
 
 void Client2Client::ResetTrackingState() {

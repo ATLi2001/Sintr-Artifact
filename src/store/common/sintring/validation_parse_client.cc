@@ -173,7 +173,7 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
       case ::rwsql::RW_SQL_POLICY_CHANGE: {
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
-        return new ::rwsql::RWSQLValPolicyChange(timeout, valTxnData);
+        return new ::rwsql::RWSQLValPolicyChange(timeout, valTxnData, policy_function_name);
       }
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());

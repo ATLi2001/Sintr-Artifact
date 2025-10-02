@@ -69,14 +69,11 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
         sintr_params.ignorePolicyUpdate); // ignore policy update is same as setting sintr to unsafe version
   }
 
-  policyParseClient = new PolicyParseClient();
   policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
-  std::map<std::string, Policy *> policies = policyParseClient->ParseConfigFile(sintr_params.policyConfigPath);
+  policyCache = policyParseClient.ParseConfigFile(sintr_params.policyConfigPath);
 
   endorseClient = new EndorsementClient(client_id);
   // endorseClient->SetDebugCheckFunction(DebugCheck); TODO: make debugcheck function
-  UW_ASSERT(policyCache.IsEmpty());
-  policyCache.Initialize(std::move(policies));
 
   c2client = new Client2Client(clients_config, sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
     signMessages, validateProofs, sintr_params, keyManager, endorseClient, valClientSelector, rand, keys);
@@ -98,7 +95,6 @@ Client::~Client()
     }
     delete c2client;
     delete endorseClient;
-    delete policyParseClient;
 
     if(SMR_mode == 2) BftSmartAgent::destroy_java_vm();
 }
@@ -123,7 +119,7 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
     if (sintr_params.clientEstimatePolicy) {
       policyClient = new PolicyClient();
       protoTxnState.ParseFromString(txnState);
-      EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
+      EstimateTxnPolicy(protoTxnState, policyClient, *policyCache);
     }
 
     Debug("BEGIN tx: ", client_seq_num);
@@ -234,8 +230,8 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
         }
         for (auto &write : txn_msg->writeset()) {
           Debug("Client write key: %s", write.key().c_str());
-          *this->txn_msg->add_writeset() = std::move(write);
           handlePolicyUpdateOnKey(write.key());
+          *this->txn_msg->add_writeset() = std::move(write);
         }
       } else {
         Debug("Statement execution FAILURE for statement %s client ID: %lu seq num: %lu", statement.c_str(), client_id, current_seq_id);
@@ -298,12 +294,14 @@ void Client::getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_c
   txn_msg = nullptr;
 }
 
-void Client::handlePolicyUpdateOnKey(std::string key) {
+void Client::handlePolicyUpdateOnKey(const std::string &key) {
   if(!sintr_params.ignorePolicyUpdate) {
     // TODO: need to also handle policy change functions
     std::string policyId = policyIdFunction(key, "");
-    const Policy *policy;
-    UW_ASSERT(policyCache.Get(policyId, policy));
+    const Policy *policy = policyCache->Get(policyId);
+    if(policy == nullptr) {
+      Panic("Policy for policy id %s not found in policy cache", policyId.c_str());
+    }
     Debug("handle policy update for policy id %lu in write", policyId);
     c2client->HandlePolicyUpdate(policy);
   }

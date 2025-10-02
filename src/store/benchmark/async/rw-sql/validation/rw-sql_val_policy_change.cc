@@ -29,8 +29,9 @@
 
 namespace rwsql {
 
-RWSQLValPolicyChange::RWSQLValPolicyChange(uint32_t timeout, const validation::proto::RWSqlPolicyChange &msg) 
-  : ValidationTransaction(timeout), RWSQLBasePolicyChange(msg.table(), msg.policy_weight()) {}
+RWSQLValPolicyChange::RWSQLValPolicyChange(uint32_t timeout, const validation::proto::RWSqlPolicyChange &msg,
+  const std::string &policy_function_name) 
+  : ValidationTransaction(timeout), RWSQLBasePolicyChange(msg.table(), msg.policy_weight(), policy_function_name) {}
 
 RWSQLValPolicyChange::~RWSQLValPolicyChange() {}
 
