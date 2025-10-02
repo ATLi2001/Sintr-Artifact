@@ -176,13 +176,13 @@ private:
 
   std::shared_mutex atomicMutex;
   pelotonstore::TableStore *table_store;
-  VersionedKVStoreGeneric<std::string, Timestamp, Policy*> policyStore;
+  VersionedKVStoreGeneric<std::string, Timestamp, const Policy*> policyStore;
   // not sure if VersionedKvStoreGeneric will actually free the policy pointers, so store separately and free on destruction
-  std::vector<Policy *> policiesToFree;
+  std::vector<std::unique_ptr<Policy>> policiesToFree;
   // policy_function policyFunction;
   policy_id_function policyIdFunction;
 
-  PolicyParseClient *policyParseClient;
+  PolicyParseClient policyParseClient;
   SintrParameters sintr_params;
 
      /////////////////// HELPER FUNCTIONS ///////////////////

@@ -1999,7 +1999,8 @@ int main(int argc, char **argv) {
             FLAGS_sintr_client_estimate_policy,
             FLAGS_sintr_hash_query_gen_id,
             FLAGS_sintr_separate_transport,
-            FLAGS_sintr_max_clients_connect
+            FLAGS_sintr_max_clients_connect,
+            FLAGS_sintr_use_endorsement_cb
           );
         client = new pelotonstore::Client(*config, clientId, FLAGS_num_shards,
                                        FLAGS_num_groups, closestReplicas,

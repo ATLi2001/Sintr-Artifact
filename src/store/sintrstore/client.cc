@@ -473,7 +473,8 @@ void Client::Put(const std::string &key, const std::string &value,
     } else {
       if (!params.sintr_params.ignorePolicyUpdate) {
         // look in cache for policy
-        const Policy *policy = policyCache->Get(policyIdFunction(key, value));
+        std::string policyId = policyIdFunction(key, value);
+        const Policy *policy = policyCache->Get(policyId);
         if (policy == nullptr) {
           // if not found, use default policy for now
           policy = policyCache->Get("p#0");

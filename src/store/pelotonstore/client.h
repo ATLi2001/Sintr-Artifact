@@ -102,7 +102,7 @@ class Client : public ::Client {
 
  private:
   void getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num);
-  void handlePolicyUpdateOnKey(std::string key);
+  void handlePolicyUpdateOnKey(const std::string &key);
   std::shared_ptr<tao::pq::connection> connection;
   std::shared_ptr<tao::pq::transaction> transaction;
 
@@ -153,9 +153,9 @@ class Client : public ::Client {
 
   // collect endorsements for current transaction
   EndorsementClient *endorseClient;
-  PolicyParseClient *policyParseClient;
+  PolicyParseClient policyParseClient;
   policy_id_function policyIdFunction;
-  PolicyCache policyCache;
+  std::unique_ptr<PolicyCache> policyCache;
 
   ClientSelector *valClientSelector;
   SintrParameters sintr_params;
