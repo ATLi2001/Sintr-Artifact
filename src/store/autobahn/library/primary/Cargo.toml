@@ -24,6 +24,7 @@ crypto = { path = "../crypto" }
 store = { path = "../store" }
 config = { path = "../config" }
 network = { path = "../network" }
+bridge_debug = { path = "../bridge_debug" }
 #sailfish = { path = "../sailfish"}
 
 [dev-dependencies]

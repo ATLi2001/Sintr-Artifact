@@ -4,6 +4,7 @@ use std::collections::{HashMap, BTreeMap};
 // Copyright(C) Facebook, Inc. and its affiliates.
 use crate::messages::{Certificate, Header, ConsensusMessage};
 use crate::primary::Height;
+// use bridge_debug::debug_via_cpp;
 use config::{Committee, WorkerId};
 use crypto::{Digest, PublicKey, SignatureService, Hash};
 use log::debug;
@@ -156,6 +157,13 @@ impl Proposer {
             // NOTE: This log entry is used to compute performance.
             info!("Created {} -> {:?}", header, digest);
         }
+        // // log for performance measurement
+        // let now = std::time::SystemTime::now()
+        //     .duration_since(std::time::UNIX_EPOCH)
+        //     .unwrap();
+        // for digest in header.payload.keys() {
+        //     debug_via_cpp(&format!("{},{}->{:?},header_begin", now.as_millis(), header, digest));
+        // }
 
         // Reset last parent
         self.last_parent = None;

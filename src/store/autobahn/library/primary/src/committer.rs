@@ -5,6 +5,7 @@ use crate::messages::{ConsensusMessage, Proposal};
 use crate::primary::{PrimaryWorkerMessage, Slot, CHANNEL_CAPACITY};
 use crate::synchronizer::Synchronizer;
 use crate::{Certificate, Header, Height};
+use bridge_debug::debug_via_cpp;
 //use crate::error::{ConsensusError, ConsensusResult};
 use bytes::Bytes;
 use config::Committee;
@@ -196,6 +197,18 @@ impl Committer {
                                         // NOTE: This log entry is used to compute performance.
                                         info!("Committed {} -> {:?}", header, digest);
                                     }
+                                    // for digest in header.payload.keys() {
+                                    //     // log for performance measurement
+                                    //     let now = std::time::SystemTime::now()
+                                    //         .duration_since(std::time::UNIX_EPOCH)
+                                    //         .unwrap();
+                                    //     debug_via_cpp(&format!(
+                                    //         "{},{}->{:?},header_end",
+                                    //         now.as_millis(),
+                                    //         header,
+                                    //         digest
+                                    //     ));
+                                    // }
                                     debug!("Finished Commit");
                                     // Output the block to the top-level application.
                                     if let Err(e) = self.tx_output.send(header.clone()).await {
