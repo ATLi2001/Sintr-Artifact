@@ -104,10 +104,13 @@ bool LocalBatchVerifier::Verify(crypto::PubKey *publicKey, const std::string &me
     return false;
   }
   //Latency_End(&hashLats[core]);
-  std::unique_lock<std::mutex> lock(cacheMutex);
-  auto itr = cache.find(rootSig);
-  if (itr == cache.end()) {
-    lock.unlock();
+  // std::unique_lock<std::mutex> lock(cacheMutex);
+  // auto itr = cache.find(rootSig);
+  concurrentCacheMap::const_accessor a;
+  bool found = concurrentCache.find(a, rootSig);
+  if (!found) {
+    // lock.unlock();
+    a.release();
     stats.Increment("verify_cache_miss");
     //Latency_Start(&cryptoLats[core]);
     //TODO: here: call AddToBatch  . This function needs to include the callback of the return
@@ -116,8 +119,13 @@ bool LocalBatchVerifier::Verify(crypto::PubKey *publicKey, const std::string &me
     //Latency_End(&cryptoLats[core]);
     if (valid) {
       Debug("(CPU:%d) Adding rootSig:[%s] and hashStr:[%s].", sched_getcpu(), BytesToHex(rootSig, 1024).c_str(), BytesToHex(hashStr, 1024).c_str());
-      std::unique_lock<std::mutex> lock(cacheMutex);
-      cache[rootSig] = hashStr;
+      // std::unique_lock<std::mutex> lock(cacheMutex);
+      // cache[rootSig] = hashStr;
+
+      concurrentCacheMap::accessor b;
+      concurrentCache.insert(b, rootSig);
+      b->second = hashStr;
+
       return true;
     } else {
       Panic("(CPU:%d) Public Key verification failed: Sig:[%s] with Msg:[%s]. rootSig:[%s] with rootHash:[%s].", sched_getcpu(), 
@@ -125,7 +133,7 @@ bool LocalBatchVerifier::Verify(crypto::PubKey *publicKey, const std::string &me
       return false;
     }
   } else {
-    if (hashStr == itr->second) {
+    if (hashStr == a->second) {
       stats.Increment("verify_cache_hit");
       return true;
     } else {
@@ -134,7 +142,7 @@ bool LocalBatchVerifier::Verify(crypto::PubKey *publicKey, const std::string &me
           BytesToHex(signature, 1024).c_str(), BytesToHex(message, 1024).c_str(), 
           BytesToHex(rootSig, 1024).c_str(),
           BytesToHex(hashStr, 1024).c_str(),
-          BytesToHex(itr->second, 100).c_str());
+          BytesToHex(a->second, 100).c_str());
       return false;
     }
   }
@@ -147,7 +155,12 @@ bool LocalBatchVerifier::partialVerify(crypto::PubKey *publicKey, const std::str
       //std::string hashStr_cpy(*hashStr);
       //std::string rootSig_cpy(*rootSig);
       //cache[rootSig_cpy] = hashStr_cpy;
-      cache[rootSig] = hashStr;
+      // cache[rootSig] = hashStr;
+
+      concurrentCacheMap::accessor a;
+      concurrentCache.insert(a, rootSig);
+      a->second = hashStr;
+
       return true;
     } else {
       Latency_End(&cryptoLats[sched_getcpu()]);
@@ -210,10 +223,13 @@ Debug("Harry you're a wizard? %s", *(bool*)validate ? "yes  if(current_fill == 0
 //TODO modify accordingly to params.
   if(*(bool*) validate){
     Latency_End(&hashLats[sched_getcpu()]);
-    auto itr = cache.find(*rootSig);
+    // auto itr = cache.find(*rootSig);
 
-    if (itr != cache.end()) {
-      if (*hashStr == itr->second) {
+    concurrentCacheMap::const_accessor a;
+    bool found = concurrentCache.find(a, *rootSig);
+
+    if (found) {
+      if (*hashStr == a->second) {
         stats.Increment("verify_cache_hit");
         bool *res = new bool(true);
         vb((void*)res);
@@ -223,7 +239,7 @@ Debug("Harry you're a wizard? %s", *(bool*)validate ? "yes  if(current_fill == 0
         return;
       } else {
         Debug("Verification via cached hash %s failed.",
-            BytesToHex(itr->second, 100).c_str());
+            BytesToHex(a->second, 100).c_str());
         bool *res = new bool(false);
         vb((void*)res);
         delete hashStr;
@@ -428,7 +444,12 @@ void LocalBatchVerifier::manageCallbacks(std::vector<const char*> &_messages, st
       if(valid[i]){
         std::string hashStr(_messages[i]);
         std::string rootSig(_signatures[i]);
-        cache[hashStr] = rootSig;
+        // cache[hashStr] = rootSig;
+
+        concurrentCacheMap::accessor a;
+        concurrentCache.insert(a, hashStr);
+        a->second = rootSig;
+
         //bool* res = new bool(true);
         _pendingBatchCallbacks[i]((void*) true);
       }
@@ -463,7 +484,12 @@ void LocalBatchVerifier::manageCallbacksS(std::vector<std::string*> &_messagesS,
       if(valid[i]){
         //std::string hashStr(*_messagesS[i]);
         std::string rootSig(*_signaturesS[i]);
-        cache[*_messagesS[i]] = rootSig;
+        // cache[*_messagesS[i]] = rootSig;
+
+        concurrentCacheMap::accessor a;
+        concurrentCache.insert(a, *_messagesS[i]);
+        a->second = rootSig;
+
         //cache[hashStr] = rootSig;
         //bool* res = new bool(true);
         _pendingBatchCallbacks[i]((void*) true);

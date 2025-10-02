@@ -37,6 +37,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "tbb/concurrent_hash_map.h"
+
 namespace sintrstore {
 
 class LocalBatchVerifier : public Verifier {
@@ -66,13 +68,16 @@ class LocalBatchVerifier : public Verifier {
 
 
  private:
-  std::mutex cacheMutex;
+  // std::mutex cacheMutex;
   Transport *transport;
   const uint64_t merkleBranchFactor;
   Stats &stats;
   std::vector<Latency_t> hashLats;
   std::vector<Latency_t> cryptoLats;
-  std::unordered_map<std::string, std::string> cache;
+  // std::unordered_map<std::string, std::string> cache;
+
+  typedef tbb::concurrent_hash_map<std::string, std::string> concurrentCacheMap;
+  concurrentCacheMap concurrentCache;
 
   bool batchTimerRunning;
   uint64_t batch_size;
