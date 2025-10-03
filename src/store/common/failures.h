@@ -46,4 +46,16 @@ struct InjectFailure {
   uint32_t frequency;
 };
 
+enum SintrFailureType {
+  IGNORE_VALIDATION_REQUEST = 0
+};
+
+struct SintrFailure {
+  SintrFailure() { }
+  SintrFailure(const SintrFailure &failure) : type(failure.type), enabled(failure.enabled) { }
+
+  SintrFailureType type;
+  bool enabled;
+};
+
 #endif /* _FAILURES_H_ */

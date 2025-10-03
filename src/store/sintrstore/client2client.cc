@@ -471,7 +471,7 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   // return;
 
   // send to all clients so no need to bother with estimated policy
-  if(params.sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::ALL) {
+  if(params.sintr_params.clientValidationHeuristic < 0) {
     for (int i = 0; i < clients_config->n; i++) {
       // do not send to self
       if (i == client_id) {
@@ -494,17 +494,15 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     // need to use DifferenceToSatisfied to account for self
     ExtractFromPolicyClientsToContact(policyClient->DifferenceToSatisfied(beginValSent), clients);
     
-    if (params.sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::EXACT) {
+    if (params.sintr_params.clientValidationHeuristic == 0) {
     }
-    else if (params.sintr_params.clientValidationHeuristic == CLIENT_VALIDATION_HEURISTIC::ONE_MORE) {
-      for (int i = 0; i < clients_config->n; i++) {
-        if (i != client_id && clients.find(i) == clients.end()) {
-          clients.insert(i);
-        }
+    else { // params.sintr_params.clientValidationHeuristic > 0
+      size_t offset = 0;
+      for (int i = 0; i < params.sintr_params.clientValidationHeuristic; i++) {
+        uint64_t target = GetNextClientToContact(offset, endorseClient->GetBlacklistedClients(), clients);
+        Debug("ClientValidationHeuristic=%d adding client %lu", params.sintr_params.clientValidationHeuristic, target);
+        clients.insert(target);
       }
-    }
-    else {
-      Panic("Invalid clientValidationHeuristic value");
     }
 
     // struct timespec ts_start;
@@ -2109,38 +2107,8 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
     }
     // i < 0 means can choose any client
     else if (i < 0) {
-      if (valClientSelector != nullptr) {
-        for (; order_index < valClientOrder.size(); order_index++) {
-          uint64_t target = valClientOrder[order_index];
-          if (blacklistedClients.find(target) != blacklistedClients.end()) {
-            continue;
-          }
-          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
-            clients.insert(target);
-            break;
-          }
-        }
-        if (order_index == valClientOrder.size()) {
-          Panic("Policy requires more endorsements than available clients");
-        }
-      }
-      // if no selector, then use offset for ring style selection
-      else {
-        for (; offset < clients_config->n; offset++) {
-          uint64_t target = (client_id + offset) % clients_config->n;
-          if (blacklistedClients.find(target) != blacklistedClients.end()) {
-            continue;
-          }
-          if (beginValSent.find(target) == beginValSent.end() && clients.find(target) == clients.end()) {
-            clients.insert(target);
-            break;
-          }
-        }
-        // if we reach the end of the loop, then we have exhausted all clients
-        if (offset == clients_config->n) {
-          Panic("Policy requires more endorsements than available clients");
-        }
-      }
+      uint64_t target = GetNextClientToContact(order_index, blacklistedClients, clients);
+      clients.insert(target);
     }
     // otherwise i is a specific client to contact
     else {
@@ -2156,6 +2124,41 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
       }
     }
   }
+}
+
+uint64_t Client2Client::GetNextClientToContact(size_t &offset, const std::set<uint64_t> &blacklistedClients,
+    const std::set<uint64_t> &alreadyContactedClients) {
+  if (valClientSelector != nullptr) {
+    for (; offset < valClientOrder.size(); offset++) {
+      uint64_t target = valClientOrder[offset];
+      if (blacklistedClients.find(target) != blacklistedClients.end()) {
+        continue;
+      }
+      if (beginValSent.find(target) == beginValSent.end() && alreadyContactedClients.find(target) == alreadyContactedClients.end()) {
+        offset++;
+        return target;
+      }
+    }
+  }
+  // if no selector, then use offset for ring style selection
+  else {
+    if (offset == 0) {
+      offset = 1;
+    }
+    for (; offset < clients_config->n; offset++) {
+      uint64_t target = (client_id + offset) % clients_config->n;
+      if (blacklistedClients.find(target) != blacklistedClients.end()) {
+        continue;
+      }
+      if (beginValSent.find(target) == beginValSent.end() && alreadyContactedClients.find(target) == alreadyContactedClients.end()) {
+        offset++;
+        return target;
+      }
+    }
+  }
+
+  Panic("No more available clients");
+  return 0;
 }
 
 void Client2Client::ValidationThreadFunction() {

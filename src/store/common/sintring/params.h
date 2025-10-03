@@ -27,14 +27,10 @@
 #ifndef SINTRING_PARAMS_H
 #define SINTRING_PARAMS_H
 
+#include "store/common/failures.h"
 #include "lib/message.h"
 #include <string>
 
-enum CLIENT_VALIDATION_HEURISTIC {
-  EXACT, // contact exactly the number of clients as estimated
-  ONE_MORE, // contact one more client than estimated
-  ALL // contact all clients
-};
 
 // Sintr protocol specific parameters
 typedef struct SintrParameters {
@@ -48,7 +44,7 @@ typedef struct SintrParameters {
   const uint32_t readIncludePolicy; // period of include policy in read messages
   const uint64_t minEnablePullPolicies;
   // heuristic from estimate to actual number of clients contacted for validation
-  const CLIENT_VALIDATION_HEURISTIC clientValidationHeuristic;
+  const int clientValidationHeuristic;
   const bool checkPolicyLeak;
   const bool clientPinCores; // pin client cores for validation
   const bool c2cSendThread; // separate thread for sending client-to-client communication
@@ -70,16 +66,17 @@ typedef struct SintrParameters {
   const bool separateTransport; // enable separate transport object for c2c communication
   const uint32_t maxClientsConnect; // max number of clients that a single client connects to
   const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
+  const SintrFailure sintrFailure; // sintr failure injection configuration
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
-    std::string policyConfigPath, uint32_t readIncludePolicy, CLIENT_VALIDATION_HEURISTIC clientValidationHeuristic,
+    std::string policyConfigPath, uint32_t readIncludePolicy, int clientValidationHeuristic,
     bool checkPolicyLeak, bool clientPinCores, uint64_t minEnablePullPolicies, bool c2cSendThread, bool c2cReceiveThread,
     bool parallelEndorsementCheck, bool useOCCForPolicies, bool hashEndorsements, bool parallelQuerySigsCheck,
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
-    bool useEndorsementCB) :
+    bool useEndorsementCB, const SintrFailure &sintrFailure) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -110,7 +107,8 @@ typedef struct SintrParameters {
     hashQueryGenId(hashQueryGenId),
     separateTransport(separateTransport),
     maxClientsConnect(maxClientsConnect),
-    useEndorsementCB(useEndorsementCB)
+    useEndorsementCB(useEndorsementCB),
+    sintrFailure(sintrFailure)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering

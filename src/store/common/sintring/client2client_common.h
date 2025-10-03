@@ -83,6 +83,8 @@ protected:
   std::set<uint64_t> ProcessClientValidationHeuristic(PolicyClient *policyClient);
   // extract client ids not currently in beginValSent from policy satisfying set
   void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
+  uint64_t GetNextClientToContact(size_t &offset, const std::set<uint64_t> &blacklistedClients,
+    const std::set<uint64_t> &alreadyContactedClients);
 
   virtual void ValidationThreadFunction() = 0;
   void ValidationThreadFunctionBase(ValidationClientCommon *valClient,
