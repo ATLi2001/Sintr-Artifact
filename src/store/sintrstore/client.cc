@@ -584,10 +584,13 @@ void Client::Write(std::string &write_statement, write_callback wcb,
           for (const auto &key : *keys_written) {
             std::string policyId = policyIdFunction(key, "");
             //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
-            const Policy *policy = policyCache->Get(policyId);
-            UW_ASSERT(policy != nullptr);
-            Debug("handle policy update for policy id %s (policy %s) in write", policyId.c_str(), policy->ToString().c_str());
-            c2client->HandlePolicyUpdate(policy);
+            if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+              perTxnPolicyIds.insert(policyId);
+              const Policy *policy = policyCache->Get(policyId);
+              UW_ASSERT(policy != nullptr);
+              Debug("handle policy update for policy id %s (policy %s) in write", policyId.c_str(), policy->ToString().c_str());
+              c2client->HandlePolicyUpdate(policy);
+            }
           }
         }
 
@@ -766,8 +769,8 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
         // still forward cached point query result but no proofs or dependencies needed
         c2client->SendForwardPointQueryResultMessage(
           encoded_key, itr->second, Timestamp(), pendingQuery->table_name,
-          proto::CommittedProof(), proto::SignedMessage(),
-          proto::Dependency(), false, false
+          nullptr, nullptr,
+          nullptr, false, false, nullptr
         );
 
         Debug("Supply point query result from cache! (Query seq: %d)", query_seq_num);
@@ -785,7 +788,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
         // still forward cached query result but no readset or proofs needed
         c2client->SendForwardQueryResultMessage(
           pendingQuery->query_gen_id, itr->second,
-          proto::QueryResultMetaData(),
+          nullptr,
           std::move(pendingQuery->group_sigs), false
         );
         pendingQuery->group_sigs = nullptr;
@@ -833,7 +836,8 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
       prcb = std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
-                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11);
+                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
+                     std::placeholders::_12);
       stats.Increment("PointQueryAttempts", 1);
     }
     else{
@@ -868,8 +872,9 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
 
 void Client::PointQueryResultCallback(PendingQuery *pendingQuery,  
                                   int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
-                                  const proto::Dependency &dep, bool hasDep, bool addReadSet,
-                                  const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg) 
+                                  std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadSet,
+                                  std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite, std::unique_ptr<EndorsementPolicyMessage> policyMsg,
+                                  std::unique_ptr<std::string> tsDigest) 
 { 
   
    if(PROFILING_LAT){
@@ -897,20 +902,20 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     Debug("READ TIME FOR POINT QUERY IS: %lu:%lu", read_time.getTimestamp(), read_time.getID());
 
     // new policy can only come from server, which must correspond to addReadSet
-    if (policyMsg.IsInitialized()) {
+    if (policyMsg != nullptr && policyMsg->IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR key %s in GET",client_id, client_seq_num, BytesToHex(key, 16).c_str());
-      policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()));
+      policyCache->Put(policyMsg->policy_id(), policyParseClient.Parse(policyMsg->policy()));
     }
   }
-  if (hasDep) {
-    *txn.add_deps() = dep;
+  if (hasDep && dep != nullptr) {
+    *txn.add_deps() = *dep;
   }
 
   // note that the pendingQuery->table_name has been moved out, so is no longer valid
   // instead we use the table_name passed in as an argument
   c2client->SendForwardPointQueryResultMessage(
-    key, result, read_time, table_name, proof,
-    signedWrite, dep, hasDep, addReadSet
+    key, result, read_time, table_name, std::move(proof),
+    std::move(signedWrite), std::move(dep), hasDep, addReadSet, std::move(tsDigest)
   );
       
   Debug("Upcall with Point Query result");
@@ -1115,7 +1120,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
   // forward to validating clients
   c2client->SendForwardQueryResultMessage(
-    pendingQuery->query_gen_id, pendingQuery->result, *queryResMetaData,
+    pendingQuery->query_gen_id, pendingQuery->result, queryResMetaData,
     std::move(pendingQuery->group_sigs), true
   );
   pendingQuery->group_sigs = nullptr;
@@ -1310,7 +1315,8 @@ void Client::RetryQuery(PendingQuery *pendingQuery){
       bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg, true, std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
-                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11));
+                     std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
+                     std::placeholders::_12));
     } 
     else{
       bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg); //--> Retry Query, shard clients already have the rcb.

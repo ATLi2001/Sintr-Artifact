@@ -237,8 +237,9 @@ class Client : public ::Client {
   void TestReadSet(PendingQuery *pendingQuery);
   void PointQueryResultCallback(PendingQuery *pendingQuery,  
                             int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
-                            const proto::Dependency &dep, bool hasDep, bool addReadSet,
-                            const proto::CommittedProof &proof, const proto::SignedMessage &signedWrite, const EndorsementPolicyMessage &policyMsg); 
+                            std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadSet,
+                            std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite, std::unique_ptr<EndorsementPolicyMessage> policyMsg,
+                            std::unique_ptr<std::string> tsDigest); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                             std::vector<proto::SignedMessage *> *query_sigs, // take ownership

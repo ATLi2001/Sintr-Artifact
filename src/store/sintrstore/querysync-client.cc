@@ -1234,7 +1234,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             valid = ValidateTransactionWrite(*proof, &committedTxnDigest, req->key, write->committed_value(), 
             params.sintr_params.hideTimestamps ? reply.committed_pq_timestamp() : write->committed_timestamp(),
             config, params.signedMessages, keyManager, verifier,
-            params.sintr_params.hideTimestamps ? TimestampDigest(reply.committed_pq_timestamp()) : "");
+            params.sintr_params.hideTimestamps ? write->hashed_committed_ts() : "");
         } 
         else { //if read type POINT 
             //std::cerr << "WriteValue: " << write->committed_value() << std::endl;
@@ -1283,7 +1283,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                     write->committed_policy().policy_id(), policyObjectStr,
                     params.sintr_params.hideTimestamps ? reply.committed_policy_timestamp() : write->committed_policy_timestamp(),
                     config, params.signedMessages, keyManager, verifier, 
-                    params.sintr_params.hideTimestamps ? TimestampDigest(reply.committed_policy_timestamp())  : "")) {
+                    params.sintr_params.hideTimestamps ? write->hashed_committed_policy_ts()  : "")) {
                     Debug("[group %i] Failed to validate committed policy for read %lu.",group, reply.req_id());
                     return false;
                 }
@@ -1402,7 +1402,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                         //FIXME: To succeed in verifyDeps verification: Need to set whole Write... ==> However, that makes no sense. Deprecate verifyDeps.
                         *req->dep->mutable_write()->mutable_prepared_value() = req->maxValue; 
                         if(params.sintr_params.hideTimestamps) {
-                            req->dep->mutable_write()->set_hashed_prepared_ts(TimestampDigest(ts));
+                            req->dep->mutable_write()->set_hashed_prepared_ts(txn.hashed_timestamp());
                         } else {
                             ts.serialize(req->dep->mutable_write()->mutable_prepared_timestamp());
                         }
@@ -1425,8 +1425,9 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         if(first_read){ //for first read
             ReadMessage *read = txn.add_read_set();
             *read->mutable_key() = req->key;
+            std::unique_ptr<std::string> tsDigest = std::make_unique<std::string>(TimestampDigest(req->maxTs));
             if(params.sintr_params.hideTimestamps) {
-                read->set_hashed_readtime(TimestampDigest(req->maxTs));
+                read->set_hashed_readtime(*tsDigest);
             }
             req->maxTs.serialize(read->mutable_readtime());
             
@@ -1435,8 +1436,8 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
             if(params.sintr_params.hideTimestamps && req->maxCommittedProof != nullptr) {
                 removeTsfromTx(req->maxCommittedProof->mutable_txn());
             }
-            req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, req->dep ? *req->dep : proto::Dependency(),req->hasDep, true,
-                req->maxCommittedProof ? *req->maxCommittedProof : proto::CommittedProof(), req->maxWrite ? *req->maxWrite : proto::SignedMessage(), req->maxPolicy ? *req->maxPolicy : EndorsementPolicyMessage());
+            req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, std::move(req->dep),req->hasDep, true,
+                std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy), std::move(tsDigest));
         }
         // else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
         //     Notice("Duplicate Point read to key %s", req->key.c_str());

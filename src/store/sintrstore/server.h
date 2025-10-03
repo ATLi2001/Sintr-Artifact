@@ -857,7 +857,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   void MessageToSign(::google::protobuf::Message* msg,
       proto::SignedMessage *signedMessage, signedCallback cb);
   void SignSendReadReply(proto::Write *write, proto::SignedMessage *signed_write, const std::function<void()> &sendCB);
-
+  Timestamp LatestPolicyTS(const std::string &policyId);
   /* BEGIN Semantic CC functions */ 
 
 //TODO: Parameterize. 

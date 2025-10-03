@@ -3263,7 +3263,8 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   }
 
   if (params.sintr_params.checkPolicyLeak) {
-    policiesChecked.clear();
+    // map that stores policyID to latest policy TS
+    std::unordered_map<std::string, Timestamp> latestPolicyTSMap;
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
       if (read.is_table_col_version()) {
@@ -3276,11 +3277,6 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
 
       std::string policyId = policyIdFunction(read.key(), "");
-      if(policiesChecked.find(policyId) != policiesChecked.end()) {
-        continue;
-      } else {
-        policiesChecked.insert(policyId);
-      }
       Debug(
         "Extracting policy %s at time %lu.%lu for read to key %s",
         policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
@@ -3288,6 +3284,13 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       GetPolicy(policyId, read.readtime(), tsPolicy, false);
+      if(latestPolicyTSMap.find(policyId) == latestPolicyTSMap.end()) {
+        latestPolicyTSMap[policyId] = LatestPolicyTS(policyId);
+      }
+      if(tsPolicy.first < latestPolicyTSMap[policyId]) {
+        // there already exists a committed policy with TS > this policy, then this value is safe.
+        continue;
+      }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
         Debug(
           "Read policy (%s) does not imply write policy (%s)",
