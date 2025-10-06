@@ -489,7 +489,7 @@ DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to v
 DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
 DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
 DEFINE_bool(sintr_use_endorsement_cb, true, "use endorsement cb instead of busy waiting");
-DEFINE_int32(sintr_client_validation, 0, "sintr number of clients to contact for validation relative to estimated policy; 0 = exact, -1 = all, >0 = that many more");
+DEFINE_int32(sintr_client_validation_heuristic, 0, "sintr number of clients to contact for validation relative to estimated policy; 0 = exact, -1 = all, >0 = that many more");
 
 DEFINE_bool(sintr_client_pin_cores, false, "sintr pin client cores for validation");
 DEFINE_bool(sintr_c2c_send_thread, false, "sintr separate thread for sending client-to-client communication");
@@ -1476,6 +1476,7 @@ int main(int argc, char **argv) {
         }
         else {
           sintrFailure.enabled = clientId % FLAGS_sintr_failure_client_period == 0;
+          Notice("Client %lu sintr failure enabled: %d", clientId, sintrFailure.enabled);
         }
       case PROTO_PEQUIN:
          switch (query_sync_quorum) {
@@ -1740,14 +1741,14 @@ int main(int argc, char **argv) {
       FLAGS_sintr_policy_function_name,
       FLAGS_sintr_policy_config_path,
       FLAGS_sintr_read_include_policy,
-      FLAGS_sintr_client_validation,
+      FLAGS_sintr_client_validation_heuristic,
       true,
       FLAGS_sintr_client_pin_cores,
       FLAGS_sintr_min_enable_pull_policies,
       FLAGS_sintr_c2c_send_thread,
       FLAGS_sintr_c2c_receive_thread,
       FLAGS_sintr_parallel_endorsement_check,
-      false,
+      true,
       FLAGS_sintr_hash_endorsements,
       FLAGS_sintr_parallel_query_sigs_check,
       FLAGS_sintr_blind_write_message,

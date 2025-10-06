@@ -261,6 +261,11 @@ Client2Client::~Client2Client() {
 void Client2Client::ReceiveMessage(const TransportAddress &remote,
       const std::string &type, const std::string &data, void *meta_data) {
 
+  // ignore validation requests from other clients if we are simulating a failure
+  // but we still want to process other clients validating for us
+  bool ignoreValidationRequest = params.sintr_params.sintrFailure.enabled
+    && params.sintr_params.sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST;
+
   if (type == sendPing.GetTypeName()) {
     Debug("ping received");
     PingMessage receivePing;
@@ -269,20 +274,36 @@ void Client2Client::ReceiveMessage(const TransportAddress &remote,
     Debug("AFTER PING HANDLED");
   }
   else if (type == beginValTxnMsg.GetTypeName()) {
+    if (ignoreValidationRequest) {
+      Debug("Ignoring BeginValidateTxnMessage from due to failure simulation");
+      return;
+    }
     ManageDispatchBeginValidateTxnMessage(remote, data);
   }
   else if (type == fwdReadResultMsg.GetTypeName()) {
+    if (ignoreValidationRequest) {
+      return;
+    }
     ManageDispatchForwardReadResultMessage(remote, data);
   }
   else if (type == fwdPointQueryResultMsg.GetTypeName()) {
+    if (ignoreValidationRequest) {
+      return;
+    }
     ManageDispatchForwardPointQueryResultMessage(remote, data);
   }
   else if (type == fwdQueryResultMsg.GetTypeName()) {
+    if (ignoreValidationRequest) {
+      return;
+    }
     ManageDispatchForwardQueryResultMessage(remote, data);
   }
   else if (type == blindWriteMsg.GetTypeName()) {
+    if (ignoreValidationRequest) {
+      return;
+    }
     ManageDispatchBlindWriteMessage(remote, data);
-  }  
+  }
   else if (type == finishValTxnMsg.GetTypeName()) {
     ManageDispatchFinishValidateTxnMessage(remote, data);
   }
@@ -2174,6 +2195,13 @@ void Client2Client::ValidationThreadFunction() {
     if (valInfo == nullptr) {
       continue;
     }
+
+    if (params.sintr_params.sintrFailure.enabled
+        && params.sintr_params.sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST) {
+      Debug("Ignoring validation request");
+      continue;
+    }
+
     // struct timespec ts_startstart;
     // clock_gettime(CLOCK_MONOTONIC, &ts_startstart);
     // uint64_t startstart = ts_startstart.tv_sec * 1000 * 1000 + ts_startstart.tv_nsec / 1000;
