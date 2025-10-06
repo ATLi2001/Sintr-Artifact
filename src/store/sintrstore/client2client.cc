@@ -491,8 +491,20 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   // }
   // return;
 
+  bool byzRequestExtraValidation = params.sintr_params.sintrFailure.enabled
+    && params.sintr_params.sintrFailure.type == SintrFailureType::REQUEST_EXTRA_VALIDATION;
+  if (byzRequestExtraValidation) {
+    Debug("Byzantine request extra validation enabled, sending to all correct clients");
+    for (int i = 0; i < clients_config->n; i++) {
+      if (i == client_id || i % params.sintr_params.sintrFailure.client_period == 0) {
+        continue;
+      }
+      beginValSent.insert(i);
+      transport->SendMessageToReplica(this, i, sentBeginValTxnMsg);
+    }
+  }
   // send to all clients so no need to bother with estimated policy
-  if(params.sintr_params.clientValidationHeuristic < 0) {
+  else if(params.sintr_params.clientValidationHeuristic < 0) {
     for (int i = 0; i < clients_config->n; i++) {
       // do not send to self
       if (i == client_id) {

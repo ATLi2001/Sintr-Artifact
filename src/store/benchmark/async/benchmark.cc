@@ -537,9 +537,11 @@ DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
 
 const std::string sintr_fail_args[] = {
   "ignore-validation-request",
+  "request-extra-validation"
 };
 const SintrFailureType sintr_fail[] {
-  SintrFailureType::IGNORE_VALIDATION_REQUEST // ignore validation request from other clients
+  SintrFailureType::IGNORE_VALIDATION_REQUEST, // ignore validation request from other clients
+  SintrFailureType::REQUEST_EXTRA_VALIDATION // request extra validation from other clients
 };
 static bool ValidateSintrFailureType(const char* flagname,
     const std::string &value) {
@@ -1471,6 +1473,7 @@ int main(int argc, char **argv) {
         }
 
         sintrFailure.type = sintr_failure_type;
+        sintrFailure.client_period = FLAGS_sintr_failure_client_period;
         if (FLAGS_sintr_failure_client_period == 0) {
           sintrFailure.enabled = false;
         }

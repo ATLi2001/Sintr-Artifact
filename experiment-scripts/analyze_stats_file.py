@@ -42,6 +42,7 @@ ANALYSIS_TYPES = [
     "overheads_lat_cum_bar",
     "overheads_lat_grouped_bar",
     "throughput_time",
+    "client_failures",
 ]
 
 
@@ -104,11 +105,13 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
     # more efficient to use list to collect data, then create dataframe
     data_rows = []
 
+    total_recorded_time = 0
     for subdir in os.listdir(original_stats_dir):
         subdir_path = os.path.join(original_stats_dir, subdir)
 
-        # Get analysis name
+        # read config file
         analysis_name = None
+        failed_client_period = 0
         for file in os.listdir(subdir_path):
             if file != "stats.json" and file.endswith(".json"):
                 with open(os.path.join(subdir_path, file), "r") as config_file:
@@ -119,6 +122,12 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
                         protocol = config["client_protocol_mode"]
                         benchmark = config["benchmark_name"]
                         analysis_name = f"{protocol}-{benchmark}"
+
+                    if "sintr_protocol_settings" in config and "sintr_failure_client_period" in config["sintr_protocol_settings"]:
+                        failed_client_period = config["sintr_protocol_settings"]["sintr_failure_client_period"]
+
+                    total_recorded_time = float(config["client_experiment_length"] - config["client_ramp_up"] - config["client_ramp_down"])
+
                     break
 
         # Process log files
@@ -126,7 +135,14 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
         if not os.path.exists(logs_dir):
             continue
 
-        for log_file in os.listdir(logs_dir):
+        i = 0
+        for log_file in sorted(os.listdir(logs_dir)):
+            if failed_client_period > 0 and i % failed_client_period == 0:
+                # skip logs from clients that were supposed to fail
+                i += 1
+                continue
+            i += 1
+
             log_path = os.path.join(logs_dir, log_file)
             # if we are tracking aborts over time, we need to ignore lines before #start
             # started = False
@@ -141,17 +157,20 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
                     if not line or "#end" in line:
                         break
                     operation, latency, timestamp, client_id = line.split(",")
-                    data_rows.append([analysis_name, operation, latency, timestamp, client_id])
+                    data_rows.append([analysis_name, operation, latency, timestamp, client_id, failed_client_period])
 
     # Create DataFrame once from all collected data
-    out_df = pd.DataFrame(data_rows, columns=["experiment_name", "operation", "latency_ns", "commit_timestamp_ns", "client_id"])
+    out_df = pd.DataFrame(
+        data_rows,
+        columns=["experiment_name", "operation", "latency_ns", "commit_timestamp_ns", "client_id", "failed_client_period"]
+    )
 
     # Convert timestamp column to numeric for proper sorting
     out_df["commit_timestamp_ns"] = pd.to_numeric(out_df["commit_timestamp_ns"], errors='coerce')
     out_df["latency_ns"] = pd.to_numeric(out_df["latency_ns"], errors='coerce')
 
     out_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
-    return out_df
+    return out_df, total_recorded_time
 
 
 def create_lat_tput_plots(df, output_dir, now_string):
@@ -473,6 +492,32 @@ def create_tput_time_plot(df, output_dir, now_string):
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 
+def create_client_failures_plot(stats_df, logs_df, total_recorded_time, output_dir, now_string):
+    fig, ax = plt.subplots(layout="constrained")
+    ax.set_xlabel("# Byzantine Clients")
+    ax.set_ylabel("Throughput per Correct Client (txn/s)")
+    ax.grid(True)
+
+    for experiment_name, group in logs_df.groupby(["experiment_name"]):
+        total_clients = stats_df.loc[stats_df["experiment_name"] == experiment_name[0], "num_clients"].values[0]
+        tputs = []
+        num_byz_clients = []
+        for failed_client_period, sub_group in group.groupby("failed_client_period"):
+            curr_num_byz_clients = total_clients // failed_client_period if failed_client_period > 0 else 0
+            num_correct_clients = total_clients - curr_num_byz_clients
+
+            num_byz_clients.append(curr_num_byz_clients)
+            tputs.append(len(sub_group) / total_recorded_time / num_correct_clients)
+
+        combined = sorted(zip(num_byz_clients, tputs))
+        num_byz_clients, tputs = zip(*combined)
+
+        ax.plot(num_byz_clients, tputs, "-o", label=experiment_name[0])
+
+    fig.legend(loc="outside lower center", ncol=2)
+    plt.savefig(os.path.join(output_dir, f"client_failures-{now_string}.png"))
+    plt.close()
+
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -553,5 +598,8 @@ if __name__ == "__main__":
         if args.logs:
             logs_df = pd.read_csv(args.logs)
         else:
-            logs_df = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
+            logs_df, _ = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
         create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[6]:
+        logs_df, total_recorded_time = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
+        create_client_failures_plot(df, logs_df, total_recorded_time, args.output_plot_dir, now_string)

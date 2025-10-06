@@ -27,6 +27,9 @@
 #ifndef _FAILURES_H_
 #define _FAILURES_H_
 
+#include <cstdint>
+
+
 enum InjectFailureType {
   CLIENT_EQUIVOCATE = 0,
   CLIENT_CRASH = 1,
@@ -47,15 +50,18 @@ struct InjectFailure {
 };
 
 enum SintrFailureType {
-  IGNORE_VALIDATION_REQUEST = 0
+  IGNORE_VALIDATION_REQUEST = 0,
+  REQUEST_EXTRA_VALIDATION = 1
 };
 
 struct SintrFailure {
   SintrFailure() { }
-  SintrFailure(const SintrFailure &failure) : type(failure.type), enabled(failure.enabled) { }
+  SintrFailure(const SintrFailure &failure) : type(failure.type), enabled(failure.enabled),
+    client_period(failure.client_period) { }
 
   SintrFailureType type;
   bool enabled;
+  uint32_t client_period; // every nth client is byzantine
 };
 
 #endif /* _FAILURES_H_ */
