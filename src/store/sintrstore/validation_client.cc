@@ -931,14 +931,27 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
 void ValidationClient::NotifyForwardQueryResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num) {
   std::string curr_txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
   allValTxnStatesMap::accessor a;
-  if (!allValTxnStates.find(a, curr_txn_id)) {
-    Panic("cannot find transaction %s in allValTxnStates", curr_txn_id.c_str());
+  const bool isNewKey = allValTxnStates.insert(a, curr_txn_id);
+  if (isNewKey) {
+    // this could happen if validation of signature somehow finishes before txn is added
+    Debug("First new transaction %s in allValTxnStates", curr_txn_id.c_str());
+    proto::Transaction *txn = new proto::Transaction();
+    txn->set_client_id(txn_client_id);
+    txn->set_client_seq_num(txn_client_seq_num);
+    a->second = new AllValidationTxnState(txn_client_id, txn_client_seq_num, txn);
   }
   ++a->second->numValidForwardQuery;
   Debug(
     "numValidForwardQuery for client id %lu seq num %lu is now %lu",
     txn_client_id, txn_client_seq_num, a->second->numValidForwardQuery
   );
+  if(a->second->aborted && a->second->numValidForwardQuery == a->second->numProcessedForwardQuery) {
+    // clean up aborted txn
+    delete a->second->txn;
+    delete a->second;
+    allValTxnStates.erase(a);
+    return;
+  }
   if (a->second->commitWaitOnValidForwardQuery && a->second->numValidForwardQuery == a->second->numProcessedForwardQuery) {
     Debug("Unblocking commit for client id %lu seq num %lu", txn_client_id, txn_client_seq_num);
     a->second->commitWaitOnValidForwardQuery = false;
