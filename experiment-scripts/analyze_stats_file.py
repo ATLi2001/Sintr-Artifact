@@ -46,12 +46,13 @@ ANALYSIS_TYPES = [
 ]
 
 
-# reads all stats.json files in the given directory and returns a dictionary of dictionaries
-# each dictionary corresponds to a stats.json file
-def read_original_stats(original_stats_dir):
-    out = {}
+# reads all stats.json files in the given directory and saves a csv file
+def stats_to_csv(original_stats_dir, output_dir, now_string):
+    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
 
     for subdir in os.listdir(original_stats_dir):
+        analysis_name = None
+        num_clients = 0
         for file in os.listdir(os.path.join(original_stats_dir, subdir)):
             # read in config file
             if file != "stats.json" and file.endswith(".json"):
@@ -65,31 +66,21 @@ def read_original_stats(original_stats_dir):
                         benchmark = config["benchmark_name"]
                         analysis_name = f"{protocol}-{benchmark}"
                     num_clients = config["client_total"]
-                    # create a unique name for the stats file
-                    unique_name = (analysis_name, num_clients, subdir)
 
-                    with open(os.path.join(original_stats_dir, subdir, "stats.json"), "r") as stats_file:
-                        stats = json.load(stats_file)
-                        out[unique_name] = stats
-    return out
+        with open(os.path.join(original_stats_dir, subdir, "stats.json"), "r") as stats_file:
+            stats_json = json.load(stats_file)
 
-# converts a dictionary of stats dictionaries to a CSV file.
-def stats_to_csv(stats_dicts, output_dir, now_string):
-    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
+            if "run_stats" not in stats_json or "combined" not in stats_json["run_stats"]:
+                print(f"Skipping {subdir} as it does not contain run_stats or combined data.")
+                continue
 
-    for name, stat_json in stats_dicts.items():
-        if "run_stats" not in stat_json or "combined" not in stat_json["run_stats"]:
-            print(f"Skipping {name} as it does not contain run_stats or combined data.")
-            continue
-        experiment_name, num_clients, timestamp = name
-        num_clients = int(num_clients)
-        out_df.loc[len(out_df)] = [
-            experiment_name,
-            num_clients,
-            timestamp,
-            stat_json["run_stats"]["combined"]["tput"]["p50"],
-            stat_json["run_stats"]["combined"]["mean"]["p50"]
-        ]
+            out_df.loc[len(out_df)] = [
+                analysis_name,
+                num_clients,
+                subdir,
+                stats_json["run_stats"]["combined"]["tput"]["p50"],
+                stats_json["run_stats"]["combined"]["mean"]["p50"]
+            ]
 
     # sort by experiment name and number of clients
     out_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
@@ -577,14 +568,11 @@ if __name__ == "__main__":
     if not os.path.exists(args.output_plot_dir):
         os.makedirs(args.output_plot_dir)
 
+    df = pd.DataFrame()
     if args.csv:
         df = pd.read_csv(args.csv)
     else:
-        stats_dicts = read_original_stats(args.original_stats_dir)
-        if len(stats_dicts) == 0:
-            print(f"No stats.json files found in {args.original_stats_dir}.")
-            exit(1)
-        df = stats_to_csv(stats_dicts, args.output_csv_dir, now_string)
+        df = stats_to_csv(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
         create_lat_tput_plots(df, args.output_plot_dir, now_string)
