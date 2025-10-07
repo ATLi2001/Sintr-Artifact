@@ -174,7 +174,7 @@
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false,
     "sintr_failure_type": "ignore-validation-request",
-    "sintr_failure_client_period": 10
+    "sintr_byz_client_total": 2
   },
   "experiment_name": "sintr",
   "codebase_name": "indicus",

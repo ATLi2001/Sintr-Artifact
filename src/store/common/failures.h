@@ -28,6 +28,7 @@
 #define _FAILURES_H_
 
 #include <cstdint>
+#include <set>
 
 
 enum InjectFailureType {
@@ -56,12 +57,27 @@ enum SintrFailureType {
 
 struct SintrFailure {
   SintrFailure() { }
+  SintrFailure(SintrFailureType type, uint32_t n, uint32_t f, uint64_t client_id) : type(type),
+      enabled(false), client_id(client_id) {
+    if (f == 0) return;
+
+    // evenly space out byzantine clients
+    for (uint32_t i = 0; i < f; i++) {
+      int idx = (i * n) / f;
+      byz_client_ids.insert(idx);
+    }
+
+    if (byz_client_ids.find(client_id) != byz_client_ids.end()) {
+      enabled = true;
+    }
+  }
   SintrFailure(const SintrFailure &failure) : type(failure.type), enabled(failure.enabled),
-    client_period(failure.client_period) { }
+    client_id(failure.client_id), byz_client_ids(failure.byz_client_ids) { }
 
   SintrFailureType type;
   bool enabled;
-  uint32_t client_period; // every nth client is byzantine
+  uint64_t client_id; // id of this client
+  std::set<int> byz_client_ids; // ids of byzantine clients
 };
 
 #endif /* _FAILURES_H_ */

@@ -172,9 +172,7 @@
     "sintr_server_skip_endorsement_check": false,
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
-    "sintr_use_endorsement_cb": false,
-    "sintr_failure_type": "request-extra-validation",
-    "sintr_byz_client_total": 1
+    "sintr_use_endorsement_cb": false
   },
   "experiment_name": "sintr",
   "codebase_name": "indicus",

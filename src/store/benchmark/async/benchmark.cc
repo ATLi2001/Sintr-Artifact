@@ -556,7 +556,7 @@ static bool ValidateSintrFailureType(const char* flagname,
 }
 DEFINE_string(sintr_failure_type, sintr_fail_args[0], "sintr specific type of failure");
 DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
-DEFINE_uint32(sintr_failure_client_period, 0, "sintr proportion of clients that will inject a failure; 0 = none, otherwise every nth client");
+DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
 
 
 ///////////////////////////////////////////////////////////
@@ -1444,7 +1444,12 @@ int main(int argc, char **argv) {
     uint64_t pessimistic_quorum_bonus = FLAGS_indicus_optimistic_read_quorum? 0 : config->f; //by default only sends read to the same amount of replicas that we need replies from; if there are faults, we may need to send to more.
     uint64_t readDepSize = 0; //number of replica replies needed to form dependency  
     InjectFailure failure; //Type of Failure to be injected
-    SintrFailure sintrFailure; // type of sintr failure to be injected
+    SintrFailure sintrFailure(
+      sintr_failure_type,
+      FLAGS_num_client_hosts,
+      FLAGS_sintr_byz_client_total,
+      clientId
+    ); // type of sintr failure to be injected
 
     uint64_t syncQuorumSize = 0; //number of replies necessary to form a sync quorum
     uint64_t queryMessages = 0; //number of query messages sent to replicas to request sync replies
@@ -1471,16 +1476,8 @@ int main(int argc, char **argv) {
           default:
             NOT_REACHABLE();
         }
+        Notice("Client %lu sintr failure enabled: %d", clientId, sintrFailure.enabled);
 
-        sintrFailure.type = sintr_failure_type;
-        sintrFailure.client_period = FLAGS_sintr_failure_client_period;
-        if (FLAGS_sintr_failure_client_period == 0) {
-          sintrFailure.enabled = false;
-        }
-        else {
-          sintrFailure.enabled = clientId % FLAGS_sintr_failure_client_period == 0;
-          Notice("Client %lu sintr failure enabled: %d", clientId, sintrFailure.enabled);
-        }
       case PROTO_PEQUIN:
          switch (query_sync_quorum) {
           case QUERY_SYNC_QUROUM_ONE:

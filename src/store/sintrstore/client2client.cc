@@ -52,7 +52,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       PingInitiator(this, transport, clients_config->n),
       client_id(client_id), transport(transport), config(config), clients_config(clients_config), 
       nshards(nshards), ngroups(ngroups),
-      group(group), part(part), pingClients(pingClients), params(params),
+      group(group), part(part), pingClients(pingClients), params(params), sintrFailure(params.sintr_params.sintrFailure),
       keyManager(keyManager), verifier(verifier), endorseClient(endorseClient), sql_interpreter(sql_interpreter),
       keys(keys), valClientSelector(valClientSelector), rand(rand) {
   
@@ -263,8 +263,8 @@ void Client2Client::ReceiveMessage(const TransportAddress &remote,
 
   // ignore validation requests from other clients if we are simulating a failure
   // but we still want to process other clients validating for us
-  bool ignoreValidationRequest = params.sintr_params.sintrFailure.enabled
-    && params.sintr_params.sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST;
+  bool ignoreValidationRequest = sintrFailure.enabled
+    && sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST;
 
   if (type == sendPing.GetTypeName()) {
     Debug("ping received");
@@ -491,12 +491,12 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   // }
   // return;
 
-  bool byzRequestExtraValidation = params.sintr_params.sintrFailure.enabled
-    && params.sintr_params.sintrFailure.type == SintrFailureType::REQUEST_EXTRA_VALIDATION;
+  bool byzRequestExtraValidation = sintrFailure.enabled
+    && sintrFailure.type == SintrFailureType::REQUEST_EXTRA_VALIDATION;
   if (byzRequestExtraValidation) {
     Debug("Byzantine request extra validation enabled, sending to all correct clients");
     for (int i = 0; i < clients_config->n; i++) {
-      if (i == client_id || i % params.sintr_params.sintrFailure.client_period == 0) {
+      if (i == client_id || sintrFailure.byz_client_ids.find(i) != sintrFailure.byz_client_ids.end()) {
         continue;
       }
       beginValSent.insert(i);
@@ -2208,8 +2208,7 @@ void Client2Client::ValidationThreadFunction() {
       continue;
     }
 
-    if (params.sintr_params.sintrFailure.enabled
-        && params.sintr_params.sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST) {
+    if (sintrFailure.enabled && sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST) {
       Debug("Ignoring validation request");
       continue;
     }

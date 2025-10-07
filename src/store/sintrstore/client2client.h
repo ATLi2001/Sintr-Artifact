@@ -346,6 +346,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   const int group; // which group this client belongs to
   const bool pingClients;
   const Parameters params;
+  const SintrFailure sintrFailure;
   KeyManager *keyManager;
   Verifier *verifier;
   Verifier *clients_verifier;
