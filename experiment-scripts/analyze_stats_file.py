@@ -163,6 +163,28 @@ def logs_to_csv(original_stats_dir, output_dir, now_string):
     out_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
     return out_df, total_recorded_time
 
+def client_failures_csv(stats_df, logs_df, total_recorded_time, output_dir, now_string):
+    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "num_byz_clients", "tput_per_correct_client"])
+
+    for experiment_name, group in logs_df.groupby(["experiment_name"]):
+        total_clients = stats_df.loc[stats_df["experiment_name"] == experiment_name[0], "num_clients"].values[0]
+        for failed_client_period, sub_group in group.groupby("failed_client_period"):
+            curr_num_byz_clients = np.ceil(total_clients / failed_client_period) if failed_client_period > 0 else 0
+            num_correct_clients = total_clients - curr_num_byz_clients
+            tput_per_correct_client = len(sub_group) / total_recorded_time / num_correct_clients
+
+            out_df.loc[len(out_df)] = [
+                experiment_name[0],
+                total_clients,
+                curr_num_byz_clients,
+                tput_per_correct_client
+            ]
+
+    # sort by experiment name and number of byzantine clients
+    out_df.sort_values(by=["experiment_name", "num_byz_clients"], inplace=True)
+    out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.csv"), index=False)
+    return out_df
+
 
 def create_lat_tput_plots(df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
@@ -483,30 +505,20 @@ def create_tput_time_plot(df, output_dir, now_string):
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 
-def create_client_failures_plot(stats_df, logs_df, total_recorded_time, output_dir, now_string):
+def create_client_failures_plot(client_failures_df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
     ax.set_xlabel("# Byzantine Clients")
     ax.set_ylabel("Throughput per Correct Client (txn/s)")
     ax.grid(True)
 
-    for experiment_name, group in logs_df.groupby(["experiment_name"]):
-        total_clients = stats_df.loc[stats_df["experiment_name"] == experiment_name[0], "num_clients"].values[0]
-        tputs = []
-        num_byz_clients = []
-        for failed_client_period, sub_group in group.groupby("failed_client_period"):
-            curr_num_byz_clients = total_clients // failed_client_period if failed_client_period > 0 else 0
-            num_correct_clients = total_clients - curr_num_byz_clients
-
-            num_byz_clients.append(curr_num_byz_clients)
-            tputs.append(len(sub_group) / total_recorded_time / num_correct_clients)
-
-        combined = sorted(zip(num_byz_clients, tputs))
-        num_byz_clients, tputs = zip(*combined)
-
-        ax.plot(num_byz_clients, tputs, "-o", label=experiment_name[0])
+    for experiment_name, group in client_failures_df.groupby(["experiment_name"]):
+        client_groups = group.groupby("num_byz_clients")
+        num_byz_clients = client_groups["num_byz_clients"].mean()
+        tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
+        ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name[0])
 
     fig.legend(loc="outside lower center", ncol=2)
-    plt.savefig(os.path.join(output_dir, f"client_failures-{now_string}.png"))
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
     plt.close()
 
 
@@ -590,4 +602,5 @@ if __name__ == "__main__":
         create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
         logs_df, total_recorded_time = logs_to_csv(ORIGINAL_STATS_DIR, args.output_csv_dir, now_string)
-        create_client_failures_plot(df, logs_df, total_recorded_time, args.output_plot_dir, now_string)
+        client_failures_df = client_failures_csv(df, logs_df, total_recorded_time, args.output_csv_dir, now_string)
+        create_client_failures_plot(client_failures_df, args.output_plot_dir, now_string)
