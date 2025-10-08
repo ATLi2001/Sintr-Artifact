@@ -53,6 +53,7 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
 
     # for logs, more efficient to use list to collect data, then create dataframe
     data_rows = []
+    byz_data_rows = []
 
     total_recorded_time = 0
     for subdir in os.listdir(original_stats_dir):
@@ -76,10 +77,11 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
         logs_dir = os.path.join(subdir_path, "logs")
         if not os.path.exists(logs_dir):
             continue
-        log_data_rows = parse_logs_dir(logs_dir, analysis_name, num_clients, num_byz_clients)
+        log_data_rows, byz_log_data_rows = parse_logs_dir(logs_dir, analysis_name, num_clients, num_byz_clients, subdir)
 
         data_rows.extend(log_data_rows)
-    
+        byz_data_rows.extend(byz_log_data_rows)
+
     # sort by experiment name and number of clients
     overall_stats_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
     if save_csv:
@@ -88,7 +90,10 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
     # Create DataFrame once from all collected data
     logs_df = pd.DataFrame(
         data_rows,
-        columns=["experiment_name", "operation", "latency_ns", "commit_timestamp_ns", "client_id", "num_clients", "num_byz_clients"]
+        columns=[
+            "experiment_name", "operation", "latency_ns", "commit_timestamp_ns",
+            "client_id", "num_clients", "num_byz_clients", "exp_timestamp"
+        ]
     )
     # Convert timestamp column to numeric for proper sorting
     logs_df["commit_timestamp_ns"] = pd.to_numeric(logs_df["commit_timestamp_ns"], errors="coerce")
@@ -97,7 +102,19 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
     if len(data_rows) > 0 and save_logs_csv:
         logs_df.to_csv(os.path.join(output_dir, f"logs-{now_string}.csv"), index=False)
 
-    return overall_stats_df, logs_df, total_recorded_time
+    byz_logs_df = pd.DataFrame(
+        byz_data_rows,
+        columns=[
+            "experiment_name", "operation", "latency_ns", "commit_timestamp_ns",
+            "client_id", "num_clients", "num_byz_clients", "exp_timestamp"
+        ]
+    )
+    byz_logs_df["commit_timestamp_ns"] = pd.to_numeric(byz_logs_df["commit_timestamp_ns"], errors="coerce")
+    byz_logs_df["latency_ns"] = pd.to_numeric(byz_logs_df["latency_ns"], errors="coerce")
+    if len(byz_data_rows) > 0 and save_logs_csv:
+        byz_logs_df.to_csv(os.path.join(output_dir, f"logs-{now_string}-byz.csv"), index=False)
+
+    return overall_stats_df, logs_df, byz_logs_df, total_recorded_time
 
 # extract information from config json
 def parse_config_file(config_path):
@@ -136,8 +153,10 @@ def parse_stats_json(stats_json_path):
 
 # read all the logs in a single logs directory
 # log files are formatted as operation,latency,timestamp,client_id
-def parse_logs_dir(logs_dir_path, analysis_name, client_total, num_byz_clients):
+# subdir to distinguish between different experiment runs
+def parse_logs_dir(logs_dir_path, analysis_name, client_total, num_byz_clients, subdir):
     data_rows = []
+    byz_data_rows = []
 
     # compute which clients should have been byzantine
     byz_client_ids = set()
@@ -167,29 +186,37 @@ def parse_logs_dir(logs_dir_path, analysis_name, client_total, num_byz_clients):
                 # for client failure experiments, we only run one thread per process 
                 # so byzantine clients are determined by the process client id
                 if (int(client_id) / 16) in byz_client_ids:
-                    continue
-                data_rows.append([analysis_name, operation, latency, timestamp, client_id, client_total, num_byz_clients])
+                    byz_data_rows.append([analysis_name, operation, latency, timestamp, client_id, client_total, num_byz_clients, subdir])
+                else:
+                    data_rows.append([analysis_name, operation, latency, timestamp, client_id, client_total, num_byz_clients, subdir])
 
-    return data_rows
+    return data_rows, byz_data_rows
 
-def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string):
-    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "num_byz_clients", "tput_per_correct_client"])
+def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string, tput_per_correct=True):
+    tput_col_name = "tput_per_correct_client" if tput_per_correct else "tput_per_byz_client"
+    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "num_byz_clients", tput_col_name, "exp_timestamp"])
 
     for experiment_name, group in logs_df.groupby("experiment_name"):
         total_clients = group["num_clients"].values[0]
         for curr_num_byz_clients, sub_group in group.groupby("num_byz_clients"):
             num_correct_clients = total_clients - curr_num_byz_clients
-            tput_per_correct_client = len(sub_group) / total_recorded_time / num_correct_clients
+            client_div = num_correct_clients if tput_per_correct else curr_num_byz_clients
+            if client_div == 0:
+                continue
 
-            out_df.loc[len(out_df)] = [
-                experiment_name,
-                total_clients,
-                curr_num_byz_clients,
-                tput_per_correct_client
-            ]
+            for exp_timestamp, exp_group in sub_group.groupby("exp_timestamp"):
+                tput = len(exp_group) / total_recorded_time / client_div
+
+                out_df.loc[len(out_df)] = [
+                    experiment_name,
+                    total_clients,
+                    curr_num_byz_clients,
+                    tput,
+                    exp_timestamp
+                ]
 
     # sort by experiment name and number of byzantine clients
-    out_df.sort_values(by=["experiment_name", "num_byz_clients"], inplace=True)
+    out_df.sort_values(by=["experiment_name", "num_byz_clients", "exp_timestamp"], inplace=True)
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.csv"), index=False)
     return out_df
 
@@ -513,10 +540,13 @@ def create_tput_time_plot(df, output_dir, now_string):
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 
-def create_client_failures_plot(client_failures_df, output_dir, now_string):
+def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
     fig, ax = plt.subplots(layout="constrained")
     ax.set_xlabel("# Byzantine Clients")
-    ax.set_ylabel("Throughput per Correct Client (txn/s)")
+    if combined:
+        ax.set_ylabel("Throughput per Client (txn/s)")
+    else:
+        ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
     ax.grid(True)
 
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
@@ -524,8 +554,17 @@ def create_client_failures_plot(client_failures_df, output_dir, now_string):
         num_byz_clients = client_groups["num_byz_clients"].mean()
         tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
         ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
+    
+    if combined:
+        for experiment_name, group in byz_client_df.groupby("experiment_name"):
+            client_groups = group.groupby("num_byz_clients")
+            num_byz_clients = client_groups["num_byz_clients"].mean()
+            tput_per_byz_client = client_groups["tput_per_byz_client"].mean()
+            ax.plot(num_byz_clients, tput_per_byz_client, "-o", label=experiment_name + " (Byz)")
 
     fig.legend(loc="outside lower center", ncol=2)
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] + 10)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
     plt.close()
 
@@ -595,7 +634,7 @@ if __name__ == "__main__":
     if args.logs:
         logs_df = pd.read_csv(args.logs)
     if not args.csv and not args.logs:
-        df, logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
+        df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
         create_lat_tput_plots(df, args.output_plot_dir, now_string)
@@ -609,4 +648,5 @@ if __name__ == "__main__":
         create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
         client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
-        create_client_failures_plot(client_failures_df, args.output_plot_dir, now_string)
+        byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
+        create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)

@@ -44,7 +44,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_validation_heuristic": 1,
+      "sintr_client_validation_heuristic": 2,
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 2
     },
@@ -63,7 +63,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_client_validation_heuristic": 2,
+      "sintr_client_validation_heuristic": 3,
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 3
     },
