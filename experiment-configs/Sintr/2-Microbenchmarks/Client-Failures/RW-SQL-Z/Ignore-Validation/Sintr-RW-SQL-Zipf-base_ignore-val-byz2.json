@@ -39,8 +39,8 @@
   "_RW_SQL_ARGS_": 0,
   "_note: parititoner is unused currently": 0,
   "partitioner": "rw_sql",
-  "client_key_selector": "uniform",
-  "client_zipf_coefficient": 0.75,
+  "client_key_selector": "zipf",
+  "client_zipf_coefficient": 0.9,
   "_note: for rw_sql client_num_keys is just placeholder, it is not used!": 0,
   "client_num_keys": 10000000,
   "rw_num_ops_txn": 1,
@@ -83,8 +83,8 @@
       "verify_deps": false,
       "merkle_branch_factor": 2,
       "signature_type": 4,
-      "sig_batch": 2,
-      "sig_batch_timeout": 2,
+      "sig_batch": 1,
+      "sig_batch_timeout": 0,
       "key_path": "/usr/local/etc/indicus-keys/donna",
       "shared_mem_batch": false,
       "shared_mem_verify": false,
@@ -134,8 +134,8 @@
       "query_compress_optimistic_txid": false,
       "use_semantic_cc": true,
       "use_active_read_set": true,
-      "monotonicity_grace": 1,
-      "non_monotonicity_grace": 4,
+      "monotonicity_grace": 2,
+      "non_monotonicity_grace": 5,
       "sign_client_queries": false,
       "sign_replica_to_replica_sync": false,
       "parallel_queries": true
@@ -150,7 +150,7 @@
     "sintr_debug_endorse_check": false,
     "sintr_client_check_evidence": true,
     "sintr_policy_function_name": "basic_id",
-    "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+    "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
     "sintr_read_include_policy": 0,
     "sintr_client_validation_heuristic": 1,
     "sintr_check_policy_leak": true,
@@ -174,7 +174,7 @@
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false,
     "sintr_failure_type": "ignore-validation-request",
-    "sintr_byz_client_total": 1
+    "sintr_byz_client_total": 2
   },
   "experiment_name": "sintr",
   "codebase_name": "indicus",
@@ -182,7 +182,7 @@
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
   "client_total": [
     [
-      20
+      12
     ]
   ],
   "client_processes_per_client_node": [
@@ -195,7 +195,7 @@
       1
     ]
   ],
-  "client_nodes_per_server": 2,
+  "client_nodes_per_server": 1,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
   "pin_server_processes": [
     0,

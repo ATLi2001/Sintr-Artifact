@@ -3,178 +3,106 @@
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   },
   "request-extra-byz1": {
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 1
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   },
   "request-extra-byz2": {
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 2
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   },
   "request-extra-byz3": {
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 3
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   },
   "request-extra-byz4": {
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 4
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   },
   "request-extra-byz5": {
     "analysis_name": "request-extra",
     "replication_protocol_settings": [
       {
-        "sig_batch": 2
+        "sig_batch": 1
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 5
     },
-    "client_total": [[20]],
+    "client_total": [[12]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
-  },
-  "request-extra-byz6": {
-    "analysis_name": "request-extra",
-    "replication_protocol_settings": [
-      {
-        "sig_batch": 2
-      }
-    ],
-    "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
-      "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "request-extra-validation",
-      "sintr_byz_client_total": 6
-    },
-    "client_total": [[20]],
-    "client_processes_per_client_node": [[2]],
-    "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
-  },
-  "request-extra-byz7": {
-    "analysis_name": "request-extra",
-    "replication_protocol_settings": [
-      {
-        "sig_batch": 2
-      }
-    ],
-    "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
-      "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "request-extra-validation",
-      "sintr_byz_client_total": 7
-    },
-    "client_total": [[20]],
-    "client_processes_per_client_node": [[2]],
-    "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
-  },
-  "request-extra-byz8": {
-    "analysis_name": "request-extra",
-    "replication_protocol_settings": [
-      {
-        "sig_batch": 2
-      }
-    ],
-    "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
-      "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "request-extra-validation",
-      "sintr_byz_client_total": 8
-    },
-    "client_total": [[20]],
-    "client_processes_per_client_node": [[2]],
-    "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
-  },
-  "request-extra-byz9": {
-    "analysis_name": "request-extra",
-    "replication_protocol_settings": [
-      {
-        "sig_batch": 2
-      }
-    ],
-    "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight10.config",
-      "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "request-extra-validation",
-      "sintr_byz_client_total": 9
-    },
-    "client_total": [[20]],
-    "client_processes_per_client_node": [[2]],
-    "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
+    "client_nodes_per_server": 1
   }
 }
