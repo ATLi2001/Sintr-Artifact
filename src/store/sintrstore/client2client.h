@@ -64,6 +64,7 @@
 
 namespace sintrstore {
 
+// TODO: refactor common code with Client2ClientCommon
 class Client2Client : public TransportReceiver, public PingInitiator, public PingTransport {
  public:
   Client2Client(transport::Configuration *config, transport::Configuration *clients_config, Transport *transport,
@@ -317,6 +318,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   // extract client ids not currently in beginValSent from policy satisfying set
   void ExtractFromPolicyClientsToContact(const std::vector<int> &policySatSet, std::set<uint64_t> &clients);
+  uint64_t GetNextClientToContact(size_t &offset, const std::set<uint64_t> &blacklistedClients,
+    const std::set<uint64_t> &alreadyContactedClients);
 
   void ValidationThreadFunction();
   void Client2ClientExecutorThreadFunction(tbb::concurrent_bounded_queue<Client2ClientExecutor *> &c2cQueue);
@@ -343,6 +346,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   const int group; // which group this client belongs to
   const bool pingClients;
   const Parameters params;
+  const SintrFailure sintrFailure;
   KeyManager *keyManager;
   Verifier *verifier;
   Verifier *clients_verifier;

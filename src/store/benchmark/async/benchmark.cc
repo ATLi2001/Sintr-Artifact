@@ -489,29 +489,7 @@ DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to v
 DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
 DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
 DEFINE_bool(sintr_use_endorsement_cb, true, "use endorsement cb instead of busy waiting");
-// given an estimated txn policy, how many other clients to contact?
-const std::string sintr_client_validation_args[] = {
-	"client-validation-exact",
-  "client-validation-one-more",
-  "client-validation-all"
-};
-const CLIENT_VALIDATION_HEURISTIC sintr_client_validations[] {
-  CLIENT_VALIDATION_HEURISTIC::EXACT,
-  CLIENT_VALIDATION_HEURISTIC::ONE_MORE,
-  CLIENT_VALIDATION_HEURISTIC::ALL
-};
-static bool ValidateSintrClientValidation(const char* flagname,
-    const std::string &value) {
-  int n = sizeof(sintr_client_validation_args);
-  for (int i = 0; i < n; ++i) {
-    if (value == sintr_client_validation_args[i]) return true;
-  }
-  std::cerr << "Invalid value for --" << flagname << ": " << value << std::endl;
-  return false;
-}
-// by default, contact exactly the estimated number
-DEFINE_string(sintr_client_validation, sintr_client_validation_args[0], "sintr number of clients to contact for validation");
-DEFINE_validator(sintr_client_validation, &ValidateSintrClientValidation);
+DEFINE_int32(sintr_client_validation_heuristic, 0, "sintr number of clients to contact for validation relative to estimated policy; 0 = exact, -1 = all, >0 = that many more");
 
 DEFINE_bool(sintr_client_pin_cores, false, "sintr pin client cores for validation");
 DEFINE_bool(sintr_c2c_send_thread, false, "sintr separate thread for sending client-to-client communication");
@@ -556,6 +534,30 @@ DEFINE_bool(sintr_optimistic_receive_endorsement, true, "sintr receive endorseme
 DEFINE_bool(sintr_client_ignore_policy_update, false, "sintr client ignores policy updates during a transaction");
 DEFINE_bool(sintr_client_estimate_policy, true, "sintr client estimates policy at start of transaction");
 DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
+
+const std::string sintr_fail_args[] = {
+  "ignore-validation-request",
+  "request-extra-validation"
+};
+const SintrFailureType sintr_fail[] {
+  SintrFailureType::IGNORE_VALIDATION_REQUEST, // ignore validation request from other clients
+  SintrFailureType::REQUEST_EXTRA_VALIDATION // request extra validation from other clients
+};
+static bool ValidateSintrFailureType(const char* flagname,
+    const std::string &value) {
+  int n = sizeof(sintr_fail_args);
+  for (int i = 0; i < n; ++i) {
+    if (value == sintr_fail_args[i]) {
+      return true;
+    }
+  }
+  std::cerr << "Invalid value for --" << flagname << ": " << value << std::endl;
+  return false;
+}
+DEFINE_string(sintr_failure_type, sintr_fail_args[0], "sintr specific type of failure");
+DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
+DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
+
 
 ///////////////////////////////////////////////////////////
 
@@ -1120,16 +1122,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // parse sintr client validation setting
-  CLIENT_VALIDATION_HEURISTIC sintr_client_validation = CLIENT_VALIDATION_HEURISTIC::EXACT;
-  int numSintrClientValidations = sizeof(sintr_client_validation_args);
-  for (int i = 0; i < numSintrClientValidations; ++i) {
-    if (FLAGS_sintr_client_validation == sintr_client_validation_args[i]) {
-      sintr_client_validation = sintr_client_validations[i];
-      break;
-    }
-  }
-
   // parse sintr validation client selector
   val_client_selector_t  sintr_val_client_selector_type = VAL_CLIENT_SELECTOR_UNKNOWN;
   int numSintrValClientSelectors = sizeof(sintr_val_client_selector_args);
@@ -1144,6 +1136,15 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // parse sintr failure type
+  SintrFailureType sintr_failure_type = SintrFailureType::IGNORE_VALIDATION_REQUEST;
+  int numSintrFailureTypes = sizeof(sintr_fail_args);
+  for (int i = 0; i < numSintrFailureTypes; ++i) {
+    if (FLAGS_sintr_failure_type == sintr_fail_args[i]) {
+      sintr_failure_type = sintr_fail[i];
+      break;
+    }
+  }
 
 //////////////////////////
 
@@ -1443,6 +1444,12 @@ int main(int argc, char **argv) {
     uint64_t pessimistic_quorum_bonus = FLAGS_indicus_optimistic_read_quorum? 0 : config->f; //by default only sends read to the same amount of replicas that we need replies from; if there are faults, we may need to send to more.
     uint64_t readDepSize = 0; //number of replica replies needed to form dependency  
     InjectFailure failure; //Type of Failure to be injected
+    SintrFailure sintrFailure(
+      sintr_failure_type,
+      FLAGS_num_client_hosts,
+      FLAGS_sintr_byz_client_total,
+      clientId
+    ); // type of sintr failure to be injected
 
     uint64_t syncQuorumSize = 0; //number of replies necessary to form a sync quorum
     uint64_t queryMessages = 0; //number of query messages sent to replicas to request sync replies
@@ -1469,6 +1476,8 @@ int main(int argc, char **argv) {
           default:
             NOT_REACHABLE();
         }
+        Notice("Client %lu sintr failure enabled: %d", clientId, sintrFailure.enabled);
+
       case PROTO_PEQUIN:
          switch (query_sync_quorum) {
           case QUERY_SYNC_QUROUM_ONE:
@@ -1722,6 +1731,41 @@ int main(int argc, char **argv) {
 
 //Declare Protocol Clients
 
+    // non flag parameters are server only
+    ::SintrParameters sintr_params(
+      FLAGS_sintr_max_val_threads,
+      FLAGS_sintr_sign_fwd_read_results,
+      FLAGS_sintr_sign_finish_validation,
+      FLAGS_sintr_debug_endorse_check,
+      FLAGS_sintr_client_check_evidence,
+      FLAGS_sintr_policy_function_name,
+      FLAGS_sintr_policy_config_path,
+      FLAGS_sintr_read_include_policy,
+      FLAGS_sintr_client_validation_heuristic,
+      true,
+      FLAGS_sintr_client_pin_cores,
+      FLAGS_sintr_min_enable_pull_policies,
+      FLAGS_sintr_c2c_send_thread,
+      FLAGS_sintr_c2c_receive_thread,
+      FLAGS_sintr_parallel_endorsement_check,
+      true,
+      FLAGS_sintr_hash_endorsements,
+      FLAGS_sintr_parallel_query_sigs_check,
+      FLAGS_sintr_blind_write_message,
+      FLAGS_sintr_sort_writeset,
+      FLAGS_sintr_hide_timestamps,
+      FLAGS_sintr_max_client_sig_check_threads,
+      false, true,
+      FLAGS_sintr_optimistic_receive_endorsement,
+      FLAGS_sintr_client_ignore_policy_update,
+      FLAGS_sintr_client_estimate_policy,
+      FLAGS_sintr_hash_query_gen_id,
+      FLAGS_sintr_separate_transport,
+      FLAGS_sintr_max_clients_connect,
+      FLAGS_sintr_use_endorsement_cb,
+      sintrFailure
+    );
+
     switch (mode) {
     case PROTO_BLACKHOLE: {
         client = new blackhole::Client();
@@ -1736,39 +1780,6 @@ int main(int argc, char **argv) {
         break;
     }
     case PROTO_SINTR: {
-      // non flag parameters are server only
-      ::SintrParameters sintr_params(
-        FLAGS_sintr_max_val_threads,
-        FLAGS_sintr_sign_fwd_read_results,
-        FLAGS_sintr_sign_finish_validation,
-        FLAGS_sintr_debug_endorse_check,
-        FLAGS_sintr_client_check_evidence,
-        FLAGS_sintr_policy_function_name,
-        FLAGS_sintr_policy_config_path,
-        FLAGS_sintr_read_include_policy,
-        sintr_client_validation, true,
-        FLAGS_sintr_client_pin_cores,
-        FLAGS_sintr_min_enable_pull_policies,
-        FLAGS_sintr_c2c_send_thread,
-        FLAGS_sintr_c2c_receive_thread,
-        FLAGS_sintr_parallel_endorsement_check,
-        false,
-        FLAGS_sintr_hash_endorsements,
-        FLAGS_sintr_parallel_query_sigs_check,
-        FLAGS_sintr_blind_write_message,
-        FLAGS_sintr_sort_writeset,
-        FLAGS_sintr_hide_timestamps,
-        FLAGS_sintr_max_client_sig_check_threads,
-        false, true,
-        FLAGS_sintr_optimistic_receive_endorsement,
-        FLAGS_sintr_client_ignore_policy_update,
-        FLAGS_sintr_client_estimate_policy,
-        FLAGS_sintr_hash_query_gen_id,
-        FLAGS_sintr_separate_transport,
-        FLAGS_sintr_max_clients_connect,
-        FLAGS_sintr_use_endorsement_cb
-      );
-
       sintrstore::QueryParameters query_params(FLAGS_store_mode,
                                                 syncQuorumSize,
                                                 queryMessages,
@@ -1971,37 +1982,6 @@ int main(int argc, char **argv) {
 
     // Peloton SMR
     case PROTO_PELOTON_SMR: {
-          ::SintrParameters sintr_params(
-            FLAGS_sintr_max_val_threads,
-            FLAGS_sintr_sign_fwd_read_results,
-            FLAGS_sintr_sign_finish_validation,
-            FLAGS_sintr_debug_endorse_check,
-            FLAGS_sintr_client_check_evidence,
-            FLAGS_sintr_policy_function_name,
-            FLAGS_sintr_policy_config_path,
-            FLAGS_sintr_read_include_policy,
-            sintr_client_validation, true,
-            FLAGS_sintr_client_pin_cores,
-            FLAGS_sintr_min_enable_pull_policies,
-            FLAGS_sintr_c2c_send_thread,
-            FLAGS_sintr_c2c_receive_thread,
-            FLAGS_sintr_parallel_endorsement_check,
-            false,
-            FLAGS_sintr_hash_endorsements,
-            FLAGS_sintr_parallel_query_sigs_check,
-            FLAGS_sintr_blind_write_message,
-            FLAGS_sintr_sort_writeset,
-            FLAGS_sintr_hide_timestamps,
-            FLAGS_sintr_max_client_sig_check_threads,
-            false, true,
-            FLAGS_sintr_optimistic_receive_endorsement,
-            FLAGS_sintr_client_ignore_policy_update,
-            FLAGS_sintr_client_estimate_policy,
-            FLAGS_sintr_hash_query_gen_id,
-            FLAGS_sintr_separate_transport,
-            FLAGS_sintr_max_clients_connect,
-            FLAGS_sintr_use_endorsement_cb
-          );
         client = new pelotonstore::Client(*config, clientId, FLAGS_num_shards,
                                        FLAGS_num_groups, closestReplicas,
 																			  tport, c2cport, part,

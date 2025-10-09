@@ -169,8 +169,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_read_include_policy %d' % config['sintr_protocol_settings']['sintr_read_include_policy']
             if 'sintr_min_enable_pull_policies' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_min_enable_pull_policies %d' % config['sintr_protocol_settings']['sintr_min_enable_pull_policies']
-            if 'sintr_client_validation' in config['sintr_protocol_settings']:
-                client_command += ' --sintr_client_validation %s' % config['sintr_protocol_settings']['sintr_client_validation']
+            if 'sintr_client_validation_heuristic' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_validation_heuristic %d' % config['sintr_protocol_settings']['sintr_client_validation_heuristic']
             if 'sintr_client_pin_cores' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_client_pin_cores=%s' % str(config['sintr_protocol_settings']['sintr_client_pin_cores']).lower()
             if 'sintr_c2c_send_thread' in config['sintr_protocol_settings']:
@@ -211,6 +211,10 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_max_clients_connect=%s' % str(config['sintr_protocol_settings']['sintr_max_clients_connect']).lower()
             if 'sintr_use_endorsement_cb' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_use_endorsement_cb=%s' % str(config['sintr_protocol_settings']['sintr_use_endorsement_cb']).lower()
+            if 'sintr_failure_type' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_failure_type %s' % config['sintr_protocol_settings']['sintr_failure_type']
+            if 'sintr_byz_client_total' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_byz_client_total %d' % config['sintr_protocol_settings']['sintr_byz_client_total']
 
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':

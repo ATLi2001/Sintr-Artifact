@@ -226,8 +226,10 @@ void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, s
   if (!endorsementCheckStates.find(a, client_seq_num)) {
     // this is called in the optimistic case but on the main thread
     // and before this is called the seq num is checked to be stale
-    // so here the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    // it is possible that the client requested more validations than necessary
+    // so the endorsement check state has been removed already
+    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    return;
   }
   // if new peer
   if (a->second->client_ids_received.find(peer_client_id) == a->second->client_ids_received.end()) {
