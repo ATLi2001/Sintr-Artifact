@@ -80,9 +80,9 @@ typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string
   std::vector<proto::SignedMessage *> *,
   const std::map<std::string, std::pair<EndorsementPolicyMessage, Timestamp>> &)> result_callback; //status, group, read_set, result_hash, result, success, signatures
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
-  const proto::Dependency &, bool, bool,
-  const proto::CommittedProof &, const proto::SignedMessage &,
-  const EndorsementPolicyMessage &)> point_result_callback;  //TODO: This == Get callback.
+  std::unique_ptr<proto::Dependency>, bool, bool,
+  std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
+  std::unique_ptr<EndorsementPolicyMessage>, std::unique_ptr<std::string>)> point_result_callback;  //TODO: This == Get callback.
 
 typedef std::function<void(int)> result_timeout_callback;
 

@@ -1247,9 +1247,7 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   const proto::Transaction *preparedTxn = nullptr;
   bool exists = policyStore.get(policyId, ts, tsPolicy);
   // I don't free prepared txn bc I assume that preparedWrites is properly garbage collected
-  if (params.maxDepDepth > -2) {
-    preparedTxn = FindPreparedVersion(policyId, ts, exists, tsPolicy, proto::Transaction::POLICY_ID_POLICY);
-  }
+  preparedTxn = FindPreparedVersion(policyId, ts, exists, tsPolicy, proto::Transaction::POLICY_ID_POLICY);
   if(preparedTxn != nullptr) {
     Debug("[%s] ABSTAIN wr conflict prepared policy for policy ID associated with txn:"
       " prepared policy ts %lu.%lu < this txn's ts %lu.%lu.",
@@ -1260,6 +1258,16 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
     stats.Increment("cc_abstains_wr_conflict", 1);
     Debug("Prepared txn digest: %s", BytesToHex(preparedTxn->txndigest(), 16).c_str());
     abstain_conflict = preparedTxn;
+    return proto::ConcurrencyControl::ABSTAIN;
+  }
+  Timestamp upperTs;
+  if(policyStore.getUpperBound(policyId, ts, upperTs) && upperTs > ts) {
+    // change to debug after testing
+    Panic("[%s] ABSTAIN TS for committed policy %lu %lu > this txn's ts %lu.%lu.",
+      BytesToHex(txnDigest, 16).c_str(),
+      upperTs.getTimestamp(), upperTs.getID(),
+      ts.getTimestamp(), ts.getID());
+    stats.Increment("cc_abstains", 1);
     return proto::ConcurrencyControl::ABSTAIN;
   }
   // hack to return commit if neither check fails

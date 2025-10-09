@@ -211,8 +211,7 @@ class ValidationClient : public ::ValidationClientCommon {
     std::vector<PendingValidationQuery *> pendingQueries;
 
     std::vector<std::string> pendingWriteStatements; //Just a temp cache to keep Translated Write statements in scope during a TX.
-    std::vector<std::pair<std::string, std::string>> point_read_cache; // Cache the read results from point reads. 
-    std::vector<std::pair<std::string, std::string>> scan_read_cache; //Cache results from scan reads (only for Select *)
+    std::unordered_set<std::string> added_query_results; // keeps track of query results added to txn
 
     // vector of keys to ensure that only readset keys in transaction are added
     std::vector<std::pair<std::string, std::pair<std::string, Timestamp>>> pendingForwardedRead;
