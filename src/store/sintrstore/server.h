@@ -857,7 +857,6 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   void MessageToSign(::google::protobuf::Message* msg,
       proto::SignedMessage *signedMessage, signedCallback cb);
   void SignSendReadReply(proto::Write *write, proto::SignedMessage *signed_write, const std::function<void()> &sendCB);
-  Timestamp LatestPolicyTS(const std::string &policyId);
   /* BEGIN Semantic CC functions */ 
 
 //TODO: Parameterize. 
@@ -1386,6 +1385,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   //keep list of timeouts
   //std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> FBclient_timeouts;
   std::unordered_map<std::string, uint64_t> client_starttime;
+  std::unordered_map<std::string, std::vector<Timestamp>> policyTxnTS;
 
   //keep list for exponential timeouts for views.
   std::unordered_map<std::string, uint64_t> FBtimeouts_start; //Timer start time

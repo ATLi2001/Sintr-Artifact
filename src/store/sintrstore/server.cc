@@ -550,6 +550,7 @@ void Server::LoadPolicyStore(const std::string &policyStorePath) {
     auto committedItr = committed.find("");
     UW_ASSERT(committedItr != committed.end());
     policyStoreValue.proof = committedItr->second;
+    policyTxnTS[p].push_back(Timestamp()); // add timestamp 0 to policies
     policyStore.put(p, policyStoreValue, Timestamp());
     policiesToFree.push_back(std::move(policy));
   }
@@ -2837,6 +2838,8 @@ void Server::CommitToStore(proto::CommittedProof *proof, proto::Transaction *txn
       // parse allocates a new policy so need to free it at end
       policiesToFree.push_back(std::move(policy));
       policyVal.proof = proof;
+      policyTxnTS[write.key()].push_back(ts); // add timestamp to policies
+      std::sort(policyTxnTS[write.key()].begin(), policyTxnTS[write.key()].end()); // okay to sort bc policy ID are infrequent.
       policyStore.put(write.key(), policyVal, ts);
       return;
     }
@@ -3264,7 +3267,7 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
 
   if (params.sintr_params.checkPolicyLeak) {
     // map that stores policyID to latest policy TS
-    std::unordered_map<std::string, Timestamp> latestPolicyTSMap;
+    std::set<std::pair<std::string, Timestamp>> policyTSSet;
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
       if (read.is_table_col_version()) {
@@ -3277,19 +3280,36 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
 
       std::string policyId = policyIdFunction(read.key(), "");
+      const auto& timestamps = policyTxnTS[policyId];
+      Timestamp policyTS;
+      auto tsItr = std::upper_bound(timestamps.begin(), timestamps.end(), Timestamp(read.readtime()));
+      if(tsItr == timestamps.end()) {
+        // there is no policy committed after the read, get the latest policy TS
+        tsItr--;
+        policyTS = *tsItr;
+      } else if(tsItr != timestamps.begin()) {
+        // not the latest policy committed, is a safe value
+        continue;
+      } else {
+        // this should never happen...
+        Warning("Timestamp is %lu : %lu", read.readtime().timestamp(), read.readtime().id());
+        policyTS = *tsItr;
+        Panic("policy TS is %lu : %lu", policyTS.getTimestamp(), policyTS.getID());
+      }
+      std::pair<std::string, Timestamp> tsPair = make_pair(policyId, policyTS);
+      if(policyTSSet.find(tsPair) != policyTSSet.end()) {
+        continue;
+      } else {
+        policyTSSet.insert(tsPair);
+      }
       Debug(
         "Extracting policy %s at time %lu.%lu for read to key %s",
         policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
       );
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-      GetPolicy(policyId, read.readtime(), tsPolicy, false);
-      if(latestPolicyTSMap.find(policyId) == latestPolicyTSMap.end()) {
-        latestPolicyTSMap[policyId] = LatestPolicyTS(policyId);
-      }
-      if(tsPolicy.first < latestPolicyTSMap[policyId]) {
-        // there already exists a committed policy with TS > this policy, then this value is safe.
-        continue;
+      if(!policyStore.get(policyId, Timestamp(read.readtime()), tsPolicy)) {
+        Panic("Policy store policyId %lu not in policystore", policyId);
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
         Debug(

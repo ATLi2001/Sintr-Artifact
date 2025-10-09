@@ -1260,12 +1260,12 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
     abstain_conflict = preparedTxn;
     return proto::ConcurrencyControl::ABSTAIN;
   }
-  Timestamp latestTs = LatestPolicyTS(policyId);
-  if(latestTs > ts) {
-    // there exists a committed policy with timestamp > this write ts, must abort
-    Debug("[%s] ABSTAIN latest TS for policy %lu %lu > this txn's ts %lu.%lu.",
+  auto upperTSItr = std::upper_bound(policyTxnTS[policyId].begin(), policyTxnTS[policyId].end(), ts);
+  if(upperTSItr != policyTxnTS[policyId].end()) {
+    // change to debug after testing
+    Panic("[%s] ABSTAIN TS for committed policy %lu %lu > this txn's ts %lu.%lu.",
       BytesToHex(txnDigest, 16).c_str(),
-      latestTs.getTimestamp(), latestTs.getID(),
+      upperTSItr->getTimestamp(), upperTSItr->getID(),
       ts.getTimestamp(), ts.getID());
     stats.Increment("cc_abstains", 1);
     return proto::ConcurrencyControl::ABSTAIN;
@@ -1273,18 +1273,6 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   // hack to return commit if neither check fails
   implicitPolicyReads.insert(std::make_pair(policyId, tsPolicy.first));
   return proto::ConcurrencyControl::COMMIT;
-}
-
-Timestamp Server::LatestPolicyTS(const std::string &policyId) {
-  std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;
-  Timestamp ts(timeServer.GetTime());
-  // add delta to current local time
-  ts.setTimestamp(ts.getTimestamp() + timeDelta);
-
-  if(!policyStore.get(policyId, ts, tsPolicy)) {
-    return Timestamp();
-  }
-  return tsPolicy.first;
 }
 
 //TODO: relay Deeper depth when result is already wait. (If I always re-did the P1 it would be handled)
