@@ -498,16 +498,6 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       a->second->pendingForwardedRead.size());
   }
 
-  // makes sure cached reads are included in txn readset
-  for(const auto& [key, value] : a->second->cachedReads) {
-    auto it = a->second->readValues.find(key);
-    if (it == a->second->readValues.end() || it->second != value) {
-        Panic("Cached key %s with value %s not included in readset", key.c_str(), value.c_str());
-    }
-  }
-
-  //TODO: Make sure cached reads are in txn readset for point queries and range queries
-
   // prevent initiating client from hiding reads by telling validating client to ignore them
   std::set<std::string> readsInReadset;
   for (const auto &read : txn->read_set()) {
@@ -681,7 +671,11 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
       AddReadset(allValTxnState, curr_key, curr_value, curr_ts, true, false, hashed_ts);
     } else {
       Debug("ADDING TO CACHED READS HERE %s FOR client seq num %lu", curr_key.c_str(), allValTxnState->txn_client_seq_num);
-      allValTxnState->cachedReads.push_back(std::make_pair(curr_key, curr_value));
+      auto it = allValTxnState->readValues.find(curr_key);
+      if (it == allValTxnState->readValues.end() || it->second != curr_value) {
+          // Key doesn't exist OR value doesn't match
+          Panic("Cached read result %s or key %s not added to txn", curr_value.c_str(), curr_key.c_str());
+      }
     }
     if (hasDep) {
       AddDep(allValTxnState, dep);
@@ -778,10 +772,15 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
   ](AllValidationTxnState *allValTxnState, const std::string &query_cmd) {
     if (addReadset) {
       // bool cache_point = !curr_value.empty() && query_cmd.find("SELECT *") != std::string::npos;
+      ++allValTxnState->numPendingReads;
       AddReadset(allValTxnState, curr_key, curr_value, curr_ts, false, false, hashed_ts);
     } else {
-      // add to set of forwarded reads that were cached
-      allValTxnState->point_read_cache.push_back(std::make_pair(curr_key, curr_value));  
+      // check keys already added to txn
+      auto it = allValTxnState->readValues.find(curr_key);
+      if (it == allValTxnState->readValues.end() || it->second != curr_value) {
+          // Key doesn't exist OR value doesn't match
+          Panic("Cached read result %s or key %s not added to txn", curr_value.c_str(), curr_key.c_str());
+      }
     }
     if (hasDep) {
       AddDep(allValTxnState, dep);
@@ -861,11 +860,16 @@ void ValidationClient::ProcessForwardQueryResult(uint64_t txn_client_id, uint64_
     if (addReadset) {
       ++allValTxnState->numProcessedForwardQuery;
       allValTxnState->queriesAddedToReadset.insert(curr_query_gen_id);
+      allValTxnState->added_query_results.insert(curr_query_result);
       AddQueryReadset(allValTxnState, fwdQueryResult);
     }
     else {
       // this is a cached message sent over by client...
-      allValTxnState->scan_read_cache.push_back(std::make_pair(query_cmd, curr_query_result));
+      // check if it's already been added to txn
+      if(allValTxnState->queriesAddedToReadset.find(curr_query_gen_id) == allValTxnState->queriesAddedToReadset.end()
+        || allValTxnState->added_query_results.find(curr_query_result) == allValTxnState->added_query_results.end()) {
+        Panic("cached query %s or query result %s is not in transaction", query_cmd.c_str(), curr_query_result.c_str());
+      }
     }
   };
 
@@ -939,7 +943,14 @@ void ValidationClient::NotifyForwardQueryResultValid(uint64_t txn_client_id, uin
     "numValidForwardQuery for client id %lu seq num %lu is now %lu",
     txn_client_id, txn_client_seq_num, a->second->numValidForwardQuery
   );
-  if (a->second->commitWaitOnValidForwardQuery && a->second->numValidForwardQuery == a->second->numProcessedForwardQuery) {
+  if(a->second->aborted && a->second->numProcessedForwardQuery == a->second->numValidForwardQuery && a->second->numPendingReads == a->second->numValidReads) {
+    // clean up aborted txn for query
+    delete a->second->txn;
+    delete a->second;
+    allValTxnStates.erase(a);
+    return;
+  }
+  if (a->second->commitWaitOnValidForwardQuery && a->second->numValidForwardQuery == a->second->numProcessedForwardQuery && a->second->numPendingReads == a->second->numValidReads) {
     Debug("Unblocking commit for client id %lu seq num %lu", txn_client_id, txn_client_seq_num);
     a->second->commitWaitOnValidForwardQuery = false;
     a->second->ccb(COMMITTED);
@@ -963,16 +974,14 @@ void ValidationClient::NotifyForwardReadResultValid(uint64_t txn_client_id, uint
     "numValidReads for client id %lu seq num %lu is now %lu while numPendingReads is %lu",
     txn_client_id, txn_client_seq_num, a->second->numValidReads, a->second->numPendingReads
   );
-  if(a->second->aborted && a->second->numPendingReads == a->second->numValidReads) {
+  if(a->second->aborted && a->second->numPendingReads == a->second->numValidReads && a->second->numProcessedForwardQuery == a->second->numValidForwardQuery) {
     // clean up aborted txn
     delete a->second->txn;
     delete a->second;
     allValTxnStates.erase(a);
     return;
   }
-  // this check isn't atomic so I should acquire a lock...
-  // std::unique_lock<std::mutex> lock(a->second->readCommitMutex);
-  if (a->second->commitWaitOnValidForwardQuery && a->second->numPendingReads == a->second->numValidReads) {
+  if (a->second->commitWaitOnValidForwardQuery && a->second->numPendingReads == a->second->numValidReads && a->second->numProcessedForwardQuery == a->second->numValidForwardQuery) {
     Debug("Unblocking commit for client id %lu seq num %lu", txn_client_id, txn_client_seq_num);
     a->second->commitWaitOnValidForwardQuery = false;
     a->second->ccb(COMMITTED);
@@ -1046,6 +1055,7 @@ proto::Transaction *ValidationClient::GetCompletedTxn(uint64_t txn_client_id, ui
   return txn;
 }
 
+// DEPRECATED
 bool ValidationClient::BufferGet(const AllValidationTxnState *allValTxnState, const std::string &key, 
     validation_read_callback vrcb) {
   uint64_t txn_client_id = allValTxnState->txn_client_id;
@@ -1080,13 +1090,8 @@ void ValidationClient::AddReadset(AllValidationTxnState *allValTxnState,
   } else {
     read->set_hashed_readtime(hashedTS);
   }
-
-  if (is_get) {
-    // add to readValues for future BufferGets
-    allValTxnState->readValues[key] = value;
-  } else if(cache_point) {
-    // allValTxnState-> 
-  }
+  // this is just to track all keys added to the readset (regardless if it's a point query or get)
+  allValTxnState->readValues[key] = value;
 }
 
 void ValidationClient::AddQueryReadset(AllValidationTxnState *allValTxnState,

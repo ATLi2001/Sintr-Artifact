@@ -95,14 +95,13 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   
   // forward server point query result to other peers
   void SendForwardPointQueryResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const std::string &table_name, const proto::CommittedProof &proof,
-    const proto::SignedMessage &signedWrite,
-    const proto::Dependency &dep, bool hasDep, bool addReadset);
+    const std::string &table_name, std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite,
+    std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadset, std::unique_ptr<std::string> tsDigest);
   
   // forward query results to other clients
   // take ownership of group_sigs
-  void SendForwardQueryResultMessage(const std::string &query_gen_id, const std::string &query_result, 
-    const proto::QueryResultMetaData &query_res_meta,
+  void SendForwardQueryResultMessage(const std::string &query_gen_id, const std::string &query_result,
+    proto::QueryResultMetaData *query_res_meta,
     std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset);
 
   // send a blind write message to other clients
@@ -263,16 +262,18 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     std::string* tsDigest);
     
   void SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const std::string &table_name, const proto::CommittedProof &proof,
-    const proto::SignedMessage &signedWrite,
-    const proto::Dependency &dep, bool hasDep, bool addReadset);
+    const std::string &table_name, proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
+    proto::Dependency* dep, bool hasDep, bool addReadset,
+    std::string* tsDigest);
   
   bool ReadSigHelper(const proto::ForwardReadResult &fwdReadResult, proto::ForwardReadResultMessage &fwdReadResultMsg);
   
+  bool PointQuerySigHelper(const proto::ForwardReadResult &fwdPointQueryResult, proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg);
+
   // take ownership of the actual signatures inside group_sigs
   void SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
-    const proto::QueryResultMetaData &query_res_meta,
-    std::map<uint64_t, std::vector<proto::SignedMessage *>> &group_sigs, bool addReadset);
+    proto::QueryResultMetaData *query_res_meta,
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset);
 
   void SendBlindWriteMessageHelper();
 
@@ -287,7 +288,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
 
   void HandleBeginValidateTxnMessage(const TransportAddress &remote, const proto::BeginValidateTxnMessage &beginValTxnMsg);
   void HandleForwardReadResultMessage(const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg);
-  void HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg);
+  void HandleForwardPointQueryResultMessage(const std::shared_ptr<proto::ForwardPointQueryResultMessage> &fwdPointQueryResultMsg);
   void HandleForwardQueryResultMessage(const proto::ForwardQueryResultMessage &fwdQueryResultMsg);
   void HandleBlindWriteMessage(const proto::BlindWriteMessage &blindWriteMsg);
   void HandleFinishValidateTxnMessage(const proto::FinishValidateTxnMessage &finishValTxnMsg,
@@ -304,9 +305,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
     const std::shared_ptr<proto::ForwardReadResultMessage> &fwdReadResultMsg);
   // check if fwdPointQueryResultMsg is valid based on either prepared dependency or committed proof
   // also extract write and dep from fwdPointQueryResultMsg
-  bool CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
-    const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, 
-    proto::Write &write, proto::Dependency &dep);
+  bool CheckPreparedCommittedEvidence(const std::shared_ptr<proto::ForwardReadResult> &fwdReadResult, 
+    const std::shared_ptr<proto::ForwardPointQueryResultMessage> &fwdPointQueryResultMsg);
   // check if fwdQueryResult is valid based on f+1 matching server responses in fwdQueryResultMsg
   bool CheckPreparedCommittedEvidence(const proto::ForwardQueryResult &fwdQueryResult,
     const proto::ForwardQueryResultMessage &fwdQueryResultMsg);

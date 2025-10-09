@@ -3263,7 +3263,8 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   }
 
   if (params.sintr_params.checkPolicyLeak) {
-    policiesChecked.clear();
+    // map that stores policyID to latest policy TS
+    std::set<std::pair<std::string, Timestamp>> policyTSSet;
     // disallow readset to contain a policy that does not imply the write set policy
     for (const auto &read : txn->read_set()) {
       if (read.is_table_col_version()) {
@@ -3276,18 +3277,26 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
 
       std::string policyId = policyIdFunction(read.key(), "");
-      if(policiesChecked.find(policyId) != policiesChecked.end()) {
-        continue;
-      } else {
-        policiesChecked.insert(policyId);
-      }
       Debug(
         "Extracting policy %s at time %lu.%lu for read to key %s",
         policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
       );
       // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-      GetPolicy(policyId, read.readtime(), tsPolicy, false);
+      if(!policyStore.get(policyId, Timestamp(read.readtime()), tsPolicy)) {
+        Panic("Policy store policyId %lu not in policystore", policyId);
+      }
+      std::pair<std::string, Timestamp> tsPair = make_pair(policyId, tsPolicy.first);
+      if(policyTSSet.find(tsPair) != policyTSSet.end()) {
+        continue;
+      } else {
+        policyTSSet.insert(tsPair);
+      }
+      Timestamp upperTs;
+      if(policyStore.getUpperBound(policyId, Timestamp(read.readtime()), upperTs) && upperTs > read.readtime()) {
+        // value is safe, continue
+        continue;
+      }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
         Debug(
           "Read policy (%s) does not imply write policy (%s)",

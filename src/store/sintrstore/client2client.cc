@@ -681,21 +681,27 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
 }
 
 void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, const std::string &value, const Timestamp &ts,
-    const std::string &table_name, const proto::CommittedProof &proof,
-    const proto::SignedMessage &signedWrite,
-    const proto::Dependency &dep, bool hasDep, bool addReadset) {
+    const std::string &table_name, std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite,
+    std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadset, std::unique_ptr<std::string> tsDigest) {
   
+  proto::CommittedProof *proofPtr = proof.release();
+  proto::Dependency *depPtr = dep.release();
+  proto::SignedMessage *signedWritePtr = signedWrite.release();
+  std::string *tsDigestPtr = tsDigest.release();
+
   if (!params.sintr_params.c2cSendThread) {
     SendForwardPointQueryResultMessageHelper(
-      key, value, ts, table_name, proof, signedWrite,
-      dep, hasDep, addReadset
+      key, value, ts, table_name, proofPtr, signedWritePtr,
+      depPtr, hasDep, addReadset, tsDigestPtr
     );
   }
   else {
-    auto f = [=]() {
+    auto f = [this, key, value, ts, table_name, proof = std::move(proofPtr),
+      signedWrite = std::move(signedWritePtr), dep = std::move(depPtr),
+      tsDigest = std::move(tsDigestPtr), hasDep, addReadset]() {
       this->SendForwardPointQueryResultMessageHelper(
         key, value, ts, table_name, proof, signedWrite,
-        dep, hasDep, addReadset
+        dep, hasDep, addReadset, tsDigest
       );
       return (void*) true;
     };
@@ -707,9 +713,8 @@ void Client2Client::SendForwardPointQueryResultMessage(const std::string &key, c
 // basically same logic as SendForwardReadResultMessageHelper
 // no policy dep but additional table_name field
 void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &key, const std::string &value, const Timestamp &ts,
-    const std::string &table_name, const proto::CommittedProof &proof,
-    const proto::SignedMessage &signedWrite,
-    const proto::Dependency &dep, bool hasDep, bool addReadset) {
+    const std::string &table_name, proto::CommittedProof* proof, proto::SignedMessage* signedWrite, 
+    proto::Dependency* dep, bool hasDep, bool addReadset, std::string* tsDigest) {
   
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardPointQueryResultMessage *fwdPointQueryResultMsgToSend = new proto::ForwardPointQueryResultMessage();
@@ -720,8 +725,8 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     fwdReadResult.mutable_timestamp()->set_timestamp(ts.getTimestamp());
     fwdReadResult.mutable_timestamp()->set_id(ts.getID());
   } else {
-    std::string tsDigest = TimestampDigest(ts);
-    fwdReadResult.set_hashed_timestamp(tsDigest);
+    fwdReadResult.set_allocated_hashed_timestamp(tsDigest);
+    tsDigest = nullptr;
   }
   fwdReadResult.set_client_id(client_id);
   fwdReadResult.set_client_seq_num(client_seq_num);
@@ -732,16 +737,18 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
   // otherwise it came from the buffer and there is no dependency or committed proof
   if (addReadset) {
     // this will contain the prepared txn dependency
-    if (hasDep) {
-      UW_ASSERT(dep.IsInitialized());
-      *fwdReadResult.mutable_dep() = dep;
+    if (hasDep && dep != nullptr) {
+      UW_ASSERT(dep->IsInitialized());
+      fwdReadResult.set_allocated_dep(dep);
       // must be oneof write or signed write
+      dep = nullptr;
       *fwdPointQueryResultMsgToSend->mutable_write() = proto::Write();
     }
     else {
       if (params.validateProofs) {
-        if (proof.IsInitialized()) {
-          *fwdPointQueryResultMsgToSend->mutable_proof() = proof;
+        if (proof != nullptr && proof->IsInitialized()) {
+          fwdPointQueryResultMsgToSend->set_allocated_proof(proof);
+          proof = nullptr;
         }
         // if no proof then it is possible the value is empty
         else {
@@ -751,13 +758,31 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
 
       // depending on if signatures are enabled and if the value is non empty
       if(params.signedMessages && value.length() != 0) {
-        *fwdPointQueryResultMsgToSend->mutable_signed_write() = signedWrite;
+        fwdPointQueryResultMsgToSend->set_allocated_signed_write(signedWrite);
+        signedWrite = nullptr;
       } else {
         // this should only happen if value is empty
         UW_ASSERT(value.length() == 0);
         *fwdPointQueryResultMsgToSend->mutable_write() = proto::Write();
       }
     }
+  }
+
+  if(proof != nullptr) {
+    delete proof;
+    proof = nullptr;
+  }
+  if(signedWrite != nullptr) {
+    delete signedWrite;
+    signedWrite = nullptr;
+  }
+  if(tsDigest != nullptr) {
+    delete tsDigest;
+    tsDigest = nullptr;
+  }
+  if(dep != nullptr) {
+    delete dep;
+    dep = nullptr;
   }
 
   // copy into sentFwdResultState
@@ -779,7 +804,7 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     // create_hmac_us.add(duration);
   }
   else {
-    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = fwdReadResult;
+    *fwdPointQueryResultMsgToSend->mutable_fwd_read_result() = std::move(fwdReadResult);
   }
 
   std::unique_lock lock(sentFwdResultsMutex);
@@ -808,45 +833,46 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
 }
 
 void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_id, const std::string &query_result,
-    const proto::QueryResultMetaData &query_res_meta,
+    proto::QueryResultMetaData *query_res_meta,
     std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset) {
   UW_ASSERT(group_sigs != nullptr);
   if (!params.sintr_params.c2cSendThread) {
     SendForwardQueryResultMessageHelper(
       query_gen_id, query_result,
-      query_res_meta, *group_sigs, addReadset
+      query_res_meta, group_sigs, addReadset
     );
-    delete group_sigs;
-    // the signatures inside of group_sigs are moved in SendForwardQueryResultMessageHelper
-
-    // query_res_meta is a newly allocated object only if result is not from cache (addReadset=true)
-    // and cacheReadSet=false and mergeActiveAtClient=true
-    if (addReadset && !params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
-      delete &query_res_meta;
+    if(group_sigs) {
+      delete group_sigs;
     }
+    // the signatures inside of group_sigs are moved in SendForwardQueryResultMessageHelper
   }
   else {
     std::function<void*(void)> f;
     if (addReadset && !params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
       // here query_res_meta is ours to own so capture it by pointer
-      f = [=, query_res_meta_ptr = &query_res_meta]() {
+      f = [this, query_gen_id, query_result, group_sigs, query_res_meta,
+          addReadset]() {
         this->SendForwardQueryResultMessageHelper(
           query_gen_id, query_result,
-          *query_res_meta_ptr, *group_sigs, addReadset
+          query_res_meta, group_sigs, addReadset
         );
-        delete group_sigs;
-        delete query_res_meta_ptr;
+        if(group_sigs) {
+          delete group_sigs;
+        }
         return (void*) true;
       };
     }
     else {
-      f = [=]() {
+      f = [this, query_gen_id, query_result, group_sigs, query_res_meta,
+          addReadset]() {
         // here query_res_meta is from the client txn object, so we need to copy capture it
         this->SendForwardQueryResultMessageHelper(
           query_gen_id, query_result,
-          query_res_meta, *group_sigs, addReadset
+          query_res_meta, group_sigs, addReadset
         );
-        delete group_sigs;
+        if(group_sigs) {
+          delete group_sigs;
+        }
         return (void*) true;
       };
     }
@@ -856,8 +882,8 @@ void Client2Client::SendForwardQueryResultMessage(const std::string &query_gen_i
 }
 
 void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query_gen_id, const std::string &query_result,
-    const proto::QueryResultMetaData &query_res_meta,
-    std::map<uint64_t, std::vector<proto::SignedMessage *>> &group_sigs, bool addReadset) {
+    proto::QueryResultMetaData *query_res_meta,
+    std::map<uint64_t, std::vector<proto::SignedMessage *>> *group_sigs, bool addReadset) {
 
   SentFwdResultState *sentFwdResultState = new SentFwdResultState();
   proto::ForwardQueryResultMessage *fwdQueryResultMsgToSend = new proto::ForwardQueryResultMessage();
@@ -867,8 +893,13 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
   fwdQueryResult.set_client_id(client_id);
   fwdQueryResult.set_client_seq_num(client_seq_num);
   fwdQueryResult.set_add_readset(addReadset);
-  if(query_res_meta.IsInitialized()) {
-    *fwdQueryResult.mutable_query_res_meta() = query_res_meta;
+  if(query_res_meta != nullptr && query_res_meta->IsInitialized()) {
+    if(!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
+      fwdQueryResult.set_allocated_query_res_meta(query_res_meta);
+      query_res_meta = nullptr;
+    } else {
+      *fwdQueryResult.mutable_query_res_meta() = *query_res_meta;
+    }
     if(params.sintr_params.hideTimestamps && !params.query_params.cacheReadSet) {
       // assuming we send over the readset only if cacheReadSet is false
       for (auto &[group, queryMeta] : *fwdQueryResult.mutable_query_res_meta()->mutable_group_meta()) {
@@ -906,10 +937,10 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
 
   if (addReadset) {
     if (params.validateProofs) {
-      for (auto &[group, query_sigs] : group_sigs) {
+      for (auto &[group, query_sigs] : *group_sigs) {
         proto::SignedMessages &curr_group_sigs = (*fwdQueryResultMsgToSend->mutable_query_sigs())[group];
         for (auto &query_sig : query_sigs) {
-          *curr_group_sigs.add_sig_msgs() = std::move(*query_sig);
+          curr_group_sigs.add_sig_msgs()->Swap(query_sig);
         }
       }
     }
@@ -1122,15 +1153,15 @@ void Client2Client::ManageDispatchForwardReadResultMessage(const TransportAddres
 
 void Client2Client::ManageDispatchForwardPointQueryResultMessage(const TransportAddress &remote, const std::string &data) {
   if (!params.sintr_params.c2cReceiveThread) {
-    fwdPointQueryResultMsg.ParseFromString(data);
+    const std::shared_ptr<proto::ForwardPointQueryResultMessage> fwdPointQueryResultMsg = std::make_shared<proto::ForwardPointQueryResultMessage>();
+    fwdPointQueryResultMsg->ParseFromString(data);
     HandleForwardPointQueryResultMessage(fwdPointQueryResultMsg);
   }
   else {
-    proto::ForwardPointQueryResultMessage *fwdPointQueryResultMsg = new proto::ForwardPointQueryResultMessage();
-    fwdPointQueryResultMsg->ParseFromString(data);
-    auto f = [this, fwdPointQueryResultMsg](){
-      this->HandleForwardPointQueryResultMessage(*fwdPointQueryResultMsg);
-      delete fwdPointQueryResultMsg;
+    auto f = [this, data](){
+      const std::shared_ptr<proto::ForwardPointQueryResultMessage> fwdPointQueryResultMsg = std::make_shared<proto::ForwardPointQueryResultMessage>();
+      fwdPointQueryResultMsg->ParseFromString(data);
+      this->HandleForwardPointQueryResultMessage(fwdPointQueryResultMsg);
       return (void*) true;
     };
     Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
@@ -1337,8 +1368,8 @@ void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::
   );
 }
 
-void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg) {
-  proto::ForwardReadResult fwdReadResult;
+void Client2Client::HandleForwardPointQueryResultMessage(const std::shared_ptr<proto::ForwardPointQueryResultMessage> &fwdPointQueryResultMsg) {
+  std::shared_ptr<proto::ForwardReadResult> fwdReadResult;
   if (params.sintr_params.signFwdReadResults) {
     // struct timespec ts_start;
     // clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -1346,12 +1377,12 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
 
     // first check client signature
     // Debugs will not include client ID/client seq num because they are included in the fwdReadResult
-    if (!fwdPointQueryResultMsg.has_signed_fwd_read_result()) {
+    if (!fwdPointQueryResultMsg->has_signed_fwd_read_result()) {
       Debug("Missing client signature on forwarded read result");
       return;
     }
     std::string data;
-    if (!ValidateHMACedMessage(fwdPointQueryResultMsg.signed_fwd_read_result(), data)) {
+    if (!ValidateHMACedMessage(fwdPointQueryResultMsg->signed_fwd_read_result(), data)) {
       Debug("Invalid client signature on forwarded read result");
       return;
     }
@@ -1362,74 +1393,45 @@ void Client2Client::HandleForwardPointQueryResultMessage(const proto::ForwardPoi
     // auto duration = end - start;
     // verify_hmac_us.add(duration);
 
-    fwdReadResult.ParseFromString(data);
+    fwdReadResult = std::make_shared<proto::ForwardReadResult>();
+
+    fwdReadResult->ParseFromString(data);
   }
   else {
-    fwdReadResult = fwdPointQueryResultMsg.fwd_read_result();
+    fwdReadResult = std::shared_ptr<proto::ForwardReadResult>(fwdPointQueryResultMsg->release_fwd_read_result());
   }
 
-  uint64_t curr_client_id = fwdReadResult.client_id();
-  uint64_t curr_client_seq_num = fwdReadResult.client_seq_num();
+  uint64_t curr_client_id = fwdReadResult->client_id();
+  uint64_t curr_client_seq_num = fwdReadResult->client_seq_num();
 
-  std::string curr_key = fwdReadResult.key();
-  std::string curr_value = fwdReadResult.value();
-
-  proto::Write write;
-  bool hasDep = fwdReadResult.has_dep();
-  proto::Dependency dep;
-  bool addReadset = fwdReadResult.add_readset();
+  bool addReadset = fwdReadResult->add_readset();
   // only if addReadset is true will there be dep or committed proofs
   if (addReadset && params.sintr_params.clientCheckEvidence) {
-    if (!CheckPreparedCommittedEvidence(fwdReadResult, fwdPointQueryResultMsg, write, dep)) {
-      Panic("Invalid prepared or committed evidence on forwarded point query result");
+    if (!params.sintr_params.parallelQuerySigsCheck && !CheckPreparedCommittedEvidence(fwdReadResult, fwdPointQueryResultMsg)) {
+      Panic("Invalid prepared or committed evidence on forwarded read result");
       return;
-    }
-    // point query dependencies don't contain full information about the write, only txn digest
-    // so we can't check the key 
-    if (!hasDep) {
-      // if there is an actual value, expect matches
-      if (curr_value.length() > 0) {
-        UW_ASSERT(write.key() == curr_key);
-        UW_ASSERT(write.committed_value() == curr_value);
-        if(params.sintr_params.hideTimestamps) {
-          UW_ASSERT(write.hashed_committed_ts() == fwdReadResult.hashed_timestamp());
-        } else {
-          UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdReadResult.timestamp()));
-        }
-      }
-      // otherwise the write should be empty
-      else {
-        UW_ASSERT(!write.has_key());
-      }
-
-      // curr_key is essentially what the forwarding client is claiming is the key
-      // write contains the server's claim as to what the key is
-      // these two should match
-      // also if value is empty, then no need to check since server makes no claims about it
-      if (curr_value.length() > 0 && curr_key != write.key()) {
-        Debug(
-          "Mismatch in forwarded key and the server key: from client id %lu, seq num %lu, forwarded key %s, server key %s",
-          curr_client_id, 
-          curr_client_seq_num,
-          BytesToHex(curr_key, 16).c_str(),
-          BytesToHex(write.key(), 16).c_str()
-        );
-        return;
-      }
+    } else {
+      Debug("HandleForwardReadResult parallel sig check: from client id %lu, seq num %lu, read key %s, read result %s",
+        curr_client_id, 
+        curr_client_seq_num,
+        BytesToHex(fwdReadResult->key(), 16).c_str(),
+        BytesToHex(fwdReadResult->value(), 16).c_str()
+      );
+      CheckPreparedCommittedEvidence(fwdReadResult, fwdPointQueryResultMsg);
     }
   }
 
   Debug(
-    "HandleForwardPointQueryResult: from client id %lu, seq num %lu, key %s, value %s", 
+    "HandleForwardReadResult: from client id %lu, seq num %lu, key %s, value %s", 
     curr_client_id, 
     curr_client_seq_num,
-    curr_key.c_str(),
-    BytesToHex(curr_value, 16).c_str()
+    BytesToHex(fwdReadResult->key().c_str(), 16).c_str(),
+    BytesToHex(fwdReadResult->value().c_str(), 16).c_str()
   );
   // tell valClient about this forwardedReadResult
   valClient->ProcessForwardPointQueryResult(
-    curr_client_id, curr_client_seq_num, fwdReadResult,
-    dep, hasDep, addReadset
+    curr_client_id, curr_client_seq_num, *fwdReadResult,
+    fwdReadResult->dep(), fwdReadResult->has_dep(), addReadset
   );
 }
 
@@ -1821,12 +1823,41 @@ bool Client2Client::ReadSigHelper(const proto::ForwardReadResult &fwdReadResult,
   return true;
 }
 
-bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResult &fwdPointQueryResult, 
-  const proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg, proto::Write &write, proto::Dependency &dep) {
+bool Client2Client::CheckPreparedCommittedEvidence(const std::shared_ptr<proto::ForwardReadResult> &fwdReadResult, 
+    const std::shared_ptr<proto::ForwardPointQueryResultMessage> &fwdPointQueryResultMsg) {
   // struct timespec ts_start;
   // clock_gettime(CLOCK_MONOTONIC, &ts_start);
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
 
+  if(!fwdReadResult->add_readset()) {
+    // skip checking evidence if we dont add it to the readset
+    Debug("Skipping validation because we don't add to readset");
+    return true;
+  }
+
+  if(params.sintr_params.parallelQuerySigsCheck) {
+    // TODO: We copy the shared pointer instead of the message -> should be less overhead
+    auto f = [this, fwdReadResult, fwdPointQueryResultMsg] {
+      Debug("Checking signatures asynchronously for %lu : %lu", fwdReadResult->client_id(), fwdReadResult->client_seq_num());
+
+      if(!this->PointQuerySigHelper(*fwdReadResult, *fwdPointQueryResultMsg)) {
+        Panic("Invalid signatures for read result!");
+      } else {
+        valClient->NotifyForwardReadResultValid(fwdReadResult->client_id(), fwdReadResult->client_seq_num());
+      }
+      return (void*) true;
+    };
+    Client2ClientExecutor *executor = new Client2ClientExecutor(std::move(f));
+    parallelSigCheckQueue.push(executor);
+    return true;
+  } else {
+    return PointQuerySigHelper(*fwdReadResult, *fwdPointQueryResultMsg);
+  }
+}
+
+
+bool Client2Client::PointQuerySigHelper(const proto::ForwardReadResult &fwdPointQueryResult, proto::ForwardPointQueryResultMessage &fwdPointQueryResultMsg) {
+  proto::Write write;
   uint64_t curr_client_id = fwdPointQueryResult.client_id();
   uint64_t curr_client_seq_num = fwdPointQueryResult.client_seq_num();
 
@@ -1843,7 +1874,6 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
         return false;
       }
     }
-    dep = fwdPointQueryResult.dep();
     write = fwdPointQueryResult.dep().write();
   }
   else {
@@ -1911,6 +1941,22 @@ bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardReadResul
     }
   }
 
+  //TODO: Change UW_ASSERT to just check & return false so client won't crash if it receives wrong value
+  if (!fwdPointQueryResult.has_dep()) {
+    if(fwdPointQueryResult.value().length() > 0) {
+      UW_ASSERT(write.key() == fwdPointQueryResult.key());
+      UW_ASSERT(write.committed_value() == fwdPointQueryResult.value());
+      if(params.sintr_params.hideTimestamps) {
+        UW_ASSERT(write.hashed_committed_ts() == fwdPointQueryResult.hashed_timestamp());
+      } else {
+        UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(write.committed_timestamp(), fwdPointQueryResult.timestamp()));
+      }
+    } 
+    // otherwise the write should be empty
+    else {
+      UW_ASSERT(!write.has_key());
+    }
+  }
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
