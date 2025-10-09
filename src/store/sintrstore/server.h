@@ -1385,7 +1385,6 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   //keep list of timeouts
   //std::unordered_map<std::string, std::chrono::high_resolution_clock::time_point> FBclient_timeouts;
   std::unordered_map<std::string, uint64_t> client_starttime;
-  std::unordered_map<std::string, std::vector<Timestamp>> policyTxnTS;
 
   //keep list for exponential timeouts for views.
   std::unordered_map<std::string, uint64_t> FBtimeouts_start; //Timer start time

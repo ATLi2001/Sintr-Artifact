@@ -1260,12 +1260,12 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
     abstain_conflict = preparedTxn;
     return proto::ConcurrencyControl::ABSTAIN;
   }
-  auto upperTSItr = std::upper_bound(policyTxnTS[policyId].begin(), policyTxnTS[policyId].end(), ts);
-  if(upperTSItr != policyTxnTS[policyId].end()) {
+  Timestamp upperTs;
+  if(policyStore.getUpperBound(policyId, ts, upperTs) && upperTs > ts) {
     // change to debug after testing
     Panic("[%s] ABSTAIN TS for committed policy %lu %lu > this txn's ts %lu.%lu.",
       BytesToHex(txnDigest, 16).c_str(),
-      upperTSItr->getTimestamp(), upperTSItr->getID(),
+      upperTs.getTimestamp(), upperTs.getID(),
       ts.getTimestamp(), ts.getID());
     stats.Increment("cc_abstains", 1);
     return proto::ConcurrencyControl::ABSTAIN;

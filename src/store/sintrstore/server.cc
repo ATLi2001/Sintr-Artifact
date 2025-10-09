@@ -550,7 +550,6 @@ void Server::LoadPolicyStore(const std::string &policyStorePath) {
     auto committedItr = committed.find("");
     UW_ASSERT(committedItr != committed.end());
     policyStoreValue.proof = committedItr->second;
-    policyTxnTS[p].push_back(Timestamp()); // add timestamp 0 to policies
     policyStore.put(p, policyStoreValue, Timestamp());
     policiesToFree.push_back(std::move(policy));
   }
@@ -2838,8 +2837,6 @@ void Server::CommitToStore(proto::CommittedProof *proof, proto::Transaction *txn
       // parse allocates a new policy so need to free it at end
       policiesToFree.push_back(std::move(policy));
       policyVal.proof = proof;
-      policyTxnTS[write.key()].push_back(ts); // add timestamp to policies
-      std::sort(policyTxnTS[write.key()].begin(), policyTxnTS[write.key()].end()); // okay to sort bc policy ID are infrequent.
       policyStore.put(write.key(), policyVal, ts);
       return;
     }
@@ -3280,28 +3277,6 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
 
       std::string policyId = policyIdFunction(read.key(), "");
-      const auto& timestamps = policyTxnTS[policyId];
-      Timestamp policyTS;
-      auto tsItr = std::upper_bound(timestamps.begin(), timestamps.end(), Timestamp(read.readtime()));
-      if(tsItr == timestamps.end()) {
-        // there is no policy committed after the read, get the latest policy TS
-        tsItr--;
-        policyTS = *tsItr;
-      } else if(tsItr != timestamps.begin()) {
-        // not the latest policy committed, is a safe value
-        continue;
-      } else {
-        // this should never happen...
-        Warning("Timestamp is %lu : %lu", read.readtime().timestamp(), read.readtime().id());
-        policyTS = *tsItr;
-        Panic("policy TS is %lu : %lu", policyTS.getTimestamp(), policyTS.getID());
-      }
-      std::pair<std::string, Timestamp> tsPair = make_pair(policyId, policyTS);
-      if(policyTSSet.find(tsPair) != policyTSSet.end()) {
-        continue;
-      } else {
-        policyTSSet.insert(tsPair);
-      }
       Debug(
         "Extracting policy %s at time %lu.%lu for read to key %s",
         policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
@@ -3310,6 +3285,17 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
       if(!policyStore.get(policyId, Timestamp(read.readtime()), tsPolicy)) {
         Panic("Policy store policyId %lu not in policystore", policyId);
+      }
+      std::pair<std::string, Timestamp> tsPair = make_pair(policyId, tsPolicy.first);
+      if(policyTSSet.find(tsPair) != policyTSSet.end()) {
+        continue;
+      } else {
+        policyTSSet.insert(tsPair);
+      }
+      Timestamp upperTs;
+      if(policyStore.getUpperBound(policyId, Timestamp(read.readtime()), upperTs) && upperTs > read.readtime()) {
+        // value is safe, continue
+        continue;
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
         Debug(
