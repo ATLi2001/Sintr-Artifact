@@ -810,7 +810,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
 
     std::vector<uint64_t> involved_groups = {target_group};
     pendingQuery->SetInvolvedGroups(involved_groups);
-    Debug("[group %i] designated as Query Execution Manager for query [%lu:%lu]", pendingQuery->queryMsg.query_manager(), client_seq_num, query_seq_num);
+    Debug("[group %i] designated as Query Execution Manager for query [%lu:%lu]", pendingQuery->queryMsg->query_manager(), client_seq_num, query_seq_num);
     pendingQuery->SetQueryId(this);
 
    
@@ -859,7 +859,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
     // Send the Query operation to involved shards & select transaction manager (shard responsible for result reply) 
     for(auto &i: pendingQuery->involved_groups){
       Debug("[group %i] starting Query [%lu:%lu]", i, client_seq_num, query_seq_num);
-      bclient[i]->Query(client_seq_num, query_seq_num, pendingQuery->queryMsg, timeout, rtcb, rcb, prcb, pendingQuery->is_point, &pendingQuery->table_name, &pendingQuery->key);
+      bclient[i]->Query(client_seq_num, query_seq_num, *(pendingQuery->queryMsg), timeout, rtcb, rcb, prcb, pendingQuery->is_point, &pendingQuery->table_name, &pendingQuery->key);
     }
     // Shard Client upcalls only if it is the leader for the query, and if it gets matching result hashes  ..........const std::string &resultHash
        //store QueryID + result hash in transaction.
@@ -883,7 +883,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     uint64_t query_end_ms = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
     
     //Should not take more than 1 ms (already generous) to parse and prepare.
-    auto duration = query_end_ms - query_start_times[pendingQuery->queryMsg.query_seq_num()];    //TODO: Store query_start_ms in some map.Look it up via query seq num!.
+    auto duration = query_end_ms - query_start_times[pendingQuery->queryMsg->query_seq_num()];    //TODO: Store query_start_ms in some map.Look it up via query seq num!.
     // Warning("Query[%d] exec latency in ms [%d]. in us [%d]", pendingQuery->queryMsg.query_seq_num(), duration/1000, duration);
     // if(duration > 20000) Warning("PointQuery exec exceeded 20ms");
     // query_time_us.add(duration);
@@ -932,7 +932,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
   Debug("Result size: %d. Result rows affected: %d", q_result->size(), q_result->rows_affected());
 
   if(TEST_READ_SET){
-    Debug("Print result for query: %s", pendingQuery->queryMsg.query_cmd().c_str());
+    Debug("Print result for query: %s", pendingQuery->queryMsg->query_cmd().c_str());
     for(int i = 0; i < q_result->size(); ++i){
       std::unique_ptr<query_result::Row> row = (*q_result)[i]; 
       Debug("Checking row at index: %d", i);
@@ -950,13 +950,13 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
   //Cache point read results. This can help optimize common point Select + point Update patterns.
   if(!result.empty()){ //only cache if we did find a row.
     //Only cache if we did a Select *, i.e. we have the full row, and thus it can be used by Update.
-    if(size_t pos = pendingQuery->queryMsg.query_cmd().find("SELECT *"); pos != std::string::npos) point_read_cache[key] = result;
+    if(size_t pos = pendingQuery->queryMsg->query_cmd().find("SELECT *"); pos != std::string::npos) point_read_cache[key] = result;
   } 
 
   stats.Increment("PointQuerySuccess", 1);
   pendingQuery->qcb(REPLY_OK, q_result); //callback to application (or write cont)
   
-  pendingQueries.erase(pendingQuery->queryMsg.query_seq_num());
+  pendingQueries.erase(pendingQuery->queryMsg->query_seq_num());
   delete pendingQuery;  //For Point Queries can delete immediately;
   //clean pendingQuery and query_seq_num_mapping in all shards. ==> Not necessary here: Already happens in HandlePointQuery
   //ClearQuery(pendingQuery);     
@@ -977,7 +977,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     uint64_t query_end_ms = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
     
     //Should not take more than 1 ms (already generous) to parse and prepare.
-    auto duration = query_end_ms - query_start_times[pendingQuery->queryMsg.query_seq_num()]; ;
+    auto duration = query_end_ms - query_start_times[pendingQuery->queryMsg->query_seq_num()]; ;
     //Warning("Query[%d] exec latency in ms [%d]. in us [%d]", pendingQuery->queryMsg.query_seq_num(), duration/1000, duration);
     // query_time_us.add(duration);
   }
@@ -999,13 +999,13 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       delete sig;
     }
     delete query_sigs;
-    Debug("[group %i] Reported failure for QuerySync [seq : ver] [%lu : %lu] \n", group, pendingQuery->queryMsg.query_seq_num(), pendingQuery->version);
+    Debug("[group %i] Reported failure for QuerySync [seq : ver] [%lu : %lu] \n", group, pendingQuery->queryMsg->query_seq_num(), pendingQuery->version);
     RetryQuery(pendingQuery);
     return;
   }      
   
 
-  Debug("[group %i] Reported success for QuerySync [seq : ver] [%lu : %lu] \n", group, pendingQuery->queryMsg.query_seq_num(), pendingQuery->version);
+  Debug("[group %i] Reported success for QuerySync [seq : ver] [%lu : %lu] \n", group, pendingQuery->queryMsg->query_seq_num(), pendingQuery->version);
   pendingQuery->group_replies++;
 
   if(params.query_params.cacheReadSet){ 
@@ -1024,7 +1024,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
   if(pendingQuery->involved_groups.size() != pendingQuery->group_replies) return;
 
   
-  Debug("Received all required group replies for QuerySync[%lu:%lu] (seq:ver). UPCALLING \n", group, pendingQuery->queryMsg.query_seq_num(), pendingQuery->version);
+  Debug("Received all required group replies for QuerySync[%lu:%lu] (seq:ver). UPCALLING \n", group, pendingQuery->queryMsg->query_seq_num(), pendingQuery->version);
 
   //just for testing
   if(TEST_READ_SET) TestReadSet(pendingQuery);
@@ -1146,7 +1146,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
   if(TEST_READ_SET){
     int num_rows = std::min((int) q_result->size(), 10);
-    Debug("Print result for query: %s", pendingQuery->queryMsg.query_cmd().c_str());
+    Debug("Print result for query: %s", pendingQuery->queryMsg->query_cmd().c_str());
     Debug("Printing first %d rows.", num_rows);
     for(int i = 0; i < num_rows; ++i){
       std::unique_ptr<query_result::Row> row = (*q_result)[i]; 
@@ -1163,10 +1163,10 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
 
   if(!q_result->empty() && (pendingQuery->cache_result || FORCE_SCAN_CACHING)){ //only cache if we did find a row.
-     Debug("Caching result for query: %s", pendingQuery->queryMsg.query_cmd().c_str());
+     Debug("Caching result for query: %s", pendingQuery->queryMsg->query_cmd().c_str());
         //Only cache if we did a Select *, i.e. we have the full row, and thus it can be used by Update.
-      if(size_t pos = pendingQuery->queryMsg.query_cmd().find("SELECT *"); pos != std::string::npos){
-            scan_read_cache[pendingQuery->queryMsg.query_cmd()] = pendingQuery->result;  
+      if(size_t pos = pendingQuery->queryMsg->query_cmd().find("SELECT *"); pos != std::string::npos){
+            scan_read_cache[pendingQuery->queryMsg->query_cmd()] = pendingQuery->result;  
       }
   }
 
@@ -1185,7 +1185,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
       }
 
         //Only cache if we did a Select *, i.e. we have the full row, and thus it can be used by Update.
-      if(size_t pos = pendingQuery->queryMsg.query_cmd().find("SELECT *"); pos != std::string::npos){
+      if(size_t pos = pendingQuery->queryMsg->query_cmd().find("SELECT *"); pos != std::string::npos){
 
           bool is_point_res = result.size() == 1; //TODO: In this case technically don't need to build new result.
 
@@ -1272,7 +1272,7 @@ void Client::ClearTxnQueries(){
 
 void Client::ClearQuery(PendingQuery *pendingQuery){
   for(auto &g: pendingQuery->involved_groups){
-    bclient[g]->ClearQuery(pendingQuery->queryMsg.query_seq_num()); //-->Remove mapping + pendingRequest.
+    bclient[g]->ClearQuery(pendingQuery->queryMsg->query_seq_num()); //-->Remove mapping + pendingRequest.
   }
 
   //pendingQueries.erase(pendingQuery->queryMsg.query_seq_num()); Don't delete early..
@@ -1282,7 +1282,7 @@ void Client::ClearQuery(PendingQuery *pendingQuery){
 void Client::RetryQuery(PendingQuery *pendingQuery){
 
   if(params.query_params.retryLimit > -1 && pendingQuery->version >= params.query_params.retryLimit){
-    Warning("Exceeded Retry Limit for Query[%lu:%lu:%lu]. Limit: %d", client_id, pendingQuery->queryMsg.query_seq_num(), pendingQuery->version, params.query_params.retryLimit);
+    Warning("Exceeded Retry Limit for Query[%lu:%lu:%lu]. Limit: %d", client_id, pendingQuery->queryMsg->query_seq_num(), pendingQuery->version, params.query_params.retryLimit);
     stats.Increment("Exceeded_Retry_Limit");
     //throw std::runtime_error("Exceeded Retry Limit"); //Application will catch exception and turn it into a SystemAbort
 
@@ -1305,21 +1305,21 @@ void Client::RetryQuery(PendingQuery *pendingQuery){
   
   pendingQuery->version++;
   pendingQuery->group_replies = 0;
-  pendingQuery->queryMsg.set_retry_version(pendingQuery->version);
+  pendingQuery->queryMsg->set_retry_version(pendingQuery->version);
   pendingQuery->ClearReplySets();
 
   for(auto &g: pendingQuery->involved_groups){
     if(pendingQuery->is_point){
       stats.Increment("eager_point_fail", 1);
       pendingQuery->key = EncodeTableRow(pendingQuery->table_name, pendingQuery->p_col_values);
-      bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg, true, std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
+      bclient[g]->RetryQuery(pendingQuery->queryMsg->query_seq_num(), *pendingQuery->queryMsg, true, std::bind(&Client::PointQueryResultCallback, this, pendingQuery,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
                      std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
                      std::placeholders::_12));
     } 
     else{
-      bclient[g]->RetryQuery(pendingQuery->queryMsg.query_seq_num(), pendingQuery->queryMsg); //--> Retry Query, shard clients already have the rcb.
+      bclient[g]->RetryQuery(pendingQuery->queryMsg->query_seq_num(), *pendingQuery->queryMsg); //--> Retry Query, shard clients already have the rcb.
     }
   }
 
