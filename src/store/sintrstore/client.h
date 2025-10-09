@@ -151,17 +151,18 @@ class Client : public ::Client {
 
   struct PendingQuery {
     PendingQuery(Client *client, uint64_t query_seq_num, const std::string &query_cmd, const query_callback &qcb, bool cache_result) : version(0UL), group_replies(0UL), qcb(qcb), cache_result(cache_result){
-      queryMsg.Clear();
-      queryMsg.set_client_id(client->client_id);
-      queryMsg.set_query_seq_num(query_seq_num);
-      *queryMsg.mutable_query_cmd() = std::move(query_cmd);
-      *queryMsg.mutable_timestamp() = client->txn.timestamp();
-      queryMsg.set_retry_version(0);
+      queryMsg = std::make_unique<proto::Query>();
+      queryMsg->Clear();
+      queryMsg->set_client_id(client->client_id);
+      queryMsg->set_query_seq_num(query_seq_num);
+      *queryMsg->mutable_query_cmd() = std::move(query_cmd);
+      *queryMsg->mutable_timestamp() = client->txn.timestamp();
+      queryMsg->set_retry_version(0);
       if(client->params.sintr_params.hideTimestamps) {
-        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(),
+        query_gen_id = QueryGenId(queryMsg->query_cmd(), queryMsg->timestamp(),
           TimestampDigest(client->txn.timestamp()), client->params.sintr_params.hashQueryGenId);
       } else {
-        query_gen_id = QueryGenId(queryMsg.query_cmd(), queryMsg.timestamp(), "", client->params.sintr_params.hashQueryGenId);
+        query_gen_id = QueryGenId(queryMsg->query_cmd(), queryMsg->timestamp(), "", client->params.sintr_params.hashQueryGenId);
       }
 
       group_sigs = new std::map<uint64_t, std::vector<proto::SignedMessage *>>();
@@ -188,12 +189,12 @@ class Client : public ::Client {
 
    void SetInvolvedGroups(std::vector<uint64_t> &involved_groups_){
       involved_groups = std::move(involved_groups_);
-      queryMsg.set_query_manager(involved_groups[0]);
+      queryMsg->set_query_manager(involved_groups[0]);
     }
 
     void SetQueryId(Client *client){
       bool hash_query_id = client->params.query_params.signClientQueries && client->params.query_params.cacheReadSet && client->params.hashDigest;
-      queryId = QueryDigest(queryMsg, hash_query_id); 
+      queryId = QueryDigest(*queryMsg, hash_query_id); 
 
       // if(client->params.query_params.signClientQueries && client->params.query_params.cacheReadSet){ //TODO: when to use hash id? always?
       //     queryId = QueryDigest(queryMsg, client->params.hashDigest); 
@@ -210,7 +211,7 @@ class Client : public ::Client {
 
     std::string query_gen_id;
 
-    proto::Query queryMsg;
+    std::unique_ptr<proto::Query> queryMsg;
     
     std::vector<uint64_t> involved_groups;
     //std::map<uint64_t, std::map<std::string, TimestampMessage>> group_read_sets;
