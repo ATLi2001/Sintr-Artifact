@@ -926,7 +926,7 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
           Panic("Failed to enable bufferevent");
         }
     } else if (what & BEV_EVENT_ERROR) {
-        Warning("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
+        Debug("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
                 info->groupIdx, info->replicaIdx,
                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         bufferevent_free(bev);
