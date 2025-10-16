@@ -141,6 +141,26 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
       shard->WarmupDone();
     }
   });
+  if(params.sintr_params.conflictByzantine && client_id == 1) {
+    auto f = [this](proto::Transaction txn) {
+      this->transport->Timer(0, [this, txn]() {
+        client_seq_num++;
+        endorseClient->SetClientSeqNum(client_seq_num);
+        PendingRequest *req = new PendingRequest(client_seq_num, this);
+        pendingReqs[client_seq_num] = req;
+        this->txn = txn;
+        this->txn.set_client_id(client_id);
+        this->txn.set_client_seq_num(client_seq_num);
+        req->txnDigest = TransactionDigest(this->txn, this->params.hashDigest, this->params.sintr_params.hideTimestamps, this->params.sintr_params.hashEndorsements);
+        endorseClient->SetExpectedTxnDigest(req->txnDigest);
+        req->callbackInvoked = true; // prevent commit callback
+        req->timeout = 5000;
+        this->Phase1(req);
+      });
+      return (void*) true;
+    };
+    c2client->setConflictCB(std::move(f));
+  }
 }
 
 Client::~Client()
@@ -2116,7 +2136,9 @@ void Client::Writeback(PendingRequest *req) {
       stats.Increment("total_abort_honest", 1);
       //result = ABORTED_USER;
     }
-    req->ccb(result);
+    if(!req->callbackInvoked) {
+      req->ccb(result);
+    }
     req->callbackInvoked = true;
   }
   //XXX use StopP1 to shortcircuit all shard clients
@@ -2127,6 +2149,9 @@ void Client::Writeback(PendingRequest *req) {
   ClearTxnQueries();
   this->pendingReqs.erase(req->id);
   delete req;
+  if(params.sintr_params.conflictByzantine && client_id == 1) {
+    c2client->setConflictBool(false);
+  }
 }
 
 bool Client::IsParticipant(int g) const {

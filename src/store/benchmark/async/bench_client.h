@@ -60,6 +60,7 @@ class BenchmarkClient {
   bool cooldownStarted;
   int tputInterval;
   std::vector<uint64_t> latencies;
+  bool sendNext = true;
 
   inline const Stats &GetStats() const { return stats; }
  protected:

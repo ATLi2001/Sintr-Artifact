@@ -499,6 +499,7 @@ DEFINE_bool(sintr_parallel_query_sigs_check, false, "parallelize query signature
 DEFINE_bool(sintr_blind_write_message, false, "send a blind write message to validating clients");
 DEFINE_bool(sintr_sort_writeset, true, "sort write set in order to get endorsement matches");
 DEFINE_bool(sintr_profile_one_client_load, false, "profiling with only one client load (other clients are validating only)");
+DEFINE_bool(sintr_conflict_byzantine, false, "byzantine client purposefully conflicts with correct client");
 DEFINE_uint32(sintr_max_client_sig_check_threads, 0, "maximum number of parallel client threads for signature checks");
 
 // if sintr client has choice of which clients to contact, define the selection heuristic
@@ -1763,7 +1764,8 @@ int main(int argc, char **argv) {
       FLAGS_sintr_separate_transport,
       FLAGS_sintr_max_clients_connect,
       FLAGS_sintr_use_endorsement_cb,
-      sintrFailure
+      sintrFailure,
+      FLAGS_sintr_conflict_byzantine
     );
 
     switch (mode) {
@@ -2258,16 +2260,18 @@ int main(int argc, char **argv) {
         UW_ASSERT(syncBench != nullptr);
         // for profiling sintr isolate one client as executing and other as validating only
         bool skip = FLAGS_sintr_profile_one_client_load && (mode == PROTO_SINTR) && (clientId > 0);
-        threads.push_back(new std::thread([syncBench, bdcb, skip](){
+        bool skip2 = FLAGS_sintr_conflict_byzantine && (mode == PROTO_SINTR) && (clientId == 1);
+        syncBench->sendNext = !skip2;
+        threads.push_back(new std::thread([syncBench, bdcb, skip, skip2](){
             syncBench->Start([](){});
             while (!syncBench->IsFullyDone()) {
               syncBench->StartLatency();
-              if (!skip) {
+              if (!skip && !skip2) {
                 transaction_status_t result;
                 syncBench->SendNext(&result);
                 syncBench->IncrementSent(result);
               }
-              else {
+              else if(!skip2) {
                 syncBench->IncrementSent(1);
               }
             }

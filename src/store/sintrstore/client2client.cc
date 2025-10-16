@@ -1315,6 +1315,9 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
     Debug("hashed TS validation: %s", BytesToHex(hashed_ts, 16).c_str());
   } else {
     ts = beginValTxn.timestamp();
+    if(params.sintr_params.conflictByzantine && client_id == 1) {
+      originalTxnTS = ts;
+    }
   }
   Debug(
     "HandleBeginValidateTxnMessage: from client id %lu, seq num %lu", 
@@ -1366,6 +1369,28 @@ void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::
 
   uint64_t curr_client_id = fwdReadResult->client_id();
   uint64_t curr_client_seq_num = fwdReadResult->client_seq_num();
+  if(params.sintr_params.conflictByzantine && client_id == 1) {
+    std::unique_lock lk(conflictMutex);
+    if(!conflictStarted && conflictcb != nullptr && conflict_seq_num < curr_client_seq_num) {
+      Debug("Starting conflict txn");
+      conflict_seq_num = curr_client_seq_num; // only 1 conflicting txn per txn
+      conflictStarted = true;
+      proto::Transaction txn = proto::Transaction();
+      txn.add_involved_groups(0); // assume only one shard for all keys...
+      txn.mutable_timestamp()->set_id(client_id);
+      uint64_t base_ts = originalTxnTS.getTimestamp();
+      uint64_t time_mask = 0xFFF;
+
+      uint64_t second_valid_ts = ((base_ts >> 12) + 2) << 12;
+      txn.mutable_timestamp()->set_timestamp(second_valid_ts);
+      ReadMessage *read = txn.add_read_set();
+      read->set_key(fwdReadResult->key());
+      read->mutable_readtime()->set_timestamp(fwdReadResult->timestamp().timestamp());
+      read->mutable_readtime()->set_id(fwdReadResult->timestamp().id());
+      conflictcb(txn);
+    }
+    lk.unlock();
+  }
 
 
   bool addReadset = fwdReadResult->add_readset();
@@ -2435,6 +2460,16 @@ void Client2Client::setEndorsementCB(std::function<void*(void)> ecb) {
   } else {
     this->ecb = std::move(ecb);
   }
+}
+
+void Client2Client::setConflictCB(std::function<void*(proto::Transaction)> conflictCB) {
+  this->conflictcb = std::move(conflictCB);
+}
+
+void Client2Client::setConflictBool(bool conflict) {
+  std::unique_lock lk(conflictMutex);
+  conflictStarted = conflict;
+  lk.unlock();
 }
 
 } // namespace sintrstore

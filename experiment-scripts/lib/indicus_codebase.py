@@ -215,6 +215,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_failure_type %s' % config['sintr_protocol_settings']['sintr_failure_type']
             if 'sintr_byz_client_total' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_byz_client_total %d' % config['sintr_protocol_settings']['sintr_byz_client_total']
+            if 'sintr_conflict_byzantine' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_conflict_byzantine=%s' % str(config['sintr_protocol_settings']['sintr_conflict_byzantine']).lower()
 
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':

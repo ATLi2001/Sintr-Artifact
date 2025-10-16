@@ -85,7 +85,9 @@ void BenchmarkClient::Start(bench_done_callback bdcb) {
 				this));
   }
   Latency_Start(&latency);
-  SendNext();
+  if(sendNext) {
+    SendNext();
+  }
 }
 
 void BenchmarkClient::TimeInterval() {

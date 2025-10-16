@@ -118,6 +118,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   }
 
   void setEndorsementCB(std::function<void*(void)> ecb);
+  void setConflictCB(std::function<void*(proto::Transaction)> conflictCB);
+  void setConflictBool(bool conflict);
 
  private:
 
@@ -438,8 +440,13 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   std::mutex tcpMutex;
   bool sendDone;
   bool replyDone;
+  bool conflictStarted = false;
+  std::mutex conflictMutex;
+  uint64_t conflict_seq_num = 0;
+  Timestamp originalTxnTS;
 
   std::function<void*(void)> ecb = nullptr; // only need one endorsement callback because client is closed loop
+  std::function<void*(proto::Transaction)> conflictcb = nullptr;
 };
 
 } // namespace sintrstore

@@ -43,19 +43,23 @@ ANALYSIS_TYPES = [
     "overheads_lat_grouped_bar",
     "throughput_time",
     "client_failures",
+    "byz_interference"
 ]
 
 # the original stats directory should have subdirectories, each corresponding to a single experiment run
 # each subdirectory should have a stats.json file and a config json file, and potentially a logs directory
 # read these files and generate csvs with the data
-def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_csv=True, save_logs_csv=True):
+def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_csv=True, save_logs_csv=True, save_client_stats_csv=True):
     overall_stats_df = pd.DataFrame(columns=["experiment_name", "num_clients", "timestamp", "tput", "latency"])
+    client_stats_rows = []
 
     # for logs, more efficient to use list to collect data, then create dataframe
     data_rows = []
     byz_data_rows = []
 
     total_recorded_time = 0
+    byz_interference = False
+
     for subdir in os.listdir(original_stats_dir):
         subdir_path = os.path.join(original_stats_dir, subdir)
 
@@ -65,22 +69,49 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
         for file in os.listdir(subdir_path):
             # read in config file
             if file != "stats.json" and file.endswith(".json"):
-                analysis_name, num_clients, num_byz_clients, total_recorded_time = parse_config_file(os.path.join(subdir_path, file))
+                analysis_name, num_clients, num_byz_clients, total_recorded_time, byz_interference = parse_config_file(os.path.join(subdir_path, file))
 
         tput, latency = parse_stats_json(os.path.join(subdir_path, "stats.json"))
         if tput is None or latency is None:
-            continue
+            if byz_interference:
+                overall_stats_df.loc[len(overall_stats_df)] = [analysis_name, num_clients, subdir, 0, 0]
+            else:
+                print("Continuing")
+                continue
+        if not byz_interference:
+            overall_stats_df.loc[len(overall_stats_df)] = [analysis_name, num_clients, subdir, tput, latency]
 
-        overall_stats_df.loc[len(overall_stats_df)] = [analysis_name, num_clients, subdir, tput, latency]
-        
         # Process log files
         logs_dir = os.path.join(subdir_path, "logs")
-        if not os.path.exists(logs_dir):
-            continue
-        log_data_rows, byz_log_data_rows = parse_logs_dir(logs_dir, analysis_name, num_clients, num_byz_clients, subdir)
+        if os.path.exists(logs_dir):
+            log_data_rows, byz_log_data_rows = parse_logs_dir(logs_dir, analysis_name, num_clients, num_byz_clients, subdir)
+            data_rows.extend(log_data_rows)
+            byz_data_rows.extend(byz_log_data_rows)
 
-        data_rows.extend(log_data_rows)
-        byz_data_rows.extend(byz_log_data_rows)
+        # Process client_stats if present
+        client_stats_dir = os.path.join(subdir_path, "client_stats")
+        if os.path.exists(client_stats_dir):
+            for stats_file in os.listdir(client_stats_dir):
+                if not stats_file.endswith(".json") or "client-1" in stats_file:
+                    continue
+
+                stats_path = os.path.join(client_stats_dir, stats_file)
+                try:
+                    with open(stats_path, "r") as f:
+                        stats = json.load(f)
+
+                    committed = stats.get("rw_sync_committed", 0)
+                    attempts = stats.get("rw_sync_attempts", 0)
+                    aborted = stats.get("total_abort_honest", attempts - committed)
+
+                    client_stats_rows.append({
+                        "experiment_name": analysis_name,
+                        "client_committed": committed,
+                        "client_aborted": aborted
+                    })
+
+                except Exception as e:
+                    print(f"Error reading {stats_path}: {e}")
 
     # sort by experiment name and number of clients
     overall_stats_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
@@ -112,9 +143,17 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
     byz_logs_df["commit_timestamp_ns"] = pd.to_numeric(byz_logs_df["commit_timestamp_ns"], errors="coerce")
     byz_logs_df["latency_ns"] = pd.to_numeric(byz_logs_df["latency_ns"], errors="coerce")
     if len(byz_data_rows) > 0 and save_logs_csv:
-        byz_logs_df.to_csv(os.path.join(output_dir, f"logs-{now_string}-byz.csv"), index=False)
+        byz_logs_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}-byz.csv"), index=False)
 
-    return overall_stats_df, logs_df, byz_logs_df, total_recorded_time
+    # Client stats DataFrame
+    client_stats_df = pd.DataFrame(client_stats_rows, columns=[
+        "experiment_name", "client_aborted", "client_committed"
+    ])
+
+    if len(client_stats_rows) > 0 and save_client_stats_csv:
+        client_stats_df.to_csv(os.path.join(output_dir, f"client-abort-{now_string}.csv"), index=False)
+
+    return overall_stats_df, logs_df, byz_logs_df, total_recorded_time, client_stats_df
 
 # extract information from config json
 def parse_config_file(config_path):
@@ -122,6 +161,7 @@ def parse_config_file(config_path):
     analysis_name = None
     num_clients = 0
     num_byz_clients = 0
+    byz_interference = False
     with open(config_path, "r") as config_file:
         config = json.load(config_file)
 
@@ -137,8 +177,10 @@ def parse_config_file(config_path):
             num_byz_clients = config["sintr_protocol_settings"]["sintr_byz_client_total"]
 
         total_recorded_time = float(config["client_experiment_length"] - config["client_ramp_up"] - config["client_ramp_down"])
+        if "sintr_protocol_settings" in config and "sintr_conflict_byzantine" in config["sintr_protocol_settings"]:
+            byz_interference = config["sintr_protocol_settings"]["sintr_conflict_byzantine"]
 
-    return analysis_name, num_clients, num_byz_clients, total_recorded_time
+    return analysis_name, num_clients, num_byz_clients, total_recorded_time, byz_interference
 
 # return mean throughput and latency from stats.json file
 def parse_stats_json(stats_json_path):
@@ -568,6 +610,58 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
     plt.close()
 
+def create_client_commit_abort_plot(client_stats_df, output_dir, now_string):
+    """
+    Creates a grouped bar plot for committed and aborted transactions per experiment.
+    Saves the plot using ANALYSIS_TYPES[7].
+
+    Parameters:
+        client_stats_df (pd.DataFrame): DataFrame with columns 
+            ['experiment_name', 'client_aborted', 'client_committed']
+        output_dir (str): Path to save the plot.
+        now_string (str): Timestamp string to use in filename.
+    """
+    if client_stats_df.empty:
+        print("No client stats to plot.")
+        return
+
+    # Aggregate in case there are multiple entries per experiment
+    agg_df = client_stats_df.groupby("experiment_name", as_index=False).mean()
+
+    fig, ax = plt.subplots(layout="constrained", figsize=(12, 6))
+
+    x = np.arange(len(agg_df))  # positions for each experiment
+    width = 0.35
+
+    bars1 = ax.bar(x - width/2, agg_df["client_committed"], width, label="Committed", color="green")
+    bars2 = ax.bar(x + width/2, agg_df["client_aborted"], width, label="Aborted", color="red")
+
+    ax.set_xlabel("Experiment Name")
+    ax.set_ylabel("Average Transactions for Client 1")
+    ax.set_title("Average Committed vs Aborted Transactions per Experiment")
+    ax.set_xticks(x)
+    ax.set_xticklabels(agg_df["experiment_name"], rotation=45, ha="right")
+    ax.grid(True, axis='y')
+
+    # Add legend outside plot
+    fig.legend(loc="outside lower center", ncol=2)
+
+    # Annotate bar values
+    for bar in bars1 + bars2:
+        height = bar.get_height()
+        ax.annotate(f'{int(height)}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom', fontsize=8)
+
+    # Adjust y-limits slightly
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] + 10)
+
+    # Save plot
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[7]}-{now_string}.png"))
+    plt.close()
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -634,7 +728,7 @@ if __name__ == "__main__":
     if args.logs:
         logs_df = pd.read_csv(args.logs)
     if not args.csv and not args.logs:
-        df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
+        df, logs_df, byz_logs_df, total_recorded_time, byz_interference_df = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
         create_lat_tput_plots(df, args.output_plot_dir, now_string)
@@ -650,3 +744,6 @@ if __name__ == "__main__":
         client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
         byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
+    elif args.analysis_type == ANALYSIS_TYPES[7]:
+        create_client_commit_abort_plot(byz_interference_df, args.output_plot_dir, now_string)
+        
