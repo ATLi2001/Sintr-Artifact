@@ -96,14 +96,27 @@ int ORPolicy::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
     return 0;
   }
 
-  size_t satisfied_count = 0;
-  for (const auto &client_id : client_ids) {
-    if (endorsements.find(client_id) != endorsements.end()) {
-      satisfied_count++;
+  bool satisfied = false;
+  bool has_extra_endorsement = false;
+
+  for (const auto &endorser : endorsements) {
+    if (client_ids.find(endorser) != client_ids.end()) {
+      satisfied = true;
+    } else {
+      has_extra_endorsement = true;
+    }
+
+    // Early return if both conditions are already met
+    if (satisfied && has_extra_endorsement) {
+      return 1;
     }
   }
 
-  return satisfied_count - 1; // returns 0 if at least one satisfied
+  if (!satisfied) {
+    return -1;
+  }
+
+  return 0;
 }
 
 void ORPolicy::MergePolicy(const Policy *other) {
