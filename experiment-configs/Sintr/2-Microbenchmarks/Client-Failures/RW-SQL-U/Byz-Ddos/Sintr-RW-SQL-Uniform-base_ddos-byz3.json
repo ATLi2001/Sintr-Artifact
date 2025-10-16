@@ -173,7 +173,7 @@
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false,
-    "sintr_failure_type": "ddos-validation",
+    "sintr_failure_type": "request-extra-validation",
     "sintr_byz_client_total": 3
   },
   "experiment_name": "sintr",

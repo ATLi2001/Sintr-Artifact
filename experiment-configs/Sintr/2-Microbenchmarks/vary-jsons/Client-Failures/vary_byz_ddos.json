@@ -25,7 +25,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "ddos-validation",
+      "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 1
     },
     "client_total": [[12]],
@@ -43,7 +43,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "ddos-validation",
+      "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 2
     },
     "client_total": [[12]],
@@ -61,7 +61,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "ddos-validation",
+      "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 3
     },
     "client_total": [[12]],
@@ -79,7 +79,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "ddos-validation",
+      "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 4
     },
     "client_total": [[12]],
@@ -97,7 +97,7 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
-      "sintr_failure_type": "ddos-validation",
+      "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 5
     },
     "client_total": [[12]],
