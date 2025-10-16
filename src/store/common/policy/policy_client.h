@@ -45,6 +45,7 @@ class PolicyClient {
   bool IsSatisfied(const std::set<uint64_t> &endorsements) const;
   // add a policy to the current transaction policies
   void AddPolicy(const Policy *other);
+  int IsSatisfiedInt(const std::set<uint64_t> &endorsements) const;
   // what client ids does potentialEndorsements need to get this policy satisfied?
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const;
   // is this policy implied by other?

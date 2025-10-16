@@ -81,6 +81,19 @@ bool ANDPolicy::IsSatisfied(const std::set<uint64_t> &endorsements) const {
   );
 }
 
+int ANDPolicy::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
+  if (!std::includes(endorsements.begin(), endorsements.end(), client_ids.begin(), client_ids.end())) {
+    return -1;
+  }
+
+  // Check if the endorsement count exactly matches the number of client_ids
+  if (endorsements.size() == client_ids.size()) {
+    return 0; // Exactly enough
+  }
+
+  return 1; // More than enough
+} 
+
 void ANDPolicy::MergePolicy(const Policy *other) {
   UW_ASSERT(other != nullptr);
   UW_ASSERT(type == other->Type());

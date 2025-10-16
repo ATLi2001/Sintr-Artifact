@@ -90,6 +90,22 @@ bool ORPolicy::IsSatisfied(const std::set<uint64_t> &endorsements) const {
   return false;
 }
 
+int ORPolicy::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
+  // empty OR policy is satisfied by any endorsements
+  if (client_ids.empty()) {
+    return 0;
+  }
+
+  size_t satisfied_count = 0;
+  for (const auto &client_id : client_ids) {
+    if (endorsements.find(client_id) != endorsements.end()) {
+      satisfied_count++;
+    }
+  }
+
+  return satisfied_count - 1; // returns 0 if at least one satisfied
+}
+
 void ORPolicy::MergePolicy(const Policy *other) {
   UW_ASSERT(other != nullptr);
   UW_ASSERT(type == other->Type());

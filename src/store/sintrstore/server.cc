@@ -1615,7 +1615,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 //TODO: move p1Decision into this function (not sendp1: Then, can unlock here.)
 void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result result,
   const proto::CommittedProof* &committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote, 
-  const proto::Transaction *abstain_conflict, bool isGossip, bool forceMaterialize, bool failEndorsementCheck){
+  const proto::Transaction *abstain_conflict, bool isGossip, bool forceMaterialize, bool failEndorsementCheck, bool tooManyEndorsements){
 
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
@@ -1635,7 +1635,7 @@ void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result re
   bool send_reply = (result != proto::ConcurrencyControl::WAIT && !isGossip) || sub_original; //Note: sub_original = true only if originall subbed AND result != wait.
   if(send_reply){ //Send reply to subscribed original client instead.
      Debug("Sending P1Reply for txn [%s] to original client. sub_original=%d, isGossip=%d", BytesToHex(txnDigest, 16).c_str(), sub_original, isGossip);
-     SendPhase1Reply(reqId, result, committedProof, txnDigest, remote_original, abstain_conflict, failEndorsementCheck);
+     SendPhase1Reply(reqId, result, committedProof, txnDigest, remote_original, abstain_conflict, failEndorsementCheck, tooManyEndorsements);
   }
   c.release();
   //Note: wake_fallbacks only true if result != wait
@@ -1662,7 +1662,7 @@ void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result re
 void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result result,
                              const proto::CommittedProof *conflict, const std::string &txnDigest,
                              const TransportAddress *remote, const proto::Transaction *abstain_conflict,
-                            bool failEndorsementCheck) {
+                            bool failEndorsementCheck, bool tooManyEndorsements) {
 
   Debug("Normal sending P1 result:[%d] for txn: %s", result, BytesToHex(txnDigest, 16).c_str());
   // BufferP1Result(result, conflict, txnDigest);
@@ -1703,6 +1703,9 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
   if(failEndorsementCheck) {
     stats.Increment("failed_endorsement_check", 1);
     phase1Reply->set_insufficient_endorsements(failEndorsementCheck);
+  }
+  if(tooManyEndorsements) {
+    phase1Reply->set_too_many_endorsements(true);
   }
   phase1Reply->mutable_cc()->set_ccr(result);
   if (params.validateProofs) {
@@ -3168,7 +3171,7 @@ void Server::GetPolicy(const std::string &policyId, const Timestamp &ts,
   }
 }
 
-bool Server::EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn) {
+int Server::EndorsementCheck(const std::string &txnDigest, const proto::Transaction *txn) {
   // if (extract_policy_us.count > 0 && extract_policy_us.count % 2000 == 0) {
   //   std::cerr << "Mean extract policy latency: " << extract_policy_us.mean() << std::endl;
   //   std::cerr << "Mean validate endorsements latency: " << validate_endorsements_us.mean() << std::endl;
@@ -3316,7 +3319,7 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
   return true;
 }
 
-bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
+int Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
     uint64_t client_id, const std::string &txnDigest) {
 
   // client initiating txn is always an endorser
@@ -3338,7 +3341,7 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
   }
 
   // check if endorsers satisfy policy
-  return policyClient.IsSatisfied(endorsers);
+  return policyClient.IsSatisfiedInt(endorsers);
 }
 
 void Server::ValidateEndorsements(AsyncValidatePrepare &asyncValidatePrepare, const proto::SignedMessages *endorsements, 

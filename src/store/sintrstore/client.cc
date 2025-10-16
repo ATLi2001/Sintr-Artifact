@@ -1361,7 +1361,7 @@ void Client::AddWriteSetIdx(proto::Transaction &txn){
 void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     uint32_t timeout) {
   if (get_policy_done != 0) {
-    Warning("GET POLICY IS NOT 0");
+    Debug("GET POLICY IS %d", get_policy_done);
     transport->Timer(0, [this, ccb, ctcb, timeout]() {
       Debug("Retrying commit because policy get on put not finished");
       Commit(ccb, ctcb, timeout);
