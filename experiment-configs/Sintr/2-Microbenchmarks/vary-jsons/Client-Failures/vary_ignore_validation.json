@@ -3,23 +3,23 @@
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   },
   "ignore-val-byz1": {
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
@@ -29,16 +29,16 @@
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 1
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   },
   "ignore-val-byz2": {
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
@@ -48,16 +48,16 @@
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 2
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   },
   "ignore-val-byz3": {
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
@@ -67,16 +67,16 @@
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 3
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   },
   "ignore-val-byz4": {
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
@@ -86,16 +86,16 @@
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 4
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   },
   "ignore-val-byz5": {
     "analysis_name": "ignore-val-ideal",
     "replication_protocol_settings": [
       {
-        "sig_batch": 1
+        "sig_batch": 2
       }
     ],
     "sintr_protocol_settings": {
@@ -105,9 +105,9 @@
       "sintr_failure_type": "ignore-validation-request",
       "sintr_byz_client_total": 5
     },
-    "client_total": [[12]],
+    "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
     "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 1
+    "client_nodes_per_server": 2
   }
 }

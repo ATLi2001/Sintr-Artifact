@@ -648,5 +648,6 @@ if __name__ == "__main__":
         create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
         client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
-        byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
-        create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
+        # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
+        # create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
+        create_client_failures_plot(client_failures_df, None, args.output_plot_dir, now_string)
