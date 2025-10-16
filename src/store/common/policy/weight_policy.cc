@@ -72,6 +72,10 @@ bool WeightPolicy::IsSatisfied(const std::set<uint64_t> &endorsements) const {
   return endorsements.size() >= weight;
 }
 
+int WeightPolicy::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
+  return endorsements.size() - weight;
+}
+
 void WeightPolicy::MergePolicy(const Policy *other) {
   UW_ASSERT(other != nullptr);
   UW_ASSERT(type == other->Type());

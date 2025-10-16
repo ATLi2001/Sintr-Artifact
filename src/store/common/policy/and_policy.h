@@ -52,6 +52,7 @@ class ANDPolicy : public Policy {
   Policy *Clone() const override;
   std::set<uint64_t> GetANDList() const;
   bool IsSatisfied(const std::set<uint64_t> &endorsements) const override;
+  int IsSatisfiedInt(const std::set<uint64_t> &endorsements) const override;
   void MergePolicy(const Policy *other) override;
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const override;
   bool IsImpliedBy(const Policy *other) const override;

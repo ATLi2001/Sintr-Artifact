@@ -40,6 +40,13 @@ bool PolicyClient::IsSatisfied(const std::set<uint64_t> &endorsements) const {
   return policy->IsSatisfied(endorsements);
 }
 
+int PolicyClient::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
+  if (policy == nullptr) {
+    return 0;
+  }
+  return policy->IsSatisfiedInt(endorsements);
+}
+
 void PolicyClient::AddPolicy(const Policy *other) {
   UW_ASSERT(other != nullptr);
   if (policy == nullptr) {
