@@ -994,8 +994,10 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
 
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
+        int endorseStatus = 0;
         if (!params.sintr_params.serverSkipEndorsementCheck) {
-          if (!EndorsementCheck(oldTxnDigest, txn)) {
+          endorseStatus = EndorsementCheck(oldTxnDigest, txn);
+          if (endorseStatus < 0) {
             Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
             result = proto::ConcurrencyControl::ABSTAIN;
             HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, true);
@@ -1006,7 +1008,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         result = DoOCCCheck(reqId, remote, txnDigest, *txn, retryTs,
             committedProof, abstain_conflict, false, isGossip); //forwarded messages dont need to be treated as original client.
 
-        HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, false);
+        HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, remote, abstain_conflict, isGossip, forceMaterialize, false, endorseStatus > 0);
 
         return (void*) true;
       }
@@ -1014,12 +1016,13 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         auto remote_ptr = remote.clone();
         auto callback = [this, reqId, txnDigest, txn, remote_ptr, isGossip, forceMaterialize](
           proto::ConcurrencyControl::Result result, const proto::CommittedProof *committedProof,
-          const proto::Transaction *abstain_conflict, bool failEndorsementCheck
+          const proto::Transaction *abstain_conflict, bool failEndorsementCheck, bool tooManyEndorsements
         ) mutable {
           if (result == proto::ConcurrencyControl::ABORT) {
             UW_ASSERT(committedProof != nullptr);
           }
-          HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
+          HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck,
+            tooManyEndorsements);
         };
         AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
           txn->endorsements().sig_msgs_size(),
@@ -1074,8 +1077,10 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         proto::ConcurrencyControl::Result *result;
         bool endorsementCheckFail = false;
         if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
+          int endorseStatus = 0;
           if (!params.sintr_params.serverSkipEndorsementCheck) {
-            if (!EndorsementCheck(oldTxnDigest, txn)) {
+            endorseStatus = EndorsementCheck(oldTxnDigest, txn);
+            if (endorseStatus < 0) {
               Debug("Endorsement check failed for txn %s", BytesToHex(txnDigest, 16).c_str());
               result = new proto::ConcurrencyControl::Result(proto::ConcurrencyControl::ABSTAIN);
               endorsementCheckFail = true;
@@ -1087,7 +1092,7 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
             *remote_ptr, txnDigest, *txn, retryTs, committedProof, abstain_conflict, false, isGossip));
           }
 
-          HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail);
+          HandlePhase1CB(reqId, *result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, endorsementCheckFail, endorseStatus > 0);
 
           delete result;
           delete remote_ptr;
@@ -1096,9 +1101,9 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
         else {
           auto callback = [this, reqId, txnDigest, txn, remote_ptr, isGossip, forceMaterialize](
             proto::ConcurrencyControl::Result result, const proto::CommittedProof *committedProof,
-            const proto::Transaction *abstain_conflict, bool failEndorsementCheck
+            const proto::Transaction *abstain_conflict, bool failEndorsementCheck, bool tooManyEndorsements
           ) mutable {
-            HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck);
+            HandlePhase1CB(reqId, result, committedProof, txnDigest, txn, *remote_ptr, abstain_conflict, isGossip, forceMaterialize, failEndorsementCheck, tooManyEndorsements);
           };
           AsyncValidatePrepare *asyncValidatePrepare = new AsyncValidatePrepare(
             txn->endorsements().sig_msgs_size(),

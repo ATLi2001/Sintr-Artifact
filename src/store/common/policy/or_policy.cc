@@ -90,6 +90,35 @@ bool ORPolicy::IsSatisfied(const std::set<uint64_t> &endorsements) const {
   return false;
 }
 
+int ORPolicy::IsSatisfiedInt(const std::set<uint64_t> &endorsements) const {
+  // empty OR policy is satisfied by any endorsements
+  if (client_ids.empty()) {
+    return 0;
+  }
+
+  bool satisfied = false;
+  bool has_extra_endorsement = false;
+
+  for (const auto &endorser : endorsements) {
+    if (client_ids.find(endorser) != client_ids.end()) {
+      satisfied = true;
+    } else {
+      has_extra_endorsement = true;
+    }
+
+    // Early return if both conditions are already met
+    if (satisfied && has_extra_endorsement) {
+      return 1;
+    }
+  }
+
+  if (!satisfied) {
+    return -1;
+  }
+
+  return 0;
+}
+
 void ORPolicy::MergePolicy(const Policy *other) {
   UW_ASSERT(other != nullptr);
   UW_ASSERT(type == other->Type());

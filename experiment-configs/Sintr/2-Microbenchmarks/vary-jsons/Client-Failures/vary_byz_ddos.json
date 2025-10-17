@@ -1,6 +1,6 @@
 {
-  "request-extra-byz0": {
-    "analysis_name": "request-extra",
+  "ddos-byz0": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1
@@ -15,8 +15,8 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 1
   },
-  "request-extra-byz1": {
-    "analysis_name": "request-extra",
+  "ddos-byz1": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1
@@ -33,8 +33,8 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 1
   },
-  "request-extra-byz2": {
-    "analysis_name": "request-extra",
+  "ddos-byz2": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1
@@ -51,8 +51,8 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 1
   },
-  "request-extra-byz3": {
-    "analysis_name": "request-extra",
+  "ddos-byz3": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1
@@ -69,8 +69,8 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 1
   },
-  "request-extra-byz4": {
-    "analysis_name": "request-extra",
+  "ddos-byz4": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1
@@ -87,8 +87,8 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 1
   },
-  "request-extra-byz5": {
-    "analysis_name": "request-extra",
+  "ddos-byz5": {
+    "analysis_name": "ddos",
     "replication_protocol_settings": [
       {
         "sig_batch": 1

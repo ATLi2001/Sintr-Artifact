@@ -1,0 +1,53 @@
+{
+  "val-extra-4-low": {
+    "analysis_name": "val-extra-4",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 1
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_validation_heuristic": 4
+    },
+    "client_total": [[9, 12]],
+    "client_processes_per_client_node": [[2, 2]],
+    "client_threads_per_process": [[1, 1]],
+    "client_nodes_per_server": 1
+  },
+  "val-extra-4-med": {
+    "analysis_name": "val-extra-4",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 2
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_validation_heuristic": 4
+    },
+    "client_total": [[16, 20, 24]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
+    "client_nodes_per_server": 2
+  },
+  "val-extra-4": {
+    "analysis_name": "val-extra-4",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 4
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_client_validation_heuristic": 4
+    },
+    "client_total": [[28, 32, 36]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
+    "client_nodes_per_server": 3
+  }
+}

@@ -54,6 +54,7 @@ class WeightPolicy : public Policy {
   Policy *Clone() const override;
   uint64_t GetWeight() const;
   bool IsSatisfied(const std::set<uint64_t> &endorsements) const override;
+  int IsSatisfiedInt(const std::set<uint64_t> &endorsements) const override;
   void MergePolicy(const Policy *other) override;
   std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const override;
   bool IsImpliedBy(const Policy *other) const override;

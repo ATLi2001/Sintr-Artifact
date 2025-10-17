@@ -19,7 +19,7 @@
     ]
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
-  "analysis_name": "request-extra",
+  "analysis_name": "ddos",
   "replication_protocol": [
     "sintr"
   ],

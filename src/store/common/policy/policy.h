@@ -47,6 +47,7 @@ class Policy {
   virtual Policy *Clone() const = 0;
   // does endorsements satisfy this Policy object?
   virtual bool IsSatisfied(const std::set<uint64_t> &endorsements) const = 0;
+  virtual int IsSatisfiedInt(const std::set<uint64_t> &endorsements) const = 0;
   // merge this Policy with other
   // assume that other is owned by caller, not this policy object
   // other must be of the same type as this policy

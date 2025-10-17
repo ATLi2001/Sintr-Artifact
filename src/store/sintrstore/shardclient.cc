@@ -1370,6 +1370,11 @@ void ShardClient::ProcessP1R(proto::Phase1Reply &reply, bool FB_path, PendingFB 
       Debug("Replica aborted due to insufficient endorsements");
       pendingPhase1->endorsementFailedReplicas.insert(reply.signed_cc().process_id());
     }
+    if(reply.has_too_many_endorsements() && reply.too_many_endorsements()) {
+      Debug("Replica has too many endorsements");
+      //reusing the same data structure for too many endorsements
+      pendingPhase1->endorsementFailedReplicas.insert(reply.signed_cc().process_id());
+    }
   }
 
   // //FIXME: REMOVE TEST
@@ -1799,6 +1804,7 @@ void ShardClient::Phase1Decision(
     Debug("SET GET POLICY SHARD CLIENT TO TRUE");
     get_policy_shard_client = true;
   } else if(get_policy_shard_client) {
+    Debug("Setting get policy shard client to false");
     get_policy_shard_client = false;
   }
   pendingPhase1->pcb(pendingPhase1->decision, pendingPhase1->fast, pendingPhase1->conflict_flag,
