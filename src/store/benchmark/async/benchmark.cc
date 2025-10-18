@@ -500,6 +500,7 @@ DEFINE_bool(sintr_blind_write_message, false, "send a blind write message to val
 DEFINE_bool(sintr_sort_writeset, true, "sort write set in order to get endorsement matches");
 DEFINE_bool(sintr_profile_one_client_load, false, "profiling with only one client load (other clients are validating only)");
 DEFINE_bool(sintr_conflict_byzantine, false, "byzantine client purposefully conflicts with correct client");
+DEFINE_bool(sintr_byz_equivocation, false, "byzantine client prepares txn then aborts it");
 DEFINE_uint32(sintr_max_client_sig_check_threads, 0, "maximum number of parallel client threads for signature checks");
 
 // if sintr client has choice of which clients to contact, define the selection heuristic
@@ -1765,7 +1766,8 @@ int main(int argc, char **argv) {
       FLAGS_sintr_max_clients_connect,
       FLAGS_sintr_use_endorsement_cb,
       sintrFailure,
-      FLAGS_sintr_conflict_byzantine
+      FLAGS_sintr_conflict_byzantine,
+      FLAGS_sintr_byz_equivocation
     );
 
     switch (mode) {
@@ -2095,6 +2097,8 @@ int main(int argc, char **argv) {
 
     uint32_t seed = (FLAGS_client_id << 4) | i;
 	  BenchmarkClient *bench;
+    bool byz_client = FLAGS_client_id == 1 && FLAGS_sintr_byz_equivocation; // hardcoding byz client
+    Warning("Byz client status: %d", byz_client);
     
 	  switch (benchMode) {
       case BENCH_RETWIS:
@@ -2167,11 +2171,12 @@ int main(int argc, char **argv) {
         break;
       case BENCH_RW_SYNC:
         UW_ASSERT(syncClient != nullptr);
+        // set abort backoff to 0 and retry aborted to false if you are byz client
         bench = new rwsync::RWSyncClient(keySelector, FLAGS_num_ops_txn, FLAGS_rw_read_only,
             *syncClient, *tport, seed,
             FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
             FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
-            FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff,
+            byz_client ? 0 : FLAGS_abort_backoff, byz_client ? false : FLAGS_retry_aborted, FLAGS_max_backoff,
             FLAGS_max_attempts, FLAGS_timeout);
         break;
       case BENCH_TOY:

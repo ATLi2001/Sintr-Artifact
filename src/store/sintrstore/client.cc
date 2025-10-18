@@ -151,6 +151,22 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
         this->txn = txn;
         this->txn.set_client_id(client_id);
         this->txn.set_client_seq_num(client_seq_num);
+        if(this->params.sintr_params.hideTimestamps) {
+          // set txn timestamp
+          uint64_t base_ts = this->timeServer.GetTime();
+          Warning("base ts is %lu", base_ts);
+          uint64_t delta = 10000ULL << 12;  // 4,096,000
+          uint64_t second_valid_ts = base_ts >= delta ? base_ts - delta : 0;
+          uint64_t next_ts = base_ts + delta;
+          Warning("second_valid_ts: %lu", second_valid_ts);
+          Warning("next_ts: %lu", next_ts);
+          this->txn.mutable_timestamp()->set_timestamp(next_ts);
+          this->txn.set_hashed_timestamp(TimestampDigest(client_id, next_ts));
+          ReadMessage* first_read = this->txn.mutable_read_set(0);
+          first_read->mutable_readtime()->set_timestamp(second_valid_ts); // make up timestamp
+          first_read->mutable_readtime()->set_id(0);
+          first_read->set_hashed_readtime(TimestampDigest(0, second_valid_ts));
+        }
         req->txnDigest = TransactionDigest(this->txn, this->params.hashDigest, this->params.sintr_params.hideTimestamps, this->params.sintr_params.hashEndorsements);
         endorseClient->SetExpectedTxnDigest(req->txnDigest);
         req->callbackInvoked = true; // prevent commit callback
@@ -240,6 +256,7 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     client_seq_num++;
 
     uint64_t txnStartTime = timeServer.GetTime();
+    Warning("txn start time is %lu", txnStartTime);
     
     // begin sintr validation
     endorseClient->SetClientSeqNum(client_seq_num);

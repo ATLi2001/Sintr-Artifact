@@ -1378,15 +1378,20 @@ void Client2Client::HandleForwardReadResultMessage(const std::shared_ptr<proto::
       proto::Transaction txn = proto::Transaction();
       txn.add_involved_groups(0); // assume only one shard for all keys...
       txn.mutable_timestamp()->set_id(client_id);
-      uint64_t base_ts = originalTxnTS.getTimestamp();
-      uint64_t time_mask = 0xFFF;
+      if(!params.sintr_params.hideTimestamps) {
+        uint64_t base_ts = originalTxnTS.getTimestamp();
+        uint64_t time_mask = 0xFFF;
 
-      uint64_t second_valid_ts = ((base_ts >> 12) + 2) << 12;
-      txn.mutable_timestamp()->set_timestamp(second_valid_ts);
-      ReadMessage *read = txn.add_read_set();
-      read->set_key(fwdReadResult->key());
-      read->mutable_readtime()->set_timestamp(fwdReadResult->timestamp().timestamp());
-      read->mutable_readtime()->set_id(fwdReadResult->timestamp().id());
+        uint64_t second_valid_ts = ((base_ts >> 12) + 2) << 12;
+        txn.mutable_timestamp()->set_timestamp(second_valid_ts);
+        ReadMessage *read = txn.add_read_set();
+        read->set_key(fwdReadResult->key());
+        read->mutable_readtime()->set_timestamp(fwdReadResult->timestamp().timestamp());
+        read->mutable_readtime()->set_id(fwdReadResult->timestamp().id());
+      } else {
+        ReadMessage *read = txn.add_read_set();
+        read->set_key(fwdReadResult->key());
+      }
       conflictcb(txn);
     }
     lk.unlock();

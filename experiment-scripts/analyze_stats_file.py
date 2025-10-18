@@ -29,6 +29,7 @@ import json
 import os
 import argparse
 import time
+import re
 
 
 BASE_DIR = "experiment-results"
@@ -43,8 +44,18 @@ ANALYSIS_TYPES = [
     "overheads_lat_grouped_bar",
     "throughput_time",
     "client_failures",
-    "byz_interference"
+    "byz_interference",
+    "byz_equivocation"
 ]
+
+def extract_client_id(stats_file: str) -> str:
+    """
+    Extract client_id from stats_file.
+    Expected format: <client_id>-stats-<number>.json
+    """
+    match = re.match(r"^(.*?)-stats-\d+\.json$", stats_file)
+    return match.group(1) if match else stats_file
+
 
 # the original stats directory should have subdirectories, each corresponding to a single experiment run
 # each subdirectory should have a stats.json file and a config json file, and potentially a logs directory
@@ -73,7 +84,7 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
 
         tput, latency = parse_stats_json(os.path.join(subdir_path, "stats.json"))
         if tput is None or latency is None:
-            if byz_interference:
+            if byz_interference or byz_equivocation:
                 overall_stats_df.loc[len(overall_stats_df)] = [analysis_name, num_clients, subdir, 0, 0]
             else:
                 print("Continuing")
@@ -106,6 +117,7 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
 
                     client_stats_rows.append({
                         "experiment_name": analysis_name,
+                        "client_id": extract_client_id(stats_file),
                         "client_committed": committed,
                         "client_aborted": aborted
                     })
@@ -147,7 +159,7 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
 
     # Client stats DataFrame
     client_stats_df = pd.DataFrame(client_stats_rows, columns=[
-        "experiment_name", "client_aborted", "client_committed"
+        "experiment_name", "client_id", "client_aborted", "client_committed"
     ])
 
     if len(client_stats_rows) > 0 and save_client_stats_csv:
@@ -177,8 +189,11 @@ def parse_config_file(config_path):
             num_byz_clients = config["sintr_protocol_settings"]["sintr_byz_client_total"]
 
         total_recorded_time = float(config["client_experiment_length"] - config["client_ramp_up"] - config["client_ramp_down"])
-        if "sintr_protocol_settings" in config and "sintr_conflict_byzantine" in config["sintr_protocol_settings"]:
-            byz_interference = config["sintr_protocol_settings"]["sintr_conflict_byzantine"]
+        if "sintr_protocol_settings" in config:
+            if "sintr_conflict_byzantine" in config["sintr_protocol_settings"] and config["sintr_protocol_settings"]["sintr_conflict_byzantine"]:
+                byz_interference = True
+            elif "sintr_byz_equivocation" in config["sintr_protocol_settings"] and config["sintr_protocol_settings"]["sintr_byz_equivocation"]:
+                byz_interference = True
 
     return analysis_name, num_clients, num_byz_clients, total_recorded_time, byz_interference
 
@@ -610,23 +625,28 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
     plt.close()
 
-def create_client_commit_abort_plot(client_stats_df, output_dir, now_string):
+def create_client_commit_abort_plot(client_stats_df, output_dir, now_string, client_ids=None):
     """
     Creates a grouped bar plot for committed and aborted transactions per experiment.
-    Saves the plot using ANALYSIS_TYPES[7].
+    Can optionally filter by specific client_ids.
 
     Parameters:
         client_stats_df (pd.DataFrame): DataFrame with columns 
-            ['experiment_name', 'client_aborted', 'client_committed']
+            ['experiment_name', 'client_aborted', 'client_committed', 'client_id']
         output_dir (str): Path to save the plot.
         now_string (str): Timestamp string to use in filename.
+        client_ids (list, optional): List of client IDs to include. If provided and not empty,
+                                     only those clients are considered.
     """
+    if client_ids:
+        client_stats_df = client_stats_df[client_stats_df["client_id"].isin(client_ids)]
+
     if client_stats_df.empty:
         print("No client stats to plot.")
         return
 
-    # Aggregate in case there are multiple entries per experiment
-    agg_df = client_stats_df.groupby("experiment_name", as_index=False).mean()
+    # Aggregate (mean) per experiment
+    agg_df = client_stats_df.groupby("experiment_name", as_index=False).mean(numeric_only=True)
 
     fig, ax = plt.subplots(layout="constrained", figsize=(12, 6))
 
@@ -637,7 +657,7 @@ def create_client_commit_abort_plot(client_stats_df, output_dir, now_string):
     bars2 = ax.bar(x + width/2, agg_df["client_aborted"], width, label="Aborted", color="red")
 
     ax.set_xlabel("Experiment Name")
-    ax.set_ylabel("Average Transactions for Client 1")
+    ax.set_ylabel("Average Transactions per Client")
     ax.set_title("Average Committed vs Aborted Transactions per Experiment")
     ax.set_xticks(x)
     ax.set_xticklabels(agg_df["experiment_name"], rotation=45, ha="right")
@@ -741,9 +761,11 @@ if __name__ == "__main__":
     elif args.analysis_type == ANALYSIS_TYPES[5]:
         create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
-        client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
-        byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
+        # client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
+        # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
     elif args.analysis_type == ANALYSIS_TYPES[7]:
+        create_client_commit_abort_plot(byz_interference_df, args.output_plot_dir, now_string, client_ids = ["client-0-0-0"])
+    elif args.analysis_type == ANALYSIS_TYPES[8]:
         create_client_commit_abort_plot(byz_interference_df, args.output_plot_dir, now_string)
         

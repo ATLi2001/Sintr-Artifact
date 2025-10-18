@@ -68,6 +68,7 @@ typedef struct SintrParameters {
   const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
   const SintrFailure sintrFailure; // sintr failure injection configuration
   const bool conflictByzantine; // force byzantine client to start conflicts.
+  const bool byzEquivocation; // byzantine clients prepare txn then abort (because endorsements aren't hashed with txn digest)
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -77,7 +78,7 @@ typedef struct SintrParameters {
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
-    bool useEndorsementCB, const SintrFailure &sintrFailure, bool conflictByzantine) :
+    bool useEndorsementCB, const SintrFailure &sintrFailure, bool conflictByzantine, bool byzEquivocation) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -110,7 +111,8 @@ typedef struct SintrParameters {
     maxClientsConnect(maxClientsConnect),
     useEndorsementCB(useEndorsementCB),
     sintrFailure(sintrFailure),
-    conflictByzantine(conflictByzantine)
+    conflictByzantine(conflictByzantine),
+    byzEquivocation(byzEquivocation)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
@@ -138,6 +140,10 @@ typedef struct SintrParameters {
 
         if(!useOCCForPolicies) {
             Warning("Use OCC for policies must be true, we do not support reading from prepared policy transactions");
+        }
+
+        if(byzEquivocation && hashEndorsements) {
+            Warning("byz equivocation and hashing endorsements cannot both be true");
         }
     }
 

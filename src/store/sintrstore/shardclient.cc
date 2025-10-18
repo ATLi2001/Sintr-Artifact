@@ -284,7 +284,32 @@ void ShardClient::Phase1(uint64_t id, const proto::Transaction &transaction, con
     *phase1.mutable_txn() = transaction;
   }
 
-  if(failureActive && params.injectFailure.type == InjectFailureType::CLIENT_SEND_PARTIAL_P1){
+  if(params.sintr_params.byzEquivocation && client_id == 1) { // hardcoded byz client id is 1
+    proto::Phase1 phase1_byz;
+    phase1_byz.set_req_id(reqId);
+    phase1_byz.set_replica_gossip(false);
+    proto::Transaction no_endorsements_txn = transaction;
+    no_endorsements_txn.clear_endorsements();
+    if(params.signClientProposals){
+      //uint64_t keyId = keyManager->GetClientKeyId(client_id); 
+      //Sign with client_key id, but include client id -- so server can confirm Txn Timestamp.
+      //std::cerr << "Signing txn: " << BytesToHex(TransactionDigest(transaction, params.hashDigest), 16).c_str() << " client id: " << client_id << "; clientKeyid: " << keyManager->GetClientKeyId(client_id) << std::endl;
+      SignMessage(&no_endorsements_txn, keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), client_id, phase1_byz.mutable_signed_txn());
+    }
+    else{
+      *phase1_byz.mutable_txn() = no_endorsements_txn;
+    }
+    for (size_t i = 0; i < config->n; ++i) {
+      size_t rindex = GetNthClosestReplica(i);
+      if (rindex <= 1) {
+        Warning("[group %i] Sending correct txn to replica %lu", group, rindex);
+        transport->SendMessageToReplica(this, group, rindex, phase1);
+      } else {
+        Warning("[group %i] Sending txn with no endorsements to replica %lu", group, rindex);
+        transport->SendMessageToReplica(this, group, rindex, phase1_byz);
+      }
+    }
+  } else if(failureActive && params.injectFailure.type == InjectFailureType::CLIENT_SEND_PARTIAL_P1){
        phase1.set_crash_failure(true);
        for (size_t i = 0; i < config->n; ++i) {
          size_t rindex = GetNthClosestReplica(i);
@@ -1800,7 +1825,7 @@ void ShardClient::Phase1Decision(
   // }
   //std::cerr << "Failing on normal path" << std::endl;
   if(pendingPhase1->endorsementFailedReplicas.size() >= params.sintr_params.minEnablePullPolicies 
-      && params.sintr_params.minEnablePullPolicies != 0) {
+      && params.sintr_params.minEnablePullPolicies != 0 && !params.sintr_params.byzEquivocation) {
     Debug("SET GET POLICY SHARD CLIENT TO TRUE");
     get_policy_shard_client = true;
   } else if(get_policy_shard_client) {
@@ -1817,7 +1842,7 @@ void ShardClient::Phase1Decision(
   else{
     consecutive_abstains = 0;
   }
-  if(!params.no_fallback && consecutive_abstains >= consecutiveMax){
+  if(!params.no_fallback && consecutive_abstains >= consecutiveMax && !params.sintr_params.byzEquivocation){
     for(proto::Phase1 *p1: pendingPhase1->abstain_conflicts){
       
       proto::Transaction *txn;
