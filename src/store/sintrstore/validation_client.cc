@@ -193,6 +193,7 @@ void ValidationClient::Put(const std::string &key, const std::string &value,
   WriteMessage *write = txn->add_write_set();
   write->set_key(key);
   write->set_value(value);
+  a->second->write_values[key].push_back(value);
 
   if(txn->policy_type() == proto::Transaction::POLICY_ID_POLICY) {
     // add all shards as involved groups (since we are contacting all shards on a put to update policy)
@@ -518,6 +519,29 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
   if (a->second->queriesAddedToReadset != a->second->seenQueries) {
     Panic("Transaction queries added to readset does not match the queries seen by the validating client.");
   }
+
+  // check cached values are in writeset/readset
+  for (const auto& [key, ignore_vals] : a->second->ignore_readset_kv) {
+    auto it = a->second->write_values.find(key);
+    if (it == a->second->write_values.end()) {
+      Panic("Key %s from ignore_readset_kv not found in write_values", BytesToHex(key, 16).c_str());
+    }
+
+    const auto& write_vals = it->second;
+    size_t i = 0, j = 0;
+
+    // Subsequence check: ignore_vals should appear in order in write_vals
+    while (i < ignore_vals.size() && j < write_vals.size()) {
+      if (ignore_vals[i] == write_vals[j]) {
+          ++i;
+        }
+      ++j;
+    }
+
+    if (i != ignore_vals.size()) {
+      Panic("Values for key %s in ignore_readset_kv are not a subsequence of write_values", BytesToHex(key, 16).c_str());
+    }
+  }
   
   Debug("Committing validation for client id %lu, seq num %lu and txn ID: %s", txn_client_id, txn_client_seq_num,
       BytesToHex(TransactionDigest(*txn, true), 16).c_str());
@@ -672,9 +696,13 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
     } else {
       Debug("ADDING TO CACHED READS HERE %s FOR client seq num %lu", curr_key.c_str(), allValTxnState->txn_client_seq_num);
       auto it = allValTxnState->readValues.find(curr_key);
-      if (it == allValTxnState->readValues.end() || it->second != curr_value) {
-          // Key doesn't exist OR value doesn't match
-          Panic("Cached read result %s or key %s not added to txn", curr_value.c_str(), curr_key.c_str());
+      if (it == allValTxnState->readValues.end()) {
+          // Key doesn't exist
+          Panic("Cached read result or key %s not added to txn", BytesToHex(curr_key, 16).c_str());
+      }
+      if(it->second != curr_value) {
+        // value doesn't exist, add to the ignore readset kv list
+        allValTxnState->ignore_readset_kv[curr_key].push_back(curr_value);
       }
     }
     if (hasDep) {
@@ -779,7 +807,7 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
       auto it = allValTxnState->readValues.find(curr_key);
       if (it == allValTxnState->readValues.end() || it->second != curr_value) {
           // Key doesn't exist OR value doesn't match
-          Panic("Cached read result %s or key %s not added to txn", curr_value.c_str(), curr_key.c_str());
+          Panic("Cached point read result %s or key %s not added to txn", BytesToHex(curr_value, 16).c_str(), BytesToHex(curr_key, 16).c_str());
       }
     }
     if (hasDep) {

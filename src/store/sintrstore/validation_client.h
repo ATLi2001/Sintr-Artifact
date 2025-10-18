@@ -232,7 +232,11 @@ class ValidationClient : public ::ValidationClientCommon {
     std::set<std::string> seenQueries; //TODO: maybe change to just set if more efficient to compare ordered sets
     std::set<std::string> queriesAddedToReadset;
 
-    std::vector<std::pair<std::string, std::string>> cachedReads;
+    // map to keep track of written values for cache
+    std::unordered_map<std::string, std::vector<std::string>> write_values;
+
+    // check if these ignored reads are in readset/writeset of txn
+    std::unordered_map<std::string, std::vector<std::string>> ignore_readset_kv;
 
     uint64_t numProcessedForwardQuery = 0;
     uint64_t numPendingReads = 0;
