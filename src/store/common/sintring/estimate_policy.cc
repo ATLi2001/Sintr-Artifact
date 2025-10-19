@@ -78,9 +78,23 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         repeated_values = valTxnData.est_tables();
         break;
       }
+      case ::tpcc::TXN_ORDER_STATUS:
+      {
+        ::tpcc::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
       case ::tpcc::TXN_PAYMENT:
       {
         ::tpcc::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_STOCK_LEVEL:
+      {
+        ::tpcc::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
         break;
@@ -141,6 +155,12 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         repeated_values = valTxnData.est_tables();
         break;
       }
+      case ::tpcc_sql::SQL_TXN_ORDER_STATUS: {
+        ::tpcc_sql::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
       case ::tpcc_sql::SQL_TXN_PAYMENT: {
         ::tpcc_sql::validation::proto::Payment valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
@@ -149,6 +169,12 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       }
       case ::tpcc_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
         ::tpcc_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_STOCK_LEVEL: {
+        ::tpcc_sql::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
         break;
@@ -170,23 +196,20 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       case ::rwsql::RW_SQL_TRANSACTION: {
         ::rwsql::validation::proto::RWSql valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
-        if (!valTxnData.read_only()) {
-          // txn will have writes
-          if (policy_function_name.empty() || policy_function_name == "basic_id") {
-            const Policy *temp_policy = policyCache.Get("p#0");
+        if (policy_function_name.empty() || policy_function_name == "basic_id") {
+          const Policy *temp_policy = policyCache.Get("p#0");
+          UW_ASSERT(temp_policy != nullptr);
+          policyClient->AddPolicy(temp_policy);
+        }
+        else if (policy_function_name == "rw_sql_policy_change_grouped") {
+          for (const uint64_t &t : valTxnData.tables()) {
+            const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
             UW_ASSERT(temp_policy != nullptr);
             policyClient->AddPolicy(temp_policy);
           }
-          else if (policy_function_name == "rw_sql_policy_change_grouped") {
-            for (const uint64_t &t : valTxnData.tables()) {
-              const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
-              UW_ASSERT(temp_policy != nullptr);
-              policyClient->AddPolicy(temp_policy);
-            }
-          }
-          else {
-            Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
-          }
+        }
+        else {
+          Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
         }
         break;
       }

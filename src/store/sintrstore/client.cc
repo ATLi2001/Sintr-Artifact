@@ -364,6 +364,16 @@ void Client::Get(const std::string &key, get_callback gcb,
       if (hasDep && dep != nullptr) {
         *txn.add_deps() = *dep;
       }
+
+      std::string policyId = policyIdFunction(key, "");
+      if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+        perTxnPolicyIds.insert(policyId);
+        const Policy *policy = policyCache->Get(policyId);
+        UW_ASSERT(policy != nullptr);
+        Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+        c2client->HandlePolicyUpdate(policy);
+      }
+
       //if(true) {
         // clock_gettime(CLOCK_MONOTONIC, &ts_start);
         // uint64_t c2c_send_start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
@@ -911,6 +921,15 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     *txn.add_deps() = *dep;
   }
 
+  std::string policyId = policyIdFunction(key, "");
+  if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+    perTxnPolicyIds.insert(policyId);
+    const Policy *policy = policyCache->Get(policyId);
+    UW_ASSERT(policy != nullptr);
+    Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+    c2client->HandlePolicyUpdate(policy);
+  }
+
   // note that the pendingQuery->table_name has been moved out, so is no longer valid
   // instead we use the table_name passed in as an argument
   c2client->SendForwardPointQueryResultMessage(
@@ -1075,6 +1094,15 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
+          std::string policyId = policyIdFunction(read.key(), "");
+          if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+            perTxnPolicyIds.insert(policyId);
+            const Policy *policy = policyCache->Get(policyId);
+            UW_ASSERT(policy != nullptr);
+            Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+            c2client->HandlePolicyUpdate(policy);
+          }
+
           ReadMessage* add_read = txn.add_read_set();
           *add_read = std::move(read);
         }

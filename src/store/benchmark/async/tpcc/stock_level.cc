@@ -58,6 +58,11 @@ void StockLevel::SerializeTxnState(std::string &txnState) {
   curr_txn.set_w_id(w_id);
   curr_txn.set_d_id(d_id);
   curr_txn.set_min_quantity(min_quantity);
+  std::vector<Tables> est_tables = StockLevel::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+
   std::string txn_data;
   curr_txn.SerializeToString(&txn_data);
   currTxnState.set_txn_data(txn_data);
@@ -144,6 +149,10 @@ transaction_status_t StockLevel::BaseExecute(SyncClient &client, int timeout, bo
 
   Debug("COMMIT");
   return client.Commit(timeout);
+}
+
+std::vector<Tables> StockLevel::HeuristicFunction() {
+  return {DISTRICT, ORDER_LINE, STOCK};
 }
 
 }
