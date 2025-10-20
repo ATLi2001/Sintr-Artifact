@@ -102,9 +102,15 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
         # Process client_stats if present
         client_stats_dir = os.path.join(subdir_path, "client_stats")
         if os.path.exists(client_stats_dir):
-            for stats_file in os.listdir(client_stats_dir):
-                if not stats_file.endswith(".json") or "client-1" in stats_file:
+            skip_next_stats0 = False
+            processed_initial = False
+            for stats_file in sorted(os.listdir(client_stats_dir)):
+                if not stats_file.endswith("stats-0.json"):
                     continue
+
+                elif processed_initial and not skip_next_stats0:
+                    skip_next_stats0 = True
+                    continue  # skip this one only
 
                 stats_path = os.path.join(client_stats_dir, stats_file)
                 try:
@@ -124,6 +130,10 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
 
                 except Exception as e:
                     print(f"Error reading {stats_path}: {e}")
+                
+                if stats_file == "client-0-0-0-stats-0.json":
+                    processed_initial = True
+
 
     # sort by experiment name and number of clients
     overall_stats_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
@@ -680,7 +690,8 @@ def create_client_commit_abort_plot(client_stats_df, output_dir, now_string, cli
     ax.set_ylim(0, ylims[1] + 10)
 
     # Save plot
-    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[7]}-{now_string}.png"))
+    analysis_type = ANALYSIS_TYPES[8] if not client_ids else ANALYSIS_TYPES[7]
+    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
     plt.close()
 
 if __name__ == "__main__":
