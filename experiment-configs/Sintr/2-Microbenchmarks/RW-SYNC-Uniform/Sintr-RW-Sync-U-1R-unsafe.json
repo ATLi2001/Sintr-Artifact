@@ -160,7 +160,7 @@
     "sintr_client_ignore_policy_update": true,
     "sintr_client_estimate_policy": false,
     "sintr_hash_query_gen_id": false,
-    "sintr_separate_transport": true,
+    "sintr_separate_transport": false,
     "sintr_max_clients_connect": 0
   },
   "experiment_name": "sintr-rw",
@@ -169,37 +169,37 @@
   "analysis_name": "sintr-rw-sync-U-1R-unsafe",
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
-  "_client_total": [
+  "client_total": [
       [
-        96
+        60
       ]
     ],
-  "_client_processes_per_client_node": [
-    [
-      4
-    ]
-  ],
-  "_client_threads_per_process": [
-    [
-      1
-    ]
-  ],
-  "client_total": [
-    [
-      26,36,46,56,66,76,86,96
-    ]
-  ],
   "client_processes_per_client_node": [
     [
-      4,4,4,4,4,4,4,4
+      2
     ]
   ],
   "client_threads_per_process": [
     [
+      1
+    ]
+  ],
+  "_client_total": [
+    [
+      26,36,46,56,66,76,86,96
+    ]
+  ],
+  "_client_processes_per_client_node": [
+    [
+      4,4,4,4,4,4,4,4
+    ]
+  ],
+  "_client_threads_per_process": [
+    [
       1,1,1,1,1,1,1,1
     ]
   ],
-  "client_nodes_per_server": 4,
+  "client_nodes_per_server": 5,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
   "pin_server_processes": [
     0,
@@ -212,7 +212,7 @@
     7
   ],
   "pin_client_processes": [
-    0,2,4,6
+    0,4
   ],
   "client_debug_output": false,
   "_client_debug_output": "store/sintrstore/client2client.cc",
@@ -231,7 +231,7 @@
   "__server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
   "__client_host_format_str": "client-%d-%d.%s.%s.wisc.cloudlab.us",
   "project_name": "pequin-pg0",
-  "fault_tolerance": 1,
+  "fault_tolerance": 1, 
   "_server_names": [
     [
       "us-east-1-0"
