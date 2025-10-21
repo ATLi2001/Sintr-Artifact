@@ -1,35 +1,73 @@
 {
-  "policy2R": {
-    "analysis_name": "sintr-rw-sql-Z-policy2R",
+  "policy0-unsafe": {
+    "analysis_name": "Z-policy0-unsafe",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight1.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 0,
+      "sintr_client_parallel_endorsement_check": false,
+      "sintr_server_parallel_endorsement_check": false,
+      "sintr_parallel_query_sigs_check": false,
+      "sintr_hash_endorsements": false,
+      "sintr_sort_writeset": false,
+      "sintr_max_client_sig_check_threads": 0,
+      "sintr_hide_timestamps": false,
+      "sintr_server_skip_endorsement_check": true,
+      "sintr_optimistic_receive_endorsement": false,
+      "sintr_policy_CCC": false,
+      "sintr_client_ignore_policy_update": true,
+      "sintr_client_estimate_policy": false,
+      "sintr_hash_query_gen_id": false
+    },
+    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
+    "client_processes_per_client_node": [[4, 4, 4, 4, 4, 4, 4, 4]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "pin_client_processes": [0, 2, 4, 6],
+    "client_nodes_per_server": 2
+  },
+  "policy1U": {
+    "analysis_name": "Z-policy1U",
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[2, 4, 8, 12, 16, 20, 24]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
-    "client_nodes_per_server": 2
+    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 3
   },
-  "policy3R": {
-    "analysis_name": "sintr-rw-sql-Z-policy3R",
+  "policy2U": {
+    "analysis_name": "Z-policy2U",
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[4, 8, 12, 16, 20, 24]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1]],
-    "client_nodes_per_server": 2
+    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 3
   },
-  "policy2Z": {
-    "analysis_name": "sintr-rw-sql-Z-policy2Z",
+  "policy3U": {
+    "analysis_name": "Z-policy3U",
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
+      "sintr_val_client_selector": "ring"
+    },
+    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 3
+  },
+  "policy1Z": {
+    "analysis_name": "Z-policy1Z",
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
-      "sintr_val_client_selector": "zipf"
+      "sintr_val_client_selector": "zipf",
+      "sintr_val_client_selector_zipf": 0.9
     },
-    "client_total": [[2, 4, 8, 12, 16, 20, 24]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
-    "client_nodes_per_server": 2
+    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_nodes_per_server": 3
   }
 }
