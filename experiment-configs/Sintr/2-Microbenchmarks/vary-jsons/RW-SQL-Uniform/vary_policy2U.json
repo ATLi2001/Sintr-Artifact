@@ -1,0 +1,50 @@
+{
+  "policy2U-low": {
+    "analysis_name": "U-policy2U",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 1
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_val_client_selector": "ring"
+    },
+    "client_total": [[8, 12, 16]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
+    "client_nodes_per_server": 2
+  },
+  "policy2U-med": {
+    "analysis_name": "U-policy2U",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 2
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_val_client_selector": "ring"
+    },
+    "client_total": [[20, 24]],
+    "client_processes_per_client_node": [[2, 2]],
+    "client_threads_per_process": [[1, 1]],
+    "client_nodes_per_server": 2
+  },
+  "policy2U": {
+    "analysis_name": "U-policy2U",
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 4
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_val_client_selector": "ring"
+    },
+    "client_total": [[28, 32, 36]],
+    "client_processes_per_client_node": [[2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1]],
+    "client_nodes_per_server": 3
+  }
+}
