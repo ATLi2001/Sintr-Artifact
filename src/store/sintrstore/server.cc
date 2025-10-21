@@ -2653,6 +2653,7 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Timestamp ts(txn->timestamp());
+  auto txn_policy_type = txn->policy_type();
 
   if (params.validateProofs) {
     // CAUTION: we no longer own txn pointer (which we allocated during Phase1  and stored in ongoing)
@@ -2669,7 +2670,7 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Value val;
-  if (txn->policy_type() == proto::Transaction::NONE) {
+  if (txn_policy_type == proto::Transaction::NONE) {
     val.proof = proof;
   }
 
