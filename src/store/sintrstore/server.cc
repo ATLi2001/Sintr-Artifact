@@ -1705,6 +1705,7 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
     phase1Reply->set_insufficient_endorsements(failEndorsementCheck);
   }
   if(tooManyEndorsements) {
+    stats.Increment("too_many_endorsements", 1);
     phase1Reply->set_too_many_endorsements(true);
   }
   phase1Reply->mutable_cc()->set_ccr(result);
@@ -3268,6 +3269,8 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
 
   // map that stores policyID to latest policy TS
   std::set<std::pair<std::string, Timestamp>> policyTSSet;
+  // policies from readset to add into policyClient
+  std::unordered_set<const Policy *> readsetPoliciesToAdd;
 
   for (const auto &read : txn->read_set()) {
     if (read.is_table_col_version()) {
@@ -3280,25 +3283,32 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
 
     std::string policyId = policyIdFunction(read.key(), "");
 
-    Debug(
-      "Extracting policy %s at time %lu.%lu for read to key %s",
-      policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
-    );
+    if (policiesChecked.find(policyId) == policiesChecked.end()) {
+      // use txn timestamp for endorsement check on readset policies
+      Debug(
+        "Extracting policy %s at time %lu.%lu for read to key %s",
+        policyId.c_str(), ts.getTimestamp(), ts.getID(), read.key().c_str()
+      );
+      std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+      GetPolicy(policyId, ts, tsPolicy, false);
+      readsetPoliciesToAdd.insert(tsPolicy.second.policy);
 
-    std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-    GetPolicy(policyId, Timestamp(read.readtime()), tsPolicy, false);
-
-    std::pair<std::string, Timestamp> tsPair = make_pair(policyId, tsPolicy.first);
-    if (policyTSSet.find(tsPair) != policyTSSet.end()) {
-      continue;
+      policiesChecked.insert(policyId);
     }
-    else {
-      policyTSSet.insert(tsPair);
-    }
-
-    policyClient.AddPolicy(tsPolicy.second.policy);
 
     if (params.sintr_params.checkPolicyLeak) {
+      // use read timestamp for policy leak check
+      std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+      GetPolicy(policyId, Timestamp(read.readtime()), tsPolicy, false);
+
+      std::pair<std::string, Timestamp> tsPair = make_pair(policyId, tsPolicy.first);
+      if (policyTSSet.find(tsPair) != policyTSSet.end()) {
+        continue;
+      }
+      else {
+        policyTSSet.insert(tsPair);
+      }
+
       Timestamp upperTs;
       if (policyStore.getUpperBound(policyId, Timestamp(read.readtime()), upperTs) && upperTs > read.readtime()) {
         // value is safe, continue
@@ -3314,6 +3324,11 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
     }
   }
+
+  for (const auto &p : readsetPoliciesToAdd) {
+    policyClient.AddPolicy(p);
+  }
+
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;

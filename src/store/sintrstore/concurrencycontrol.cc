@@ -1264,8 +1264,7 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   }
   Timestamp upperTs;
   if(policyStore.getUpperBound(policyId, ts, upperTs) && upperTs > ts) {
-    // change to debug after testing
-    Panic("[%s] ABSTAIN TS for committed policy %lu %lu > this txn's ts %lu.%lu.",
+    Debug("[%s] ABSTAIN TS for committed policy %lu.%lu > this txn's ts %lu.%lu.",
       BytesToHex(txnDigest, 16).c_str(),
       upperTs.getTimestamp(), upperTs.getID(),
       ts.getTimestamp(), ts.getID());
