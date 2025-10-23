@@ -141,6 +141,7 @@ class Client : public ::Client {
 
   // track overall readset and writeset of transaction
   TransactionMessage *txn_msg;
+  std::unordered_set<std::string> perTxnPolicyIds;
 
 
   /* Debug State */
