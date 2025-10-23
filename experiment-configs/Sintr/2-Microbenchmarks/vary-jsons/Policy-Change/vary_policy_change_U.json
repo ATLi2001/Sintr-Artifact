@@ -49,10 +49,10 @@
     ],
     "sintr_protocol_settings": {
       "sintr_policy_function_name": "rw_sql_policy_change_grouped",
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-rw-sql-policy-change-grouped.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-change-grouped-low.config",
       "sintr_val_client_selector": "ring",
       "sintr_min_enable_pull_policies": 1,
-      "sintr_check_policy_leak": false
+      "sintr_check_policy_leak": true
     },
     "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
@@ -74,10 +74,60 @@
     ],
     "sintr_protocol_settings": {
       "sintr_policy_function_name": "rw_sql_policy_change_grouped",
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-rw-sql-policy-change-grouped.config",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-change-grouped-low.config",
       "sintr_val_client_selector": "ring",
       "sintr_min_enable_pull_policies": 1,
-      "sintr_check_policy_leak": false
+      "sintr_check_policy_leak": true
+    },
+    "client_total": [[20]],
+    "client_processes_per_client_node": [[2]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2,
+    "client_experiment_length": 90,
+    "client_ramp_down": 15,
+    "client_ramp_up": 15
+  },
+  "policy-change-3": {
+    "analysis_name": "-4_10%",
+    "policy_change_time": 30,
+    "rw_sql_policy_change_table": 0,
+    "rw_sql_new_policy_weight": 2,
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 2
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_function_name": "rw_sql_policy_change_grouped",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-change-grouped-high.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_min_enable_pull_policies": 1,
+      "sintr_check_policy_leak": true
+    },
+    "client_total": [[20]],
+    "client_processes_per_client_node": [[2]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2,
+    "client_experiment_length": 90,
+    "client_ramp_down": 15,
+    "client_ramp_up": 15
+  },
+  "policy-change-4": {
+    "analysis_name": "-4_90%",
+    "policy_change_time": 30,
+    "rw_sql_policy_change_table": 1,
+    "rw_sql_new_policy_weight": 2,
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 2
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_function_name": "rw_sql_policy_change_grouped",
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-change-grouped-high.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_min_enable_pull_policies": 1,
+      "sintr_check_policy_leak": true
     },
     "client_total": [[20]],
     "client_processes_per_client_node": [[2]],
