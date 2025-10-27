@@ -49,6 +49,14 @@
 #include "store/benchmark/async/sql/tpcc/validation/stock_level.h"
 #include "store/benchmark/async/sql/tpcc/validation/policy_change.h"
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/benchmark/async/smallbank/validation/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/validation/amalgamate.h"
+#include "store/benchmark/async/smallbank/validation/bal.h"
+#include "store/benchmark/async/smallbank/validation/deposit.h"
+#include "store/benchmark/async/smallbank/validation/transact.h"
+#include "store/benchmark/async/smallbank/validation/write_check.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
 
 
 ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
@@ -174,6 +182,38 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         return new ::rwsql::RWSQLValPolicyChange(timeout, valTxnData, policy_function_name);
+      }
+      default:
+        Panic("Received unexpected txn type: %s", txn_type.c_str());
+    }
+  }
+  else if (txn_bench == ::smallbank::BENCHMARK_NAME) {
+    ::smallbank::SmallbankTransactionType smallbank_txn_type = ::smallbank::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (smallbank_txn_type) {
+      case ::smallbank::AMALGAMATE: {
+        ::smallbank::validation::proto::Amalgamate valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::smallbank::ValidationAmalgamate(valTxnData, timeout);
+      }
+      case ::smallbank::BALANCE: {
+        ::smallbank::validation::proto::Bal valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::smallbank::ValidationBal(valTxnData, timeout);
+      }
+      case ::smallbank::DEPOSIT: {
+        ::smallbank::validation::proto::Deposit valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::smallbank::ValidationDepositChecking(valTxnData, timeout);
+      }
+      case ::smallbank::TRANSACT: {
+        ::smallbank::validation::proto::Transact valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::smallbank::ValidationTransactSaving(valTxnData, timeout);
+      }
+      case ::smallbank::WRITE_CHECK: {
+        ::smallbank::validation::proto::WriteCheck valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::smallbank::ValidationWriteCheck(valTxnData, timeout);
       }
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());

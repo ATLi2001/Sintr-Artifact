@@ -41,11 +41,13 @@ enum SmallbankTransactionType {
   WRITE_CHECK
 };
 
-class SmallbankTransaction : public SyncTransaction {
+class SmallbankTransaction {
  public:
   SmallbankTransaction(SmallbankTransactionType type);
 
   SmallbankTransactionType GetTransactionType();
+
+  virtual void SerializeTxnState(std::string &txnState) = 0;
 
  private:
   SmallbankTransactionType type;

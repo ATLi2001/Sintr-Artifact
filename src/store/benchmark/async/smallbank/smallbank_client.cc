@@ -40,12 +40,12 @@
 #include "lib/tcptransport.h"
 #include "lib/timeval.h"
 #include "store/benchmark/async/bench_client.h"
-#include "store/benchmark/async/smallbank/amalgamate.h"
-#include "store/benchmark/async/smallbank/bal.h"
-#include "store/benchmark/async/smallbank/deposit.h"
+#include "store/benchmark/async/smallbank/sync/amalgamate.h"
+#include "store/benchmark/async/smallbank/sync/bal.h"
+#include "store/benchmark/async/smallbank/sync/deposit.h"
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
-#include "store/benchmark/async/smallbank/transact.h"
-#include "store/benchmark/async/smallbank/write_check.h"
+#include "store/benchmark/async/smallbank/sync/transact.h"
+#include "store/benchmark/async/smallbank/sync/write_check.h"
 #include "store/common/frontend/sync_client.h"
 #include "store/common/truetime.h"
 #include "store/tapirstore/client.h"
@@ -100,18 +100,18 @@ SyncTransaction *SmallbankClient::GetNextTransaction() {
   // https://github.com/microsoft/CCF/blob/master/samples/apps/smallbank/clients/small_bank_client.cpp
   if (ttype < balanceThreshold) {
     last_op_ = "balance";
-    return new Bal(GetCustomerKey(),
+    return new SyncBal(GetCustomerKey(),
                    timeout_);
   }
   if (ttype < depositThreshold) {
     last_op_ = "deposit";
-    return new DepositChecking(
+    return new SyncDepositChecking(
         GetCustomerKey(),
         GetRand()() % 50 + 1, timeout_);
   }
   if (ttype < transactThreshold) {
     last_op_ = "transact";
-    return new TransactSaving(
+    return new SyncTransactSaving(
         GetCustomerKey(),
         GetRand()() % 101 - 50, timeout_);
   }
@@ -119,10 +119,10 @@ SyncTransaction *SmallbankClient::GetNextTransaction() {
     last_op_ = "amalgamate";
     std::pair<string, string> keyPair =
         GetCustomerKeyPair();
-    return new Amalgamate(keyPair.first, keyPair.second, timeout_);
+    return new SyncAmalgamate(keyPair.first, keyPair.second, timeout_);
   }
   last_op_ = "write_check";
-  return new WriteCheck(
+  return new SyncWriteCheck(
       GetCustomerKey(),
       GetRand()() % 50, timeout_);
 }

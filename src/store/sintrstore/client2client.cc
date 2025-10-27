@@ -219,7 +219,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     }
     lk.unlock();
   }
-  Warning("FINISHED SENDING AND RECEIVING PINGS");
+  Debug("FINISHED SENDING AND RECEIVING PINGS");
 }
 
 Client2Client::~Client2Client() {

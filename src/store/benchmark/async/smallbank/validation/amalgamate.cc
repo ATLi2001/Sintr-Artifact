@@ -24,30 +24,28 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
 
-#include "store/benchmark/async/smallbank/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/validation/amalgamate.h"
+#include "store/benchmark/async/smallbank/utils.h"
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
- public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+ValidationAmalgamate::ValidationAmalgamate(const std::string &cust1, const std::string &cust2,
+                       const uint32_t timeout)
+    : ValidationSmallbankTransaction(timeout),
+    Amalgamate(cust1, cust2, timeout)
+    {}
 
-  virtual ~Amalgamate();
+ValidationAmalgamate::ValidationAmalgamate(const validation::proto::Amalgamate &valAmalgateMsg,
+              const uint32_t timeout) : 
+    ValidationSmallbankTransaction(timeout),
+    Amalgamate(valAmalgateMsg.cust1(), valAmalgateMsg.cust2(), timeout)
+    {}
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+ValidationAmalgamate::~ValidationAmalgamate() {}
 
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
-};
+transaction_status_t ValidationAmalgamate::Validate(SyncClient &client) {
+  return Amalgamate::BaseExecute(client, false);
+}
 
 }  // namespace smallbank
-
-#endif /* AMALGAMATE_H */

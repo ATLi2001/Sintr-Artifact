@@ -28,6 +28,8 @@
 
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
 #include "store/benchmark/async/smallbank/utils.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 
 namespace smallbank {
 
@@ -36,11 +38,17 @@ Bal::Bal(const std::string &cust, const uint32_t timeout)
 
 Bal::~Bal() {}
 
-transaction_status_t Bal::Execute(SyncClient &client) {
+transaction_status_t Bal::BaseExecute(SyncClient &client, bool serialize) {
   proto::AccountRow accountRow;
   proto::SavingRow savingRow;
   proto::CheckingRow checkingRow;
-  client.Begin(timeout);
+
+  std::string txnState;
+  if(serialize) {
+    Bal::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
   Debug("Balance for customer %s", cust.c_str());
   if (!ReadAccountRow(client, cust, accountRow, timeout) ||
       !ReadSavingRow(client, accountRow.customer_id(), savingRow, timeout) ||
@@ -56,6 +64,23 @@ transaction_status_t Bal::Execute(SyncClient &client) {
   //std::pair<uint32_t, bool> res = std::make_pair(
   //    savingRow.saving_balance() + checkingRow.checking_balance(), true);
   return commitRes;
+}
+
+void Bal::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(BALANCE));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Bal curr_txn = validation::proto::Bal();
+  curr_txn.set_cust(cust);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 
 }  // namespace smallbank
