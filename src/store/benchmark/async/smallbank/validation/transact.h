@@ -24,30 +24,25 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
+#ifndef VALIDATION_TRANSACT_H
+#define VALIDATION_TRANSACT_H
 
-#include "store/benchmark/async/smallbank/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/transact.h"
+#include "store/benchmark/async/smallbank/validation/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
+#include "store/common/frontend/sync_client.h"
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
+class ValidationTransactSaving : public ValidationSmallbankTransaction, public TransactSaving {
  public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+  ValidationTransactSaving(const std::string &cust, int32_t value, const uint32_t timeout);
+  ValidationTransactSaving(const validation::proto::Transact &valTransactMsg, const uint32_t timeout);
+  virtual ~ValidationTransactSaving();
 
-  virtual ~Amalgamate();
-
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
+  transaction_status_t Validate(SyncClient &client);
 };
 
-}  // namespace smallbank
+} // namespace smallbank
 
-#endif /* AMALGAMATE_H */
+#endif /* VALIDATION_TRANSACT_H */

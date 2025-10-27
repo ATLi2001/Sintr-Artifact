@@ -24,30 +24,21 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
-
-#include "store/benchmark/async/smallbank/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/validation/write_check.h"
+#include "store/benchmark/async/smallbank/utils.h"
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
- public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+ValidationWriteCheck::ValidationWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout) :
+    ValidationSmallbankTransaction(timeout), WriteCheck(cust, value, timeout) {}
 
-  virtual ~Amalgamate();
+ValidationWriteCheck::ValidationWriteCheck(const validation::proto::WriteCheck &valWriteCheckMsg, const uint32_t timeout)
+    : ValidationSmallbankTransaction(timeout), WriteCheck(valWriteCheckMsg.cust(), valWriteCheckMsg.value(), timeout) {}
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+ValidationWriteCheck::~ValidationWriteCheck() {
+}
+transaction_status_t ValidationWriteCheck::Validate(SyncClient &client) {
+    return WriteCheck::BaseExecute(client, false);
+}
 
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
-};
-
-}  // namespace smallbank
-
-#endif /* AMALGAMATE_H */
+} // namespace smallbank

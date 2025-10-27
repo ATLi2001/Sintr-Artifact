@@ -38,9 +38,11 @@ class DepositChecking : public SmallbankTransaction {
 
   virtual ~DepositChecking();
 
-  transaction_status_t Execute(SyncClient &client);
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
 
- private:
+  virtual void SerializeTxnState(std::string &txnState) override;
+
+ protected:
   std::string cust;
   int32_t value;
   uint32_t timeout;

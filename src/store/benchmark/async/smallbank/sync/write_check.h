@@ -24,30 +24,24 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
+#ifndef SYNC_WRITE_CHECK_H
+#define SYNC_WRITE_CHECK_H
 
-#include "store/benchmark/async/smallbank/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/write_check.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
+#include "store/common/frontend/sync_client.h"
+#include "store/benchmark/async/smallbank/sync/smallbank_transaction.h"
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
+class SyncWriteCheck : public SyncSmallbankTransaction, public WriteCheck  {
  public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+  SyncWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout);
+  virtual ~SyncWriteCheck();
 
-  virtual ~Amalgamate();
-
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
+  transaction_status_t Execute(SyncClient &client);
 };
 
-}  // namespace smallbank
+} // namespace smallbank
 
-#endif /* AMALGAMATE_H */
+#endif /* SYNC_WRITE_CHECK_H */

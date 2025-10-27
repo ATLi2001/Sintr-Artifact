@@ -28,6 +28,8 @@
 
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
 #include "store/benchmark/async/smallbank/utils.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 
 namespace smallbank {
 
@@ -40,7 +42,7 @@ Amalgamate::Amalgamate(const std::string &cust1, const std::string &cust2,
 
 Amalgamate::~Amalgamate() {}
 
-transaction_status_t Amalgamate::Execute(SyncClient &client) {
+transaction_status_t Amalgamate::BaseExecute(SyncClient &client, bool serialize) {
   proto::AccountRow accountRow1;
   proto::AccountRow accountRow2;
 
@@ -48,7 +50,12 @@ transaction_status_t Amalgamate::Execute(SyncClient &client) {
   proto::SavingRow savingRow1;
   proto::CheckingRow checkingRow2;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    Amalgamate::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
   Debug("Amalgamate for names %s %s", cust1.c_str(), cust2.c_str());
   if (!ReadAccountRow(client, cust1, accountRow1, timeout) ||
       !ReadAccountRow(client, cust2, accountRow2, timeout)) {
@@ -77,6 +84,24 @@ transaction_status_t Amalgamate::Execute(SyncClient &client) {
   InsertSavingRow(client, customerId1, 0, timeout);
   InsertCheckingRow(client, customerId1, 0, timeout);
   return client.Commit(timeout);
+}
+
+void Amalgamate::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(AMALGAMATE));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Amalgamate curr_txn = validation::proto::Amalgamate();
+  curr_txn.set_cust1(cust1);
+  curr_txn.set_cust2(cust2);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 
 }  // namespace smallbank

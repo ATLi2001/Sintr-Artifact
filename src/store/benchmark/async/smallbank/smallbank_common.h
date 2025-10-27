@@ -1,7 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2021 Florian Suri-Payer <fsp@cs.cornell.edu>
- *                Matthew Burke <matthelb@cs.cornell.edu>
+ * Copyright 2024 Daniel Lee <dhl93@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -24,30 +23,57 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
+#ifndef SMALLBANK_COMMON_H
+#define SMALLBANK_COMMON_H
 
+#include "lib/message.h"
+#include "store/benchmark/async/smallbank/smallbank_client.h"
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
+
+#include <string>
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
- public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+const std::string BENCHMARK_NAME = "smallbank";
 
-  virtual ~Amalgamate();
+inline std::string GetBenchmarkTxnTypeName(SmallbankTransactionType txn_type) {
+  switch (txn_type) {
+    case BALANCE:
+      return "balance";
+    case DEPOSIT:
+      return "deposit";
+    case TRANSACT:
+      return "transact";
+    case AMALGAMATE:
+      return "amalgamate";
+    case WRITE_CHECK:
+      return "write_check";
+    default:
+      Panic("Received unexpected txn type: %d", txn_type);
+  }
+}
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+inline SmallbankTransactionType GetBenchmarkTxnTypeEnum(std::string &txn_type) {
+  if (txn_type == "balance") {
+    return BALANCE;
+  }
+  else if (txn_type == "deposit") {
+    return DEPOSIT;
+  }
+  else if (txn_type == "transact") {
+    return TRANSACT;
+  }
+  else if (txn_type == "amalgamate") {
+    return AMALGAMATE;
+  }
+  else if (txn_type == "write_check") {
+    return WRITE_CHECK;
+  }
+  else {
+    Panic("Received unexpected txn type: %s", txn_type.c_str());
+  }
+}
 
-  virtual void SerializeTxnState(std::string &txnState) override;
+}
 
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
-};
-
-}  // namespace smallbank
-
-#endif /* AMALGAMATE_H */
+#endif /* SMALLBANK_COMMON_H */

@@ -24,30 +24,18 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AMALGAMATE_H
-#define AMALGAMATE_H
-
-#include "store/benchmark/async/smallbank/smallbank_transaction.h"
+#include "store/benchmark/async/smallbank/sync/bal.h"
+#include "store/benchmark/async/smallbank/utils.h"
 
 namespace smallbank {
 
-class Amalgamate : public SmallbankTransaction {
- public:
-  Amalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+SyncBal::SyncBal(const std::string &cust, const uint32_t timeout)
+    : SyncSmallbankTransaction(timeout), Bal(cust, timeout) {}
 
-  virtual ~Amalgamate();
+SyncBal::~SyncBal() {}
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- protected:
-  std::string cust1;
-  std::string cust2;
-  uint32_t timeout;
-};
+transaction_status_t SyncBal::Execute(SyncClient &client) {
+  return Bal::BaseExecute(client, true);
+}
 
 }  // namespace smallbank
-
-#endif /* AMALGAMATE_H */

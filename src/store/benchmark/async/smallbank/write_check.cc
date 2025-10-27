@@ -27,18 +27,25 @@
 #include "store/benchmark/async/smallbank/write_check.h"
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
 #include "store/benchmark/async/smallbank/utils.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 
 namespace smallbank {
 
 WriteCheck::WriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout) : SmallbankTransaction(WRITE_CHECK), cust(cust), value(value), timeout(timeout) {}
 WriteCheck::~WriteCheck() {
 }
-transaction_status_t WriteCheck::Execute(SyncClient &client) {
+transaction_status_t WriteCheck::BaseExecute(SyncClient &client, bool serialize) {
     proto::AccountRow accountRow;
     proto::CheckingRow checkingRow;
     proto::SavingRow savingRow;
 
-    client.Begin(timeout);
+    std::string txnState;
+    if(serialize) {
+        WriteCheck::SerializeTxnState(txnState);
+    }
+
+    client.Begin(timeout, txnState);
     Debug("WriteCheck for name %s with value %d", cust.c_str(), value);
     if (!ReadAccountRow(client, cust, accountRow, timeout)) {
         client.Abort(timeout);
@@ -60,6 +67,24 @@ transaction_status_t WriteCheck::Execute(SyncClient &client) {
         InsertCheckingRow(client, customerId, checkingRow.checking_balance() - value, timeout);
     }
     return client.Commit(timeout);
+}
+
+void WriteCheck::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(WRITE_CHECK));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::WriteCheck curr_txn = validation::proto::WriteCheck();
+  curr_txn.set_cust(cust);
+  curr_txn.set_value(value);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace smallbank

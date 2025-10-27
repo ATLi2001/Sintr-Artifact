@@ -28,6 +28,8 @@
 
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
 #include "store/benchmark/async/smallbank/utils.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 
 namespace smallbank {
 
@@ -40,7 +42,7 @@ DepositChecking::DepositChecking(const std::string &cust, const int32_t value,
       
 DepositChecking::~DepositChecking() {}
 
-transaction_status_t DepositChecking::Execute(SyncClient &client) {
+transaction_status_t DepositChecking::BaseExecute(SyncClient &client, bool serialize) {
   Debug("DepositChecking for name %s with val %d", cust.c_str(), value);
   if (value < 0) {
     client.Abort(timeout);
@@ -50,7 +52,12 @@ transaction_status_t DepositChecking::Execute(SyncClient &client) {
   proto::AccountRow accountRow;
   proto::CheckingRow checkingRow;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    DepositChecking::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
   if (!ReadAccountRow(client, cust, accountRow, timeout)) {
     client.Abort(timeout);
     Debug("Aborted DepositChecking (AccountRow)");
@@ -66,6 +73,24 @@ transaction_status_t DepositChecking::Execute(SyncClient &client) {
   InsertCheckingRow(client, customerId, checkingRow.checking_balance() + value,
                     timeout);
   return client.Commit(timeout);
+}
+
+void DepositChecking::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(DEPOSIT));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Deposit curr_txn = validation::proto::Deposit();
+  curr_txn.set_cust(cust);
+  curr_txn.set_value(value);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 
 }  // namespace smallbank
