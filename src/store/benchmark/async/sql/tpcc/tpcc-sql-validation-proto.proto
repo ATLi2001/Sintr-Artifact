@@ -34,6 +34,7 @@ message OrderStatus {
   required uint32 o_id = 4;
   required bool c_by_last_name = 5;
   required string c_last = 6;
+  repeated uint32 est_tables = 7;
 }
 
 message Payment {
@@ -56,6 +57,7 @@ message StockLevel {
   required uint32 w_id = 1;
   required uint32 d_id = 2;
   required uint32 min_quantity = 3;
+  repeated uint32 est_tables = 4;
 }
 
 message PolicyChange {

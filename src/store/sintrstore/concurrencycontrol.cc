@@ -724,6 +724,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       //   if (committedWrite.first < ts) {
           if (params.validateProofs) {
               conflict = committedWrite.second.proof;
+              UW_ASSERT(conflict != nullptr);
           }
           
           //std::cerr << "key: " << read.key() << std::endl;
@@ -870,6 +871,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
 
               if (params.validateProofs) {
                 conflict = std::get<2>(*ritr);
+                UW_ASSERT(conflict != nullptr);
               }
               Debug("[%lu:%lu][%s] ABORT rw conflict committed read for key %s [plain:%s]: committed"
                   " read ts %lu.%lu < this txn's ts %lu.%lu < committed ts %lu.%lu.",
@@ -1262,8 +1264,7 @@ proto::ConcurrencyControl::Result Server::policyCheckHelper(const std::string &p
   }
   Timestamp upperTs;
   if(policyStore.getUpperBound(policyId, ts, upperTs) && upperTs > ts) {
-    // change to debug after testing
-    Panic("[%s] ABSTAIN TS for committed policy %lu %lu > this txn's ts %lu.%lu.",
+    Debug("[%s] ABSTAIN TS for committed policy %lu.%lu > this txn's ts %lu.%lu.",
       BytesToHex(txnDigest, 16).c_str(),
       upperTs.getTimestamp(), upperTs.getID(),
       ts.getTimestamp(), ts.getID());

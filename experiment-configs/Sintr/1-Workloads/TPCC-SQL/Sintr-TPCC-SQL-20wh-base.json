@@ -158,14 +158,14 @@
     "sintr_policy_function_name": "basic_id",
     "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy.config",
     "sintr_read_include_policy": 0,
-    "sintr_client_validation": "client-validation-exact",
+    "sintr_client_validation_heuristic": 0,
     "sintr_check_policy_leak": true,
     "sintr_client_pin_cores": true,
     "sintr_c2c_send_thread": true,
     "sintr_c2c_receive_thread": false,
     "sintr_client_parallel_endorsement_check": true,
     "sintr_server_parallel_endorsement_check": true,
-    "sintr_parallel_query_sigs_check": false,
+    "sintr_parallel_query_sigs_check": true,
     "sintr_hash_endorsements": true,
     "sintr_use_occ_for_policies": true,
     "sintr_blind_write_message": false,
@@ -177,7 +177,8 @@
     "sintr_hide_timestamps": true,
     "sintr_server_skip_endorsement_check": false,
     "sintr_optimistic_receive_endorsement": true,
-    "sintr_policy_CCC": true
+    "sintr_policy_CCC": true,
+    "sintr_use_endorsement_cb": false
   },
 
   "experiment_name": "sintr",

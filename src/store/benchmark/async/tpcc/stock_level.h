@@ -46,6 +46,7 @@ class StockLevel : public TPCCTransaction {
   uint32_t d_id;
   uint8_t min_quantity;
   transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 } // namespace tpcc

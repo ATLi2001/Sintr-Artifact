@@ -54,6 +54,7 @@ class OrderStatus : public TPCCTransaction {
   bool c_by_last_name;
   std::string c_last;
   transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 } // namespace tpcc

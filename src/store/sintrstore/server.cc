@@ -1706,6 +1706,7 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
     phase1Reply->set_insufficient_endorsements(failEndorsementCheck);
   }
   if(tooManyEndorsements) {
+    stats.Increment("too_many_endorsements", 1);
     phase1Reply->set_too_many_endorsements(true);
   }
   phase1Reply->mutable_cc()->set_ccr(result);
@@ -2654,6 +2655,7 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Timestamp ts(txn->timestamp());
+  auto txn_policy_type = txn->policy_type();
 
   if (params.validateProofs) {
     // CAUTION: we no longer own txn pointer (which we allocated during Phase1  and stored in ongoing)
@@ -2670,7 +2672,7 @@ void Server::Commit(const std::string &txnDigest, proto::Transaction *txn,
   }
 
   Value val;
-  if (txn->policy_type() == proto::Transaction::NONE) {
+  if (txn_policy_type == proto::Transaction::NONE) {
     val.proof = proof;
   }
 
@@ -3266,38 +3268,50 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second.policy);
   }
 
-  if (params.sintr_params.checkPolicyLeak) {
-    // map that stores policyID to latest policy TS
-    std::set<std::pair<std::string, Timestamp>> policyTSSet;
-    // disallow readset to contain a policy that does not imply the write set policy
-    for (const auto &read : txn->read_set()) {
-      if (read.is_table_col_version()) {
-        // skip table column versions
-        continue;
-      }
+  // map that stores policyID to latest policy TS
+  std::set<std::pair<std::string, Timestamp>> policyTSSet;
+  // policies from readset to add into policyClient
+  std::unordered_set<const Policy *> readsetPoliciesToAdd;
 
-      if (!IsKeyOwned(read.key())) {
-        continue;
-      }
+  for (const auto &read : txn->read_set()) {
+    if (read.is_table_col_version()) {
+      continue;
+    }
 
-      std::string policyId = policyIdFunction(read.key(), "");
+    if (!IsKeyOwned(read.key())) {
+      continue;
+    }
+
+    std::string policyId = policyIdFunction(read.key(), "");
+
+    if (policiesChecked.find(policyId) == policiesChecked.end()) {
+      // use txn timestamp for endorsement check on readset policies
       Debug(
         "Extracting policy %s at time %lu.%lu for read to key %s",
-        policyId.c_str(), read.readtime().timestamp(), read.readtime().id(), read.key().c_str()
+        policyId.c_str(), ts.getTimestamp(), ts.getID(), read.key().c_str()
       );
-      // changing to use read key timestamp for reading policy
       std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-      if(!policyStore.get(policyId, Timestamp(read.readtime()), tsPolicy)) {
-        Panic("Policy store policyId %lu not in policystore", policyId);
-      }
+      GetPolicy(policyId, ts, tsPolicy, false);
+      readsetPoliciesToAdd.insert(tsPolicy.second.policy);
+
+      policiesChecked.insert(policyId);
+    }
+
+    if (params.sintr_params.checkPolicyLeak) {
+      // use read timestamp for policy leak check
+      std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+      GetPolicy(policyId, Timestamp(read.readtime()), tsPolicy, false);
+
       std::pair<std::string, Timestamp> tsPair = make_pair(policyId, tsPolicy.first);
-      if(policyTSSet.find(tsPair) != policyTSSet.end()) {
+      if (policyTSSet.find(tsPair) != policyTSSet.end()) {
         continue;
-      } else {
+      }
+      else {
         policyTSSet.insert(tsPair);
       }
+
       Timestamp upperTs;
-      if(policyStore.getUpperBound(policyId, Timestamp(read.readtime()), upperTs) && upperTs > read.readtime()) {
+      if (policyStore.getUpperBound(policyId, Timestamp(read.readtime()), upperTs) && upperTs > read.readtime()) {
         // value is safe, continue
         continue;
       }
@@ -3311,6 +3325,11 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
     }
   }
+
+  for (const auto &p : readsetPoliciesToAdd) {
+    policyClient.AddPolicy(p);
+  }
+
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;

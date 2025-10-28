@@ -661,6 +661,7 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
   // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
   //TODO: Implement versioning for policy store
   Timestamp ts = Timestamp();
+  std::unordered_set<std::string> policiesChecked;
 
   for (const auto &write : txn->writeset()) {
     if (write.is_table_col_version()) {
@@ -675,6 +676,13 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
 
     std::string policyId = policyIdFunction(write.key(), write.value());
 
+    if (policiesChecked.find(policyId) != policiesChecked.end()) {
+      continue;
+    }
+    else {
+      policiesChecked.insert(policyId);
+    }
+
     Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
 
     std::pair<Timestamp, const Policy*> tsPolicy;
@@ -682,24 +690,31 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second);
   }
 
-  if (sintr_params.checkPolicyLeak) {
-    // disallow readset to contain a policy that does not imply the write set policy
-    for (const auto &read : txn->readset()) {
-      if (read.is_table_col_version()) {
-        // skip table column versions
-        continue;
-      }
-      // Peloton doesn't support sharding, skipping IsKeyOwned check
-      // if (!IsKeyOwned(read.key())) {
-      //   continue;
-      // }
-  
-      std::string policyId = policyIdFunction(read.key(), "");
-      Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
-      // changing to use read key timestamp for reading policy
-      std::pair<Timestamp, const Policy*> tsPolicy;
-      policyStore.get(policyId, ts, tsPolicy);
+  // policies from readset to add into policyClient
+  std::unordered_set<const Policy *> readsetPoliciesToAdd;
 
+  for (const auto &read : txn->readset()) {
+    if (read.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(read.key())) {
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(read.key(), "");
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
+    std::pair<Timestamp, const Policy*> tsPolicy;
+    policyStore.get(policyId, ts, tsPolicy);
+
+    if (policiesChecked.find(policyId) == policiesChecked.end()) {
+      readsetPoliciesToAdd.insert(tsPolicy.second);
+      policiesChecked.insert(policyId);
+    }
+
+    if (sintr_params.checkPolicyLeak) {
+      // disallow readset to contain a policy that does not imply the write set policy
       if (!policyClient.IsImpliedBy(tsPolicy.second)) {
         Panic(
           "Read policy (%s) does not imply write policy (%s)",
@@ -709,6 +724,11 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
       }
     }
   }
+
+  for (const auto &p : readsetPoliciesToAdd) {
+    policyClient.AddPolicy(p);
+  }
+
   // struct timespec ts_end;
   // clock_gettime(CLOCK_MONOTONIC, &ts_end);
   // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
