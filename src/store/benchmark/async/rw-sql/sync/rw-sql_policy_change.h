@@ -36,7 +36,7 @@ namespace rwsql {
 
 class RWSQLPolicyChange : public SyncTransaction, public RWSQLBasePolicyChange {
  public:
-  RWSQLPolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name);
+  RWSQLPolicyChange(uint64_t policy_id, uint32_t policy_weight);
   ~RWSQLPolicyChange();
 
   transaction_status_t Execute(SyncClient &client) override;

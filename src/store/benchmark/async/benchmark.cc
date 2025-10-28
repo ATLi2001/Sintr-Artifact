@@ -752,7 +752,7 @@ DEFINE_int64(max_attempts, -1, "max number of attempts per transaction (or -1"
 DEFINE_uint64(message_timeout, 10000, "length of timeout for messages in ms.");
 DEFINE_uint64(max_backoff, 5000, "max time to sleep after aborting.");
 
-DEFINE_uint64(policy_change_time, 0, "time (in seconds) after warmup which to change the transaction policy (0 = never)");
+DEFINE_string(gov_txn_config_path, "", "path to file containing governance txns over time (empty = none)");
 
 const std::string partitioner_args[] = {
 	"default",
@@ -859,8 +859,6 @@ DEFINE_bool(scan_as_point, true, "whether to execute all logical scans via indiv
 DEFINE_bool(scan_as_point_parallel, false, "whether to execute the individual point operations of a scan in parallel");
 DEFINE_bool(rw_simulate_point_kv, false, "whether to simulate point read execution in Pesto by not invoking the Table store, but just storing in the KV store");
 
-DEFINE_uint64(rw_sql_policy_change_table, 0, "table for which to change the transaction policy");
-DEFINE_uint32(rw_sql_new_policy_weight, 2, "new policy weight to change to");
 
 /**
  * TPCC settings.
@@ -2189,8 +2187,7 @@ int main(int argc, char **argv) {
             FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
             FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
             FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts,
-            FLAGS_timeout,
-            FLAGS_policy_change_time, FLAGS_rw_sql_policy_change_table, FLAGS_rw_sql_new_policy_weight, FLAGS_sintr_policy_function_name);
+            FLAGS_timeout, FLAGS_gov_txn_config_path);
         break;
       case BENCH_SEATS_SQL:
         {

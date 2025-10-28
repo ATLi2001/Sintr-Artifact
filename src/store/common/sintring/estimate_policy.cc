@@ -25,6 +25,7 @@
  **********************************************************************/
 
 #include "store/common/sintring/estimate_policy.h"
+#include "store/common/policy/policy_id.h"
 #include "store/benchmark/async/tpcc/validation/tpcc_transaction.h"
 #include "store/benchmark/async/tpcc/validation/delivery.h"
 #include "store/benchmark/async/tpcc/validation/new_order.h"
@@ -199,7 +200,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
           policyClient->AddPolicy(temp_policy);
         }
         else if (policy_function_name == "rw_sql_policy_change_grouped") {
-          const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(valTxnData.table(), txn_bench));
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(valTxnData.policy_id()));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }

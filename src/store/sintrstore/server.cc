@@ -41,6 +41,7 @@
 #include "lib/batched_sigs.h"
 #include "lib/tcptransport.h"
 #include "store/common/policy/policy_cache.h"
+#include "store/common/policy/policy_id.h"
 #include "store/sintrstore/basicverifier.h"
 #include "store/sintrstore/common.h"
 #include "store/sintrstore/localbatchsigner.h"
@@ -1099,7 +1100,7 @@ void Server::HandleRead(const TransportAddress &remote,
 
   std::pair<Timestamp, Server::Value> tsVal;
   //find committed write value to read from
-  bool committed_exists = !isPolicyKey(msg.key()) && store.get(msg.key(), ts, tsVal);
+  bool committed_exists = !IsPolicyId(msg.key()) && store.get(msg.key(), ts, tsVal);
 
   proto::ReadReply* readReply = GetUnusedReadReply();
   readReply->set_req_id(msg.req_id());
@@ -1159,7 +1160,7 @@ void Server::HandleRead(const TransportAddress &remote,
 
   //If MVTSO: Read prepared, Set RTS
   // if key is not a policy ID
-  if (occType == MVTSO && !isPolicyKey(msg.key())) {
+  if (occType == MVTSO && !IsPolicyId(msg.key())) {
   
     //Sets RTS timestamp. Favors readers commit chances.
     //Disable if worried about Byzantine Readers DDos, or if one wants to favor writers.
@@ -1250,7 +1251,7 @@ void Server::HandleRead(const TransportAddress &remote,
         }
       }
     }
-  } else if(isPolicyKey(msg.key())) {
+  } else if(IsPolicyId(msg.key())) {
     Warning("IS POLICY KEY");
     Debug("Getting policy for %s", msg.key().c_str());
     std::pair<Timestamp, Server::PolicyStoreValue> tsPolicy;

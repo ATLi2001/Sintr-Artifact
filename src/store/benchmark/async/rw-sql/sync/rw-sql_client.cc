@@ -48,16 +48,15 @@ RWSQLClient::RWSQLClient(uint64_t numOps, QuerySelector *querySelector, bool rea
       int warmupSec, int cooldownSec, int tputInterval, 
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, 
       const uint32_t timeout,
-      uint64_t policyChangeTime, uint64_t policyChangeTable, uint32_t newPolicyWeight, const std::string &policyFunctionName,
+      const std::string &govTxnConfigPath,
       const std::string &latencyFilename)
      : SyncTransactionBenchClient(client, transport, id, numRequests,
                                  expDuration, delay, warmupSec, cooldownSec,
                                  tputInterval, abortBackoff, retryAborted, maxBackoff, maxAttempts, timeout,
-                                 latencyFilename, policyChangeTime),
+                                 latencyFilename, govTxnConfigPath),
         readOnly(readOnly), readOnlyRate(readOnlyRate), querySelector(querySelector), numOps(numOps),
         readSecondaryCondition(readSecondaryCondition), fixedRange(fixedRange), value_size(value_size), value_categories(value_categories), 
-        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel),
-        policyChangeTable(policyChangeTable), newPolicyWeight(newPolicyWeight), policyFunctionName(policyFunctionName) {
+        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel) {
 
     if(readOnly) readOnlyRate = 100;
 }
@@ -70,9 +69,12 @@ SyncTransaction *RWSQLClient::GetNextTransaction() {
 
   if (IsNextPolicyChange()) {
     SetNextPolicyChange(false);
-    Notice("Changing transaction policy for table %lu to weight %u", policyChangeTable, newPolicyWeight);
+    uint64_t policyId = govTxnConfig.policyChangeIds[policyChangeCount];
+    uint32_t newPolicyWeight = govTxnConfig.newPolicyWeights[policyChangeCount];
+    policyChangeCount++;
+    Notice("Changing transaction policy for policyId %lu to weight %u", policyId, newPolicyWeight);
     lastOp = "policy_change";
-    return new RWSQLPolicyChange(policyChangeTable, newPolicyWeight, policyFunctionName);
+    return new RWSQLPolicyChange(policyId, newPolicyWeight);
   }
 
   lastOp = "rw_sql";

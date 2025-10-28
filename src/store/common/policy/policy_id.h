@@ -9,10 +9,10 @@
  * modify, merge, publish, distribute, sublicense, and/or sell copies
  * of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -24,18 +24,21 @@
  *
  **********************************************************************/
 
-#include "store/benchmark/async/rw-sql/validation/rw-sql_val_policy_change.h"
+#ifndef _POLICY_ID_H_
+#define _POLICY_ID_H_
 
+#include <string>
 
-namespace rwsql {
+static std::string policy_id_prefix = "p";
+static std::string policy_id_delimiter = "#";
 
-RWSQLValPolicyChange::RWSQLValPolicyChange(uint32_t timeout, const validation::proto::RWSqlPolicyChange &msg) 
-  : ValidationTransaction(timeout), RWSQLBasePolicyChange(msg.policy_id(), msg.policy_weight()) {}
-
-RWSQLValPolicyChange::~RWSQLValPolicyChange() {}
-
-transaction_status_t RWSQLValPolicyChange::Validate(SyncClient &client) {
-  return RWSQLBasePolicyChange::BaseExecute(client, timeout, false);
+inline std::string PolicyIdString(uint64_t policy_id) {
+  return policy_id_prefix + policy_id_delimiter + std::to_string(policy_id);
 }
 
+inline bool IsPolicyId(const std::string& s) {
+  return s.length() > 1 && s[0] == policy_id_prefix[0] && s[1] == policy_id_delimiter[0];
 }
+
+
+#endif /* _POLICY_ID_H_ */

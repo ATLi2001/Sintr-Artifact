@@ -41,7 +41,7 @@ class SyncTransactionBenchClient : public BenchmarkClient {
       int cooldownSec, int tputInterval, uint64_t abortBackoff,
       bool retryAborted, uint64_t maxBackoff, int64_t maxAttempts, uint64_t timeout,
       const std::string &latencyFilename = "",
-      uint64_t policyChangeTime = 0);
+      const std::string &govTxnConfigPath = "");
 
   virtual ~SyncTransactionBenchClient();
 
