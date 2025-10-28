@@ -25,6 +25,7 @@
  **********************************************************************/
 
 #include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_id.h"
 #include "store/common/policy/policy_types.h"
 #include "store/common/policy/policy-proto.pb.h"
 #include "store/common/policy/weight_policy.h"
@@ -57,7 +58,7 @@ std::unique_ptr<PolicyCache> PolicyParseClient::ParseConfigFile(const std::strin
     int i = 0;
     while (std::getline(iss, temp, ' ')) {
       if (i == 0) {
-        policyId = temp;
+        policyId = PolicyIdString(std::stoull(temp));
       } else if (i == 1) {
         policyType = temp;
       } else {
