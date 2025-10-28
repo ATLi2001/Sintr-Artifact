@@ -62,7 +62,7 @@
       "merkle_branch_factor": 2,
 
       "signature_type": 4,
-      "sig_batch": 4,
+      "sig_batch": 2,
       "sig_batch_timeout": 2,
       "key_path": "/usr/local/etc/indicus-keys/donna",
       "shared_mem_batch": false,
@@ -171,7 +171,7 @@
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
 
-  "client_total": [[30, 40, 50]],
+  "client_total": [[15, 20, 25]],
   "client_processes_per_client_node": [[2, 2, 2]],
   "client_threads_per_process": [[1, 1, 1]],
 
