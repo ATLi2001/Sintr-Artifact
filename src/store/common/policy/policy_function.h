@@ -28,6 +28,7 @@
 #define _POLICY_FUNCTION_H_
 
 #include "store/common/policy/policy.h"
+#include "store/common/policy/policy_id.h"
 #include "store/benchmark/async/tpcc/tpcc-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_schema.h"
 #include "store/benchmark/async/rw-sql/rw-sql_common.h"
@@ -47,16 +48,16 @@ typedef std::function<std::string(const std::string &, const std::string &)> pol
 inline policy_id_function GetPolicyIdFunction(const std::string &policy_function_name) {
   if (policy_function_name == "basic_id") {
     return [](const std::string &key, const std::string &value) -> std::string {
-      return "p#0";
+      return PolicyIdString(0);
     };
   }
   else if (policy_function_name == "grouped") {
     return [](const std::string &key, const std::string &value) -> std::string {
       switch (key.c_str()[0]) {
         case tpcc::Tables::DISTRICT:
-          return "p#1";
+          return PolicyIdString(1);
         default:
-          return "p#0";
+          return PolicyIdString(0);
       }
     };
   }

@@ -485,11 +485,7 @@ void Client::Put(const std::string &key, const std::string &value,
         // look in cache for policy
         std::string policyId = policyIdFunction(key, value);
         const Policy *policy = policyCache->Get(policyId);
-        if (policy == nullptr) {
-          // if not found, use default policy for now
-          policy = policyCache->Get("p#0");
-          UW_ASSERT(policy != nullptr);
-        }
+        UW_ASSERT(policy != nullptr);
         if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
           Debug("Sending policy update for put using c2client in regular transaction");
           perTxnPolicyIds.insert(policyId);

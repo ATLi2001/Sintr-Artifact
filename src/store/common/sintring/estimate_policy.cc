@@ -122,7 +122,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     }
     else {
       // txn will have writes
-      const Policy *temp_policy = policyCache.Get("p#0");
+      const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
       UW_ASSERT(temp_policy != nullptr);
       policyClient->AddPolicy(temp_policy);
     }
@@ -198,7 +198,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         ::rwsql::validation::proto::RWSql valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
-          const Policy *temp_policy = policyCache.Get("p#0");
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
@@ -218,7 +218,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
-          const Policy *temp_policy = policyCache.Get("p#0");
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
@@ -236,7 +236,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
   }
   else {
     // return default policy ID (policy ID 0)
-    const Policy *temp_policy = policyCache.Get("p#0");
+    const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
     UW_ASSERT(temp_policy != nullptr);
     policyClient->AddPolicy(temp_policy);
   }
@@ -247,27 +247,27 @@ std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string 
     ::tpcc::Tables table = static_cast<::tpcc::Tables>(t);
     switch (table) {
     case ::tpcc::Tables::WAREHOUSE:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::DISTRICT:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::CUSTOMER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::HISTORY:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::NEW_ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER_LINE:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ITEM:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::STOCK:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER_BY_CUSTOMER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::EARLIEST_NEW_ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     default:
       Panic("Received unexpected table type for tpcc: %d", t);
     }
@@ -275,25 +275,25 @@ std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string 
     ::tpcc_sql::TPCC_Table table = static_cast<::tpcc_sql::TPCC_Table>(t);
     switch (table) {
       case ::tpcc_sql::TPCC_Table::WAREHOUSE:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::DISTRICT:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::CUSTOMER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::HISTORY:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::NEW_ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ORDER_LINE:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ITEM:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::STOCK:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::EARLIEST_NEW_ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       default:
         Panic("Received unexpected table type for tpcc sql: %lu", t);
     }
