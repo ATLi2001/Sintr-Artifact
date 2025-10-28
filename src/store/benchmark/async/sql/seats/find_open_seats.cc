@@ -1,5 +1,7 @@
 #include "store/benchmark/async/sql/seats/find_open_seats.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
+#include "store/benchmark/async/sql/seats/seats_common.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 
 #include <fmt/core.h>
 #include <queue>
@@ -16,15 +18,27 @@ SQLFindOpenSeats::SQLFindOpenSeats(uint32_t timeout, std::mt19937 &gen, SeatsPro
         f_id = flight;
     }
 
+SQLFindOpenSeats::SQLFindOpenSeats(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::FindOpenSeats &msg)
+    : SEATSSQLTransaction(timeout),
+      gen_(&gen),
+      profile(profile),
+      f_id(ProtoToCachedFlight(msg.f_id())) {}
+
 SQLFindOpenSeats::~SQLFindOpenSeats() {};
 
-transaction_status_t SQLFindOpenSeats::Execute(SyncClient &client) {
+transaction_status_t SQLFindOpenSeats::BaseExecute(SyncClient &client, bool serialize) {
     std::unique_ptr<const query_result::QueryResult> queryResult;
     std::string query;
 
     fprintf(stderr, "FIND_OPEN_SEATS on flight %ld \n", f_id.flight_id);
     Debug("FIND_OPEN_SEATS on flight %ld", f_id.flight_id);
-    client.Begin(timeout);
+    
+    std::string txnState;
+    if(serialize) {
+        SQLFindOpenSeats::SerializeTxnState(txnState);
+    }
+
+    client.Begin(timeout, txnState);
 
     GetFlightResultRow fr_row = GetFlightResultRow();
     //GetFlight   //Doing computation in the Select statement is tricky for the point read validation to check. Thus we removed it from the query statement here and do the calculation ourselves.
@@ -52,6 +66,8 @@ transaction_status_t SQLFindOpenSeats::Execute(SyncClient &client) {
     auto result = client.Commit(timeout);
     if(result != transaction_status_t::COMMITTED) return result;
 
+    // skip updating profile if validating client
+    if(!serialize) return result;
 
     //////////////// UPDATE PROFILE /////////////////////
 
@@ -112,5 +128,23 @@ transaction_status_t SQLFindOpenSeats::Execute(SyncClient &client) {
     Debug("Unavailable: %s\n", reserved_seats_str.c_str());
 
     return result;
+}
+
+void SQLFindOpenSeats::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_FIND_OPEN_SEATS));
+  currTxnState.set_txn_name(txn_name);
+  
+  validation::proto::FindOpenSeats curr_txn = validation::proto::FindOpenSeats();
+  validation::proto::CachedFlightMessage flightMsg = CachedFlightToProto(f_id);
+  *curr_txn.mutable_f_id() = std::move(flightMsg);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 }

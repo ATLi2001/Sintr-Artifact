@@ -1,5 +1,7 @@
 #include "store/benchmark/async/sql/seats/find_flights.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
+#include "store/benchmark/async/sql/seats/seats_common.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include <fmt/core.h>
 #include <random>
 
@@ -48,15 +50,31 @@ SQLFindFlights::SQLFindFlights(uint32_t timeout, std::mt19937 &gen, SeatsProfile
         UW_ASSERT(start_time < end_time);
     }
 
+SQLFindFlights::SQLFindFlights(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::FindFlights &msg)
+    : SEATSSQLTransaction(timeout),
+      gen(gen),
+      profile(profile),
+      depart_aid(msg.depart_aid()),
+      arrive_aid(msg.arrive_aid()),
+      start_time(msg.start_time()),
+      end_time(msg.end_time()),
+      distance(msg.distance()) {}
+
 SQLFindFlights::~SQLFindFlights() {}
 
-transaction_status_t SQLFindFlights::Execute(SyncClient &client) {
+transaction_status_t SQLFindFlights::BaseExecute(SyncClient &client, bool serialize) {
     std::unique_ptr<const query_result::QueryResult> queryResult;
     std::string query;
 
     
     Debug("FIND_FLIGHTS");
-    client.Begin(timeout);
+
+    std::string txnState;
+    if(serialize) {
+        SQLFindFlights::SerializeTxnState(txnState);
+    }
+
+    client.Begin(timeout, txnState);
     std::vector<std::string> nearby_airports;
 
     if (distance > 0) {
@@ -167,6 +185,9 @@ transaction_status_t SQLFindFlights::Execute(SyncClient &client) {
     auto result = client.Commit(timeout);
     if(result != transaction_status_t::COMMITTED) return result;
 
+    // skip updating profile if validating client
+    if(!serialize) return result;
+
      //////////////// UPDATE PROFILE /////////////////////
         
     // Convert the data into FlightIds that other transactions can use
@@ -195,5 +216,26 @@ transaction_status_t SQLFindFlights::Execute(SyncClient &client) {
     
     return result;
 
+}
+
+void SQLFindFlights::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_FIND_FLIGHTS));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::FindFlights curr_txn = validation::proto::FindFlights();
+  curr_txn.set_depart_aid(depart_aid);
+  curr_txn.set_arrive_aid(arrive_aid);
+  curr_txn.set_start_time(start_time);
+  curr_txn.set_end_time(end_time);
+  curr_txn.set_distance(distance);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 }

@@ -57,7 +57,15 @@
 #include "store/benchmark/async/smallbank/validation/write_check.h"
 #include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 #include "store/benchmark/async/smallbank/smallbank_common.h"
-
+#include "store/benchmark/async/sql/seats/seats_common.h"
+#include "store/benchmark/async/sql/seats/validation/delete_reservation.h"
+#include "store/benchmark/async/sql/seats/validation/find_flights.h"
+#include "store/benchmark/async/sql/seats/validation/find_open_seats.h"
+#include "store/benchmark/async/sql/seats/validation/new_reservation.h"
+#include "store/benchmark/async/sql/seats/validation/update_customer.h"
+#include "store/benchmark/async/sql/seats/validation/update_reservation.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
+#include "store/benchmark/async/sql/seats/seats_profile.h"
 
 ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
   std::string txn_name(txnState.txn_name());
@@ -214,6 +222,44 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::smallbank::validation::proto::WriteCheck valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         return new ::smallbank::ValidationWriteCheck(valTxnData, timeout);
+      }
+      default:
+        Panic("Received unexpected txn type: %s", txn_type.c_str());
+    }
+  }
+  else if (txn_bench == ::seats_sql::BENCHMARK_NAME) {
+    ::seats_sql::SQLSeatsTransactionType seats_sql_txn_type = ::seats_sql::GetBenchmarkTxnTypeEnum(txn_type);
+    ::seats_sql::SeatsProfile profile(rand);
+    switch (seats_sql_txn_type) {
+      case ::seats_sql::SQL_TXN_DELETE_RESERVATION: {
+        ::seats_sql::validation::proto::DeleteReservation valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLDeleteReservation(timeout, rand, profile, valTxnData);
+      }
+      case ::seats_sql::SQL_TXN_FIND_FLIGHTS: {
+        ::seats_sql::validation::proto::FindFlights valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLFindFlights(timeout, rand, profile, valTxnData);
+      }
+      case ::seats_sql::SQL_TXN_FIND_OPEN_SEATS: {
+        ::seats_sql::validation::proto::FindOpenSeats valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLFindOpenSeats(timeout, rand, profile, valTxnData);
+      }
+      case ::seats_sql::SQL_TXN_NEW_RESERVATION: {
+        ::seats_sql::validation::proto::NewReservation valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLNewReservation(timeout, rand, profile, valTxnData);
+      }
+      case ::seats_sql::SQL_TXN_UPDATE_CUSTOMER: {
+        ::seats_sql::validation::proto::UpdateCustomer valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLUpdateCustomer(timeout, rand, profile, valTxnData);
+      }
+      case ::seats_sql::SQL_TXN_UPDATE_RESERVATION: {
+        ::seats_sql::validation::proto::UpdateReservation valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::seats_sql::ValidationSQLUpdateReservation(timeout, rand, profile, valTxnData);
       }
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());

@@ -13,9 +13,11 @@ namespace seats_sql {
 class SQLDeleteReservation: public SEATSSQLTransaction {
     public: 
         SQLDeleteReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile);
+        SQLDeleteReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::DeleteReservation &msg);
         virtual ~SQLDeleteReservation();
-        virtual transaction_status_t Execute(SyncClient &client);
-    private:
+        transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+        virtual void SerializeTxnState(std::string &txnState) override;
+    protected:
         CachedFlight flight;
         int64_t f_id;
         int64_t c_id;

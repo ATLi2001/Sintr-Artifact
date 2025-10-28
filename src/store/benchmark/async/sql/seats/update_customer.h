@@ -3,15 +3,18 @@
 
 #include "store/benchmark/async/sql/seats/seats_transaction.h"
 #include "store/benchmark/async/sql/seats/seats_profile.h"
+#include "store/benchmark/async/sql/seats/seats_common.h"
 
 namespace seats_sql {
 
 class SQLUpdateCustomer:public SEATSSQLTransaction {
     public: 
         SQLUpdateCustomer(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile);
+        SQLUpdateCustomer(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::UpdateCustomer &msg);
         virtual ~SQLUpdateCustomer();
-        virtual transaction_status_t Execute(SyncClient &client);
-    private:
+        transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+        virtual void SerializeTxnState(std::string &txnState) override;
+    protected:
         int64_t c_id;
         std::string c_id_str;
         int64_t update_ff;

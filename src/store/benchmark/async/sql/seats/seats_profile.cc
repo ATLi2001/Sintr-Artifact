@@ -156,4 +156,46 @@ bool SeatsProfile::addFlightToCache(const CachedFlight &cf) {
 }
 
 
+validation::proto::CachedFlightMessage CachedFlightToProto(const CachedFlight &flight) {
+  validation::proto::CachedFlightMessage msg;
+
+  msg.set_flight_id(flight.flight_id);
+  msg.set_airline_id(flight.airline_id);
+  msg.set_depart_ap_id(flight.depart_ap_id);
+  msg.set_arrive_ap_id(flight.arrive_ap_id);
+  msg.set_depart_time(flight.depart_time);
+
+  return msg;
+}
+
+CachedFlight ProtoToCachedFlight(const validation::proto::CachedFlightMessage &msg) {
+  CachedFlight flight;
+
+  if (msg.has_flight_id())
+    flight.flight_id = msg.flight_id();
+  else
+    flight.flight_id = 0;
+
+  if (msg.has_airline_id())
+    flight.airline_id = msg.airline_id();
+  else
+    flight.airline_id = 0;
+
+  if (msg.has_depart_ap_id())
+    flight.depart_ap_id = msg.depart_ap_id();
+  else
+    flight.depart_ap_id = 0;
+
+  if (msg.has_arrive_ap_id())
+    flight.arrive_ap_id = msg.arrive_ap_id();
+  else
+    flight.arrive_ap_id = 0;
+
+  if (msg.has_depart_time())
+    flight.depart_time = msg.depart_time();
+  else
+    flight.depart_time = 0;
+
+  return flight;
+}
 }

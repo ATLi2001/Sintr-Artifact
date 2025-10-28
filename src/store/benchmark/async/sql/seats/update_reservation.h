@@ -11,9 +11,11 @@ namespace seats_sql {
 class SQLUpdateReservation:public SEATSSQLTransaction {
     public: 
         SQLUpdateReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile);
+        SQLUpdateReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::UpdateReservation &msg);
         virtual ~SQLUpdateReservation();
-        virtual transaction_status_t Execute(SyncClient &client);
-    private:
+        transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+        virtual void SerializeTxnState(std::string &txnState) override;
+    protected:
         int64_t r_id;       // current reservation on flight
         int64_t c_id;       // customer id
         CachedFlight flight;  // flight  that customer has a reservation on
