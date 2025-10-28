@@ -44,6 +44,8 @@ class IndicusCodebase(ExperimentCodebase):
             if 'sintr_protocol_settings' in config:
                 client_config_path = os.path.join(local_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
                 policy_config_path = os.path.join(local_exp_directory, "policy.config")
+                if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                    gov_txn_config_path = os.path.join(local_exp_directory, "gov-txn.config")
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'], 'client-%d-%d' % (i, j),
                     'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
@@ -56,6 +58,8 @@ class IndicusCodebase(ExperimentCodebase):
             if 'sintr_protocol_settings' in config:
                 client_config_path = os.path.join(remote_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
                 policy_config_path = os.path.join(remote_exp_directory, "policy.config")
+                if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                    gov_txn_config_path = os.path.join(remote_exp_directory, "gov-txn.config")
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'],
                     'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
@@ -153,6 +157,8 @@ class IndicusCodebase(ExperimentCodebase):
         if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr':
             client_command += ' --clients_config_path %s' % client_config_path
             client_command += ' --sintr_policy_config_path %s' % policy_config_path
+            if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                client_command += ' --gov_txn_config_path %s' % gov_txn_config_path
             if 'sintr_max_val_threads' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_max_val_threads %d' % config['sintr_protocol_settings']['sintr_max_val_threads']
             if 'sintr_sign_fwd_read_results' in config['sintr_protocol_settings']:
@@ -328,9 +334,6 @@ class IndicusCodebase(ExperimentCodebase):
         if 'client_rand_sleep' in config:
             client_command += ' --delay %d' % config['client_rand_sleep']
 
-        if 'policy_change_time' in config:
-            client_command += ' --policy_change_time %d' % config['policy_change_time']
-
         if 'partitioner' in config:
             client_command += ' --partitioner %s' % config['partitioner']
 
@@ -376,11 +379,6 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --scan_as_point=%s' % (str(config['scan_as_point']).lower())
                 client_command += ' --scan_as_point_parallel=%s' % (str(config['scan_as_point_parallel']).lower())
                 client_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
-
-                if 'rw_sql_policy_change_table' in config:
-                    client_command += ' --rw_sql_policy_change_table %d' % config['rw_sql_policy_change_table']
-                if 'rw_sql_new_policy_weight' in config:
-                    client_command += ' --rw_sql_new_policy_weight %d' % config['rw_sql_new_policy_weight']
 
         elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql':
             client_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
@@ -871,6 +869,10 @@ class IndicusCodebase(ExperimentCodebase):
             # cp policy config to experiment directory
             policy_config_path = config['sintr_protocol_settings']['sintr_policy_config_path']
             shutil.copy(policy_config_path, os.path.join(local_exp_directory, "policy.config"))
+            # cp gov txn config to experiment directory
+            if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                gov_txn_config_path = config['sintr_protocol_settings']['gov_txn_config_path']
+                shutil.copy(gov_txn_config_path, os.path.join(local_exp_directory, "gov-txn.config"))
 
         return local_exp_directory
 
