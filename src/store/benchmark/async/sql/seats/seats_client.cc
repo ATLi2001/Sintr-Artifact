@@ -1,10 +1,10 @@
 #include "store/benchmark/async/sql/seats/seats_client.h"
-#include "store/benchmark/async/sql/seats/delete_reservation.h"
-#include "store/benchmark/async/sql/seats/find_flights.h"
-#include "store/benchmark/async/sql/seats/find_open_seats.h"
-#include "store/benchmark/async/sql/seats/new_reservation.h" 
-#include "store/benchmark/async/sql/seats/update_customer.h"
-#include "store/benchmark/async/sql/seats/update_reservation.h"
+#include "store/benchmark/async/sql/seats/sync/delete_reservation.h"
+#include "store/benchmark/async/sql/seats/sync/find_flights.h"
+#include "store/benchmark/async/sql/seats/sync/find_open_seats.h"
+#include "store/benchmark/async/sql/seats/sync/new_reservation.h" 
+#include "store/benchmark/async/sql/seats/sync/update_customer.h"
+#include "store/benchmark/async/sql/seats/sync/update_reservation.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
 
 #include <cmath>
@@ -37,7 +37,7 @@ SyncTransaction* SEATSSQLClient::GetNextTransaction() {
   // need to populate reservations first
   if (!started_workload) {
     started_workload = true; 
-    return new SQLFindOpenSeats(GetTimeout(), gen, profile);
+    return new SyncSQLFindOpenSeats(GetTimeout(), gen, profile);
   }
 
   // keep going until we get a valid operation
@@ -50,33 +50,33 @@ SyncTransaction* SEATSSQLClient::GetNextTransaction() {
       if (profile.delete_reservations.empty()) 
         continue;
       last_op_ = "delete_reservation";
-      return new SQLDeleteReservation(GetTimeout(), gen, profile);
+      return new SyncSQLDeleteReservation(GetTimeout(), gen, profile);
     } 
     else if (t_type <= (freq += FREQUENCY_FIND_FLIGHTS)) {
       last_op_ = "find_flight";
-      return new SQLFindFlights(GetTimeout(), gen, profile); 
+      return new SyncSQLFindFlights(GetTimeout(), gen, profile); 
     } 
     else if (t_type <= (freq += FREQUENCY_FIND_OPEN_SEATS)) {
       last_op_ = "find_open_seats";
-      return new SQLFindOpenSeats(GetTimeout(), gen, profile);
+      return new SyncSQLFindOpenSeats(GetTimeout(), gen, profile);
     } 
     else if (t_type <= (freq += FREQUENCY_NEW_RESERVATION)) {
       if (profile.insert_reservations.empty())
         continue; 
       last_op_ = "new_reservation";
       int64_t r_id = ((int64_t) profile.seats_id | (profile.num_res_made++) << 32);
-      return new SQLNewReservation(GetTimeout(), gen, r_id, profile);
+      return new SyncSQLNewReservation(GetTimeout(), gen, r_id, profile);
     } 
     else if (t_type <= (freq += FREQUENCY_UPDATE_CUSTOMER)) {
       last_op_ = "update_customer";
-      return new SQLUpdateCustomer(GetTimeout(), gen, profile);
+      return new SyncSQLUpdateCustomer(GetTimeout(), gen, profile);
     } 
     else {
       Debug("Try Update_Res. Is empty? %d", profile.update_reservations.empty()); 
       if (profile.update_reservations.empty())
         continue;
       last_op_ = "update_reservation";
-      return new SQLUpdateReservation(GetTimeout(), gen, profile);
+      return new SyncSQLUpdateReservation(GetTimeout(), gen, profile);
     }
   }
 }

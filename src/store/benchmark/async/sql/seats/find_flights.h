@@ -11,9 +11,11 @@ namespace seats_sql {
 class SQLFindFlights: public SEATSSQLTransaction {
     public: 
         SQLFindFlights(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile); 
+        SQLFindFlights(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::FindFlights &msg);
         virtual ~SQLFindFlights();
-        virtual transaction_status_t Execute(SyncClient &client);
-    private:
+        transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+        virtual void SerializeTxnState(std::string &txnState) override;
+    protected:
         int64_t depart_aid;  // depart_ap_id, airport id of departure
         int64_t arrive_aid;   // arrive_ap_id, airport id of arrival
         int64_t start_time;  // unix timestamp of earliest departure

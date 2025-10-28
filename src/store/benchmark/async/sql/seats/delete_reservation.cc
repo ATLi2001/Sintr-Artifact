@@ -1,5 +1,7 @@
 #include "store/benchmark/async/sql/seats/delete_reservation.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
+#include "store/benchmark/async/sql/seats/seats_common.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include <fmt/core.h>
 #include <random> 
 
@@ -37,14 +39,30 @@ SQLDeleteReservation::SQLDeleteReservation(uint32_t timeout, std::mt19937 &gen, 
         //Default: Delete using their CustomerId 
     }
 
+SQLDeleteReservation::SQLDeleteReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::DeleteReservation &msg)
+    : SEATSSQLTransaction(timeout),
+      gen_(&gen),
+      profile(profile),
+      flight(ProtoToCachedFlight(msg.flight())),
+      f_id(msg.f_id()),
+      c_id(msg.c_id()),
+      ff_al_id(msg.ff_al_id()),
+      c_id_str(msg.c_id_str()),
+      ff_c_id_str(msg.ff_c_id_str()) {}
+
 SQLDeleteReservation::~SQLDeleteReservation() {}
 
 
-transaction_status_t SQLDeleteReservation::Execute(SyncClient &client) {
+transaction_status_t SQLDeleteReservation::BaseExecute(SyncClient &client, bool serialize) {
     std::unique_ptr<const query_result::QueryResult> queryResult;
     std::string query;
 
-    client.Begin(timeout);
+    std::string txnState;
+    if(serialize) {
+        SQLDeleteReservation::SerializeTxnState(txnState);
+    }
+
+    client.Begin(timeout, txnState);
 
     // //Get Flight attributes from Flight Id
     // query = fmt::format("SELECT f_al_id, f_seats_left, f_iattr00, f_iattr01, f_iattr02, f_iattr03, f_iattr04, f_iattr05, f_iattr06, f_iattr07 FROM {} WHERE f_id = {}", FLIGHT_TABLE, f_id);
@@ -150,6 +168,9 @@ transaction_status_t SQLDeleteReservation::Execute(SyncClient &client) {
 
     auto result = client.Commit(timeout);
     if(result != transaction_status_t::COMMITTED) return result;
+    
+    // skip updating profile if validating client
+    if(!serialize) return result;
 
 
      //////////////// UPDATE PROFILE /////////////////////
@@ -168,4 +189,29 @@ transaction_status_t SQLDeleteReservation::Execute(SyncClient &client) {
 
     return result;
 }
+
+void SQLDeleteReservation::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_DELETE_RESERVATION));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::DeleteReservation curr_txn = validation::proto::DeleteReservation();
+  validation::proto::CachedFlightMessage flightMsg = CachedFlightToProto(flight);
+  *curr_txn.mutable_flight() = std::move(flightMsg);
+  curr_txn.set_f_id(f_id);
+  curr_txn.set_c_id(c_id);
+  curr_txn.set_ff_al_id(ff_al_id);
+  curr_txn.set_c_id_str(c_id_str);
+  curr_txn.set_ff_c_id_str(ff_c_id_str);
+  
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
+}
+
 }

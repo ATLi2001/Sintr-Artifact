@@ -33,10 +33,13 @@ void deserialize(T& t, std::unique_ptr<const query_result::QueryResult>& queryRe
   load_row(t, queryResult->at(row), col);
 }
 
-class SEATSSQLTransaction : public SyncTransaction {
+class SEATSSQLTransaction {
     public: 
         SEATSSQLTransaction(uint32_t timeout);
         virtual ~SEATSSQLTransaction();
+        virtual void SerializeTxnState(std::string &txnState) = 0;
+    protected:
+        uint32_t timeout;
 };
 }
 

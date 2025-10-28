@@ -12,9 +12,11 @@ namespace seats_sql {
 class SQLFindOpenSeats: public SEATSSQLTransaction {
     public: 
         SQLFindOpenSeats(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile);
+        SQLFindOpenSeats(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::FindOpenSeats &msg);
         virtual ~SQLFindOpenSeats();
-        virtual transaction_status_t Execute(SyncClient &client);
-    private:
+        transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+        virtual void SerializeTxnState(std::string &txnState) override;
+    protected:
         CachedFlight f_id;  // flight id
         std::mt19937 *gen_;
         SeatsProfile &profile;

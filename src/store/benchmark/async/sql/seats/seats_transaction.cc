@@ -2,7 +2,7 @@
 
 namespace seats_sql {
 
-SEATSSQLTransaction::SEATSSQLTransaction(uint32_t timeout) : SyncTransaction(timeout) {
+SEATSSQLTransaction::SEATSSQLTransaction(uint32_t timeout) : timeout(timeout) {
 }
 
 SEATSSQLTransaction::~SEATSSQLTransaction() {
