@@ -223,12 +223,11 @@ def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string, tp
 def tput_time_csv(logs_df, output_dir, now_string):
     data = []
 
-
     logs_df["commit_timestamp_ns"] = logs_df["commit_timestamp_ns"].astype(float)
     logs_df["commit_timestamp_ns"] = logs_df["commit_timestamp_ns"] / 1e9
 
-    policy_change_time_s = -1
-    tput_interval_s = 3
+    policy_change_time_s = []
+    tput_interval_s = 2.5 
     for (experiment_name, exp_timestamp), group in logs_df.groupby(["experiment_name", "exp_timestamp"]):
         # group by client_id and normalize each client's time to start at 0
         # then combine all clients' data
@@ -242,8 +241,8 @@ def tput_time_csv(logs_df, output_dir, now_string):
                 # find policy change time
                 policy_change = client_group[client_group["operation"] == "policy_change"]
                 if len(policy_change) > 0:
-                    policy_change_time_s = policy_change["commit_timestamp_ns"].iloc[0]
-                    print(f"{experiment_name}: policy change at {policy_change_time_s:.2f}s")
+                    policy_change_time_s = policy_change["commit_timestamp_ns"].tolist()
+                    print(f"{experiment_name}: policy change at {[f'{time:.2f}' for time in policy_change_time_s]}s")
 
             combined_group = pd.concat([combined_group, client_group.loc[client_group["operation"] != "abort"]])
         
@@ -533,10 +532,14 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         tput = time_groups["tput"].mean()
         ax.plot(tput, "-", label=experiment_name)
 
-    if policy_change_time_s > 0:
-        ax.axvline(x=policy_change_time_s, color="black", linestyle="--", label="Policy Change")
+    for i, policy_change_time in enumerate(policy_change_time_s):
+        # all policy changes have same line color, only label once in legend
+        label = "Policy Change" if i == 0 else None
+        ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
     fig.legend(loc="outside lower center", ncol=2)
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] + 100)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 

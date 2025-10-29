@@ -19,7 +19,7 @@
     ]
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
-  "analysis_name": "+4_10%",
+  "analysis_name": "1_table",
   "replication_protocol": [
     "sintr"
   ],
@@ -173,7 +173,8 @@
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false,
-    "sintr_min_enable_pull_policies": 1
+    "sintr_min_enable_pull_policies": 1,
+    "gov_txn_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/gov-txn-policy-id-0.config"
   },
   "experiment_name": "sintr",
   "codebase_name": "indicus",
@@ -540,8 +541,5 @@
   "client_cpuprofile": false,
   "server_gc_debug_trace": false,
   "_server_wrap_command": "valgrind --tool=none %s",
-  "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s",
-  "policy_change_time": 30,
-  "rw_sql_policy_change_table": 0,
-  "rw_sql_new_policy_weight": 6
+  "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s"
 }
