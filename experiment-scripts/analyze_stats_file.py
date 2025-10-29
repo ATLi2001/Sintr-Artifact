@@ -284,7 +284,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
-def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
+def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
     # spacing if too many bars per group
     bars_per_group = len(grouped_data)
     x = np.arange(len(x_labels)) * (bars_per_group // 4 + 1)  # the label locations
@@ -305,6 +305,7 @@ def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysi
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel(y_label)
     ax.set_xticks(x + width, x_labels)
+    ax.set_xlabel(x_axis_label)
     fig.legend(loc="outside lower center", ncol=2)
 
     plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
@@ -344,6 +345,7 @@ def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
     create_grouped_bar_plot(
         sig_no_sig_data,
         experiment_labels,
+        "",
         y_label,
         output_dir,
         analysis_type,
@@ -513,6 +515,7 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
     create_grouped_bar_plot(
         grouped_data,
         x_labels,
+        "",
         "Latency (ms)",
         output_dir,
         ANALYSIS_TYPES[4],
@@ -544,32 +547,55 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
     plt.close()
 
 def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
-    fig, ax = plt.subplots(layout="constrained")
-    ax.set_xlabel("# Byzantine Clients")
-    if combined:
-        ax.set_ylabel("Throughput per Client (txn/s)")
-    else:
-        ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
-    ax.grid(True)
+
+    target_num_byz_clients = [0, 2, 5]
+    grouped_data = {}
+    x_labels = [str(x) for x in target_num_byz_clients]
+
+    # fig, ax = plt.subplots(layout="constrained")
+    # ax.set_xlabel("# Byzantine Clients")
+    # if combined:
+    #     ax.set_ylabel("Throughput per Client (txn/s)")
+    # else:
+    #     ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
+    # ax.grid(True)
 
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
         client_groups = group.groupby("num_byz_clients")
         num_byz_clients = client_groups["num_byz_clients"].mean()
         tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
-        ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
+
+        for target in target_num_byz_clients:
+            if target in num_byz_clients.values:
+                tput_per_correct_client_value = tput_per_correct_client.loc[num_byz_clients == target].values[0]
+                grouped_data.setdefault(experiment_name, []).append(tput_per_correct_client_value)
+            else:
+                grouped_data.setdefault(experiment_name, []).append(0)
+
+        # ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
     
     if combined:
         for experiment_name, group in byz_client_df.groupby("experiment_name"):
             client_groups = group.groupby("num_byz_clients")
             num_byz_clients = client_groups["num_byz_clients"].mean()
             tput_per_byz_client = client_groups["tput_per_byz_client"].mean()
-            ax.plot(num_byz_clients, tput_per_byz_client, "-o", label=experiment_name + " (Byz)")
+            # ax.plot(num_byz_clients, tput_per_byz_client, "-o", label=experiment_name + " (Byz)")
 
-    fig.legend(loc="outside lower center", ncol=2)
-    ylims = ax.get_ylim()
-    ax.set_ylim(0, ylims[1] + 10)
-    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
-    plt.close()
+    create_grouped_bar_plot(
+        grouped_data,
+        [str(x) for x in x_labels],
+        "# Byzantine Clients",
+        "Throughput per Correct Client (txn/s)" if not combined else "Throughput per Client (txn/s)",
+        output_dir,
+        ANALYSIS_TYPES[6],
+        now_string
+    )
+
+    # fig.legend(loc="outside lower center", ncol=2)
+    # ylims = ax.get_ylim()
+    # ax.set_ylim(0, ylims[1] + 10)
+    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
+    # plt.close()
 
 
 if __name__ == "__main__":
@@ -616,12 +642,6 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
-    parser.add_argument(
-        "-l", "--logs",
-        type=str,
-        required=False,
-        help="Path to directory that contains logs to analyze for throughput over time plot. If provided, generates plot from these logs instead of going through original_stats_dir."
-    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -634,9 +654,7 @@ if __name__ == "__main__":
     logs_df = pd.DataFrame()
     if args.csv:
         df = pd.read_csv(args.csv)
-    if args.logs:
-        logs_df = pd.read_csv(args.logs)
-    if not args.csv and not args.logs:
+    else:
         df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
@@ -651,7 +669,11 @@ if __name__ == "__main__":
         tput_time_df, policy_change_time_s = tput_time_csv(logs_df, args.output_csv_dir, now_string)
         create_tput_time_plot(tput_time_df, policy_change_time_s, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
-        client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
+        client_failures_df = pd.DataFrame()
+        if args.csv:
+            client_failures_df = df
+        else:
+            client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
         # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         # create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
         create_client_failures_plot(client_failures_df, None, args.output_plot_dir, now_string)
