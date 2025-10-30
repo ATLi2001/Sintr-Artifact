@@ -66,6 +66,18 @@ NewPurchase::NewPurchase(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
   }
 }
 
+NewPurchase::NewPurchase(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewPurchase &valNewPurchaseMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "NEW PURCHASE (VALIDATION)" << std::endl;
+
+  item_id = valNewPurchaseMsg.item_id();
+  seller_id = valNewPurchaseMsg.seller_id();
+  ip_id = valNewPurchaseMsg.ip_id();
+  buyer_credit = valNewPurchaseMsg.buyer_credit();
+  current_time = valNewPurchaseMsg.current_time();
+}
+
 NewPurchase::~NewPurchase(){
 }
 
@@ -78,12 +90,11 @@ transaction_status_t NewPurchase::BaseExecute(SyncClient &client, bool serialize
 
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
 
   client.Begin(timeout, txnState);
-
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
   //NOTE: Item max bid MUST exist, otherwise we wouldn't have selected this item for Purchase  => See "new_purchase_old.cc" that includes a benchbase hack that seems unecessary
 
@@ -195,6 +206,7 @@ void NewPurchase::SerializeTxnState(std::string &txnState) {
   curr_txn.set_seller_id(seller_id);
   curr_txn.set_ip_id(ip_id);
   curr_txn.set_buyer_credit(buyer_credit);
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

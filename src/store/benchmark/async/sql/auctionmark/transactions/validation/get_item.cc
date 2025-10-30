@@ -24,106 +24,18 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#include "store/benchmark/async/sql/auctionmark/transactions/get_item.h"
-#include <fmt/core.h>
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/get_item.h"
+
 
 namespace auctionmark {
 
-GetItem::GetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen) : 
-    AuctionMarkTransaction(timeout), profile(profile) {
-   
-    std::cerr << "GET ITEM" << std::endl;
-    //std::cerr << "ItemInfo: " << ItemInfo().get_item_id().to_string() << std::endl;
-    // auto itemInfo_opt = profile.get_random_available_item();
-    // UW_ASSERT(itemInfo_opt.has_value());
+ValidationGetItem::ValidationGetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::GetItem &valGetItemMsg) : 
+  GetItem(timeout, profile, gen, valGetItemMsg), AuctionMarkValidationTransaction(timeout) {}
 
-    std::optional<ItemInfo> maybeItemInfo = profile.get_random_available_item();
-    ItemInfo itemInfo;
-    if (maybeItemInfo.has_value()) {
-      itemInfo = maybeItemInfo.value();
-    } else {
-      throw std::runtime_error("get_item construction: failed to get random available item");
-    }
-    Debug("ItemInfo: %s", itemInfo.get_item_id().to_string().c_str());
-    item_id = itemInfo.get_item_id().encode();
-    seller_id = itemInfo.get_seller_id().encode();
-}
+ValidationGetItem::~ValidationGetItem() {}
 
-GetItem::~GetItem(){
-}
-
-transaction_status_t GetItem::BaseExecute(SyncClient &client, bool serialize) {
-  std::unique_ptr<const query_result::QueryResult> queryResult;
-  std::string statement;
-  std::vector<std::unique_ptr<const query_result::QueryResult>> results;
-
-  Debug("GET ITEM");
-  Debug("Item ID: %s", item_id.c_str());
-
-  std::string txnState;
-  if(serialize) {
-      SQLDeleteReservation::SerializeTxnState(txnState);
-  }
-  client.Begin(timeout, txnState);
-
-  statement = fmt::format("SELECT i_id, i_u_id, i_name, i_current_price, i_num_bids, i_end_date, i_status FROM "
-                          "{} WHERE i_id = '{}' AND i_u_id = '{}'", TABLE_ITEM, item_id, seller_id);
-  client.Query(statement, timeout);
-
-  statement = fmt::format("SELECT u_id, u_rating, u_created, u_sattr0, u_sattr1, u_sattr2, u_sattr3, u_sattr4, r_name "
-                         "FROM {}, {} WHERE u_id = '{}' AND u_r_id = r_id "
-                         "AND r_id = r_id", //ADDED REFLEXIVE ARG FOR PELOTON PARSING. TODO: AUTOMATE THIS IN SQL_INTERPRETER 
-                         TABLE_USERACCT, TABLE_REGION, seller_id);
-
-  // statement = fmt::format("SELECT u_id, u_rating, u_created, u_sattr0, u_sattr1, u_sattr2, u_sattr3, u_sattr4, r_name "
-  //                         "FROM {} INNER JOIN {} ON u_r_id = r_id WHERE u_id = '{}' AND r_id = r_id",  TABLE_USERACCT, TABLE_REGION, seller_id);                
-  client.Query(statement, timeout);
-  
-  client.Wait(results);
-
-  if(results[0]->empty() || results[1]->empty()) {
-    Debug("Query result empty, aborting GET ITEM");
-    client.Abort(timeout);
-    return ABORTED_USER;
-  } 
-
-  ItemRow ir;
-  try{
-    deserialize(ir, results[0]);
-  }
-  catch(...){
-    Panic("deserialize ItemRow failed");
-  }
-
-  Debug("COMMIT");
-  auto tx_result = client.Commit(timeout);
-  if(tx_result != transaction_status_t::COMMITTED) return tx_result;
-
-  // skip updating profile if validating client
-  if (!serialize) return tx_result;
-
-  //////////////// UPDATE PROFILE /////////////////////
-  ItemRecord item_rec(ir.itemId, ir.sellerId, ir.i_name, ir.currentPrice, ir.numBids, ir.endDate, ir.itemStatus);
-  ItemId itemId = profile.processItemRecord(item_rec);
-
-  return tx_result;
-}
-
-void GetItem::SerializeTxnState(std::string &txnState) {
-  TxnState currTxnState;
-  std::string txn_name;
-  txn_name.append(BENCHMARK_NAME);
-  txn_name.push_back('_');
-  txn_name.append(GetBenchmarkTxnTypeName(TXN_GET_ITEM));
-  currTxnState.set_txn_name(txn_name);
-
-  validation::proto::GetItem curr_txn;
-  curr_txn.set_item_id(item_id);
-  curr_txn.set_seller_id(seller_id);
-
-  std::string txn_data;
-  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
-  currTxnState.SerializeToString(&txnState);
+transaction_status_t ValidationGetItem::Validate(SyncClient &client) {
+  return GetItem::BaseExecute(client, false);
 }
 
 } // namespace auctionmark

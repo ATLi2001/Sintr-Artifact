@@ -63,6 +63,23 @@ UpdateItem::UpdateItem(uint32_t timeout,  AuctionMarkProfile &profile, std::mt19
   seller_id = sellerId.encode();
 }
 
+UpdateItem::UpdateItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::UpdateItem &valUpdateItemMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "UPDATE ITEM (VALIDATION)" << std::endl;
+
+  item_id = valUpdateItemMsg.item_id();
+  seller_id = valUpdateItemMsg.seller_id();
+  description = valUpdateItemMsg.description();
+  delete_attribute = valUpdateItemMsg.delete_attribute();
+  
+  for (int i = 0; i < valUpdateItemMsg.add_attribute_size(); i++) {
+    add_attribute.push_back(valUpdateItemMsg.add_attribute(i));
+  }
+  
+  current_time = valUpdateItemMsg.current_time();
+}
+
 UpdateItem::~UpdateItem(){
 };
 
@@ -75,11 +92,11 @@ transaction_status_t UpdateItem::BaseExecute(SyncClient &client, bool serialize)
 
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
 
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
   std::string updateItem = fmt::format("UPDATE {} SET i_description = '{}', i_updated = {} WHERE i_id = '{}' AND i_u_id = '{}'", TABLE_ITEM, description, current_time, item_id, seller_id);
   client.Write(updateItem, queryResult, timeout);
@@ -145,6 +162,7 @@ void UpdateItem::SerializeTxnState(std::string &txnState) {
   for (const auto &attr : add_attribute) {
     curr_txn.add_add_attribute(attr);
   }
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

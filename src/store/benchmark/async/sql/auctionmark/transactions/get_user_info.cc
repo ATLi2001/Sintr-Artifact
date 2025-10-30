@@ -57,6 +57,19 @@ GetUserInfo::GetUserInfo(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
     get_watched_items = (rand <= PROB_GETUSERINFO_INCLUDE_WATCHED_ITEMS);
 }
 
+GetUserInfo::GetUserInfo(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::GetUserInfo &valGetUserInfoMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "GET USER INFO (VALIDATION)" << std::endl;
+
+  user_id = valGetUserInfoMsg.user_id();
+  get_feedback = valGetUserInfoMsg.get_feedback();
+  get_comments = valGetUserInfoMsg.get_comments();
+  get_seller_items = valGetUserInfoMsg.get_seller_items();
+  get_buyer_items = valGetUserInfoMsg.get_buyer_items();
+  get_watched_items = valGetUserInfoMsg.get_watched_items();
+}
+
 GetUserInfo::~GetUserInfo(){
 }
 

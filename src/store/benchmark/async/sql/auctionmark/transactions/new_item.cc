@@ -80,6 +80,33 @@ NewItem::NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 
 
 }
 
+NewItem::NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewItem &valNewItemMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "NEW ITEM (VALIDATION)" << std::endl;
+
+  item_id = valNewItemMsg.item_id();
+  seller_id = valNewItemMsg.seller_id();
+  category_id = valNewItemMsg.category_id();
+  name = valNewItemMsg.name();
+  description = valNewItemMsg.description();
+  duration = valNewItemMsg.duration();
+  initial_price = valNewItemMsg.initial_price();
+  attributes = valNewItemMsg.attributes();
+  
+  for (int i = 0; i < valNewItemMsg.gag_ids_size(); i++) {
+    gag_ids.push_back(valNewItemMsg.gag_ids(i));
+  }
+  for (int i = 0; i < valNewItemMsg.gav_ids_size(); i++) {
+    gav_ids.push_back(valNewItemMsg.gav_ids(i));
+  }
+  for (int i = 0; i < valNewItemMsg.images_size(); i++) {
+    images.push_back(valNewItemMsg.images(i));
+  }
+
+  current_time = valNewItemMsg.current_time();
+}
+
 NewItem::~NewItem(){
 }
 
@@ -94,11 +121,11 @@ transaction_status_t NewItem::BaseExecute(SyncClient &client, bool serialize) {
 
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
 
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
   uint64_t end_date = current_time + (duration * MILLISECONDS_IN_A_DAY);
 
   std::string updateUserBalance = fmt::format("UPDATE {} SET u_balance = u_balance -1, u_updated = {} WHERE u_id = '{}'", TABLE_USERACCT, current_time, seller_id);
@@ -284,6 +311,7 @@ void NewItem::SerializeTxnState(std::string &txnState) {
   for (const auto &image : images) {
     curr_txn.add_images(image);
   }
+  curr_txn.set_current_time(current_time);
 
   currTxnState.set_txn_data(curr_txn.SerializeAsString());
   currTxnState.SerializeToString(&txnState);

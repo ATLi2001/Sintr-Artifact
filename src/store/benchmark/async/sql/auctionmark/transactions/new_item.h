@@ -29,12 +29,14 @@
 
 #include "store/benchmark/async/sql/auctionmark/transactions/auctionmark_transaction.h"
 #include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
 
 namespace auctionmark {
 
 class NewItem : public AuctionMarkTransaction {
  public:
   NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
+  NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewItem &valNewItemMsg);
   virtual ~NewItem();
   transaction_status_t BaseExecute(SyncClient &client, bool serialize);
   virtual void SerializeTxnState(std::string &txnState) override;
@@ -51,6 +53,7 @@ class NewItem : public AuctionMarkTransaction {
   std::vector<std::string> gag_ids;
   std::vector<std::string> gav_ids;
   std::vector<std::string> images;
+  uint64_t current_time;
 
   AuctionMarkProfile &profile;
   std::mt19937_64 &gen;

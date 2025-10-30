@@ -24,33 +24,18 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AUCTION_MARK_NEW_COMMENT_H
-#define AUCTION_MARK_NEW_COMMENT_H
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_purchase.h"
 
-#include "store/benchmark/async/sql/auctionmark/transactions/auctionmark_transaction.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
 
 namespace auctionmark {
 
-class NewComment : public AuctionMarkTransaction {
- public:
-  NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
-  NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewComment &valNewCommentMsg);
-  virtual ~NewComment();
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-  virtual void SerializeTxnState(std::string &txnState) override;
+ValidationNewPurchase::ValidationNewPurchase(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewPurchase &valNewPurchaseMsg) : 
+  NewPurchase(timeout, profile, gen, valNewPurchaseMsg), AuctionMarkValidationTransaction(timeout) {}
 
- private:
-  std::string item_id;
-  std::string seller_id;
-  std::string buyer_id;
-  std::string question;
+ValidationNewPurchase::~ValidationNewPurchase() {}
 
-  std::mt19937_64 &gen;
-  AuctionMarkProfile &profile;
-};
+transaction_status_t ValidationNewPurchase::Validate(SyncClient &client) {
+  return NewPurchase::BaseExecute(client, false);
+}
 
 } // namespace auctionmark
-
-#endif /* AUCTION_MARK_NEW_COMMENT_H */

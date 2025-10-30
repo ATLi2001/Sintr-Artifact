@@ -1,6 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2021 Florian Suri-Payer <fsp@cs.cornell.edu>
+ * Copyright 2023 Florian Suri-Payer <fsp@cs.cornell.edu>
  *                Liam Arzola <lma77@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
@@ -24,33 +24,20 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AUCTION_MARK_NEW_COMMENT_H
-#define AUCTION_MARK_NEW_COMMENT_H
+#ifndef AUCTIONMARK_VALIDATION_TRANSACTION_H
+#define AUCTIONMARK_VALIDATION_TRANSACTION_H
 
-#include "store/benchmark/async/sql/auctionmark/transactions/auctionmark_transaction.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/frontend/validation_transaction.h"
 
 namespace auctionmark {
 
-class NewComment : public AuctionMarkTransaction {
+class AuctionMarkValidationTransaction : public ValidationTransaction {
  public:
-  NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
-  NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewComment &valNewCommentMsg);
-  virtual ~NewComment();
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- private:
-  std::string item_id;
-  std::string seller_id;
-  std::string buyer_id;
-  std::string question;
-
-  std::mt19937_64 &gen;
-  AuctionMarkProfile &profile;
+  AuctionMarkValidationTransaction(uint32_t timeout);
+  virtual ~AuctionMarkValidationTransaction();
 };
 
-} // namespace auctionmark
+}
 
-#endif /* AUCTION_MARK_NEW_COMMENT_H */
+#endif /* AUCTIONMARK_VALIDATION_TRANSACTION_H */
+

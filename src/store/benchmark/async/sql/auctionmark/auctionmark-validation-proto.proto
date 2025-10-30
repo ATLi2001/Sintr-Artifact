@@ -21,6 +21,7 @@ message NewBid {
     required string seller_id = 2;
     required string buyer_id = 3;
     required double new_bid = 4;
+    required uint64 current_time = 5;
 }
 
 message NewCommentResponse {
@@ -44,6 +45,7 @@ message NewFeedback {
     required string from_id = 4;
     required int32 rating = 5;
     required string feedback = 6;
+    required uint64 current_time = 7;
 }
 
 message NewItem {
@@ -58,6 +60,7 @@ message NewItem {
     repeated string gag_ids = 9;
     repeated string gav_ids = 10;
     repeated string images = 11;
+    required uint64 current_time = 12;
 }
 
 message NewPurchase {
@@ -65,6 +68,7 @@ message NewPurchase {
     required string seller_id = 2;
     required uint64 ip_id = 3;
     required float buyer_credit = 4;
+    required uint64 current_time = 5;
 }
 
 message UpdateItem {
@@ -73,4 +77,5 @@ message UpdateItem {
     required string description = 3;
     required bool delete_attribute = 4;
     repeated string add_attribute = 5;
+    required uint64 current_time = 6;
 }

@@ -57,6 +57,17 @@ NewCommentResponse::NewCommentResponse(uint32_t timeout, AuctionMarkProfile &pro
 
 }
 
+NewCommentResponse::NewCommentResponse(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewCommentResponse &valNewCommentResponseMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "NEW COMMENT RESPONSE (VALIDATION)" << std::endl;
+
+  item_id = valNewCommentResponseMsg.item_id();
+  seller_id = valNewCommentResponseMsg.seller_id();
+  comment_id = valNewCommentResponseMsg.comment_id();
+  response = valNewCommentResponseMsg.response();
+}
+
 NewCommentResponse::~NewCommentResponse(){
 }
 

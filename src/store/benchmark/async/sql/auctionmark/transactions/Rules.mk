@@ -11,3 +11,4 @@ LIB-auctionmark-transactions := $(OBJ-auctionmark-transaction) $(o)close_auction
 
 cd := $(d)
 include $(cd)sync/Rules.mk
+include $(cd)validation/Rules.mk

@@ -24,28 +24,22 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AUCTION_MARK_GET_ITEM_H
-#define AUCTION_MARK_GET_ITEM_H
+#ifndef AUCTION_MARK_VALIDATION_GET_ITEM_H
+#define AUCTION_MARK_VALIDATION_GET_ITEM_H
 
-#include "store/benchmark/async/sql/auctionmark/transactions/auctionmark_transaction.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/get_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/auctionmark_transaction.h"
 
 namespace auctionmark {
 
-class GetItem : public AuctionMarkTransaction {
+class ValidationGetItem : public GetItem, public AuctionMarkValidationTransaction {
  public:
-  GetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
-  virtual ~GetItem();
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-  virtual void SerializeTxnState(std::string &txnState) override;
-
- private:
-  std::string item_id;
-  std::string seller_id;
-  AuctionMarkProfile &profile;
+  ValidationGetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::GetItem &valGetItemMsg);
+  virtual ~ValidationGetItem();
+  transaction_status_t Validate(SyncClient &client);
 };
 
 
 } // namespace auctionmark
 
-#endif /* AUCTION_MARK_GET_ITEM_H */
+#endif /* AUCTION_MARK_VALIDATION_GET_ITEM_H */

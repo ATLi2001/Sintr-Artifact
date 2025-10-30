@@ -53,6 +53,16 @@ NewComment::NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt199
 }
 
 
+NewComment::NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewComment &valNewCommentMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "NEW COMMENT (VALIDATION)" << std::endl;
+
+  item_id = valNewCommentMsg.item_id();
+  seller_id = valNewCommentMsg.seller_id();
+  buyer_id = valNewCommentMsg.buyer_id();
+  question = valNewCommentMsg.question();
+}
 
 NewComment::~NewComment(){
 }

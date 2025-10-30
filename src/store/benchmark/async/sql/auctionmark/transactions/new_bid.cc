@@ -99,6 +99,18 @@ NewBid::NewBid(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &g
 
 }
 
+NewBid::NewBid(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewBid &valNewBidMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile) {
+
+  std::cerr << "NEW BID (VALIDATION)" << std::endl;
+  
+  item_id = valNewBidMsg.item_id();
+  seller_id = valNewBidMsg.seller_id();
+  buyer_id = valNewBidMsg.buyer_id();
+  newBid = valNewBidMsg.new_bid();
+  current_time = valNewBidMsg.current_time();
+}
+
 NewBid::~NewBid(){
 }
 
@@ -113,11 +125,12 @@ transaction_status_t NewBid::BaseExecute(SyncClient &client, bool serialize) {
   Debug("Bid: %f", newBid);
 
 
-  uint64_t current_time = GetProcTimestamp(benchmark_times);
   double i_current_price;
 
   std::string txnState;
   if(serialize) {
+    // only actually get current time if on initiating client
+    current_time = GetProcTimestamp(benchmark_times);
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
@@ -306,6 +319,7 @@ void NewBid::SerializeTxnState(std::string &txnState) {
   curr_txn.set_seller_id(seller_id);
   curr_txn.set_buyer_id(buyer_id);
   curr_txn.set_new_bid(newBid);
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

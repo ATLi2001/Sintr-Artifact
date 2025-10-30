@@ -59,6 +59,20 @@ NewFeedback::NewFeedback(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
   seller_id = sellerId.encode();
 }
 
+NewFeedback::NewFeedback(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::NewFeedback &valNewFeedbackMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile), gen(gen) {
+
+  std::cerr << "NEW FEEDBACK (VALIDATION)" << std::endl;
+
+  user_id = valNewFeedbackMsg.user_id();
+  i_id = valNewFeedbackMsg.i_id();
+  seller_id = valNewFeedbackMsg.seller_id();
+  from_id = valNewFeedbackMsg.from_id();
+  rating = valNewFeedbackMsg.rating();
+  feedback = valNewFeedbackMsg.feedback();
+  current_time = valNewFeedbackMsg.current_time();
+}
+
 NewFeedback::~NewFeedback(){
 }
 
@@ -69,10 +83,9 @@ transaction_status_t NewFeedback::BaseExecute(SyncClient &client, bool serialize
 
   Debug("NEW FEEDBACK");
 
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
-
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
@@ -115,6 +128,7 @@ void NewFeedback::SerializeTxnState(std::string &txnState) {
   curr_txn.set_from_id(from_id);
   curr_txn.set_rating(rating);
   curr_txn.set_feedback(feedback);
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

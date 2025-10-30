@@ -52,6 +52,15 @@ GetItem::GetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 
     seller_id = itemInfo.get_seller_id().encode();
 }
 
+GetItem::GetItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen, const validation::proto::GetItem &valGetItemMsg) : 
+  AuctionMarkTransaction(timeout), profile(profile) {
+
+  std::cerr << "GET ITEM (VALIDATION)" << std::endl;
+
+  item_id = valGetItemMsg.item_id();
+  seller_id = valGetItemMsg.seller_id();
+}
+
 GetItem::~GetItem(){
 }
 
