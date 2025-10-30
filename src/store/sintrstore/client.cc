@@ -297,7 +297,7 @@ bool Client::IsPolicyChangeTxn(const TxnState &protoTxnState) const {
 }
 
 void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient) {
-  EstimatePolicy est_policy_obj(params.sintr_params.policyFunctionName);
+  EstimatePolicy est_policy_obj(params.sintr_params.includeReadsetForTxnPolicy, params.sintr_params.policyFunctionName);
   est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, *policyCache);
 }
 
@@ -365,13 +365,15 @@ void Client::Get(const std::string &key, get_callback gcb,
         *txn.add_deps() = *dep;
       }
 
-      std::string policyId = policyIdFunction(key, "");
-      if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-        perTxnPolicyIds.insert(policyId);
-        const Policy *policy = policyCache->Get(policyId);
-        UW_ASSERT(policy != nullptr);
-        Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
-        c2client->HandlePolicyUpdate(policy);
+      if (params.sintr_params.includeReadsetForTxnPolicy) {
+        std::string policyId = policyIdFunction(key, "");
+        if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+          perTxnPolicyIds.insert(policyId);
+          const Policy *policy = policyCache->Get(policyId);
+          UW_ASSERT(policy != nullptr);
+          Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+          c2client->HandlePolicyUpdate(policy);
+        }
       }
 
       //if(true) {
@@ -917,13 +919,15 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     *txn.add_deps() = *dep;
   }
 
-  std::string policyId = policyIdFunction(key, "");
-  if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-    perTxnPolicyIds.insert(policyId);
-    const Policy *policy = policyCache->Get(policyId);
-    UW_ASSERT(policy != nullptr);
-    Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
-    c2client->HandlePolicyUpdate(policy);
+  if (params.sintr_params.includeReadsetForTxnPolicy) {
+    std::string policyId = policyIdFunction(key, "");
+    if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+      perTxnPolicyIds.insert(policyId);
+      const Policy *policy = policyCache->Get(policyId);
+      UW_ASSERT(policy != nullptr);
+      Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+      c2client->HandlePolicyUpdate(policy);
+    }
   }
 
   // note that the pendingQuery->table_name has been moved out, so is no longer valid
@@ -1090,13 +1094,15 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
-          std::string policyId = policyIdFunction(read.key(), "");
-          if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-            perTxnPolicyIds.insert(policyId);
-            const Policy *policy = policyCache->Get(policyId);
-            UW_ASSERT(policy != nullptr);
-            Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
-            c2client->HandlePolicyUpdate(policy);
+          if (params.sintr_params.includeReadsetForTxnPolicy) {
+            std::string policyId = policyIdFunction(read.key(), "");
+            if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+              perTxnPolicyIds.insert(policyId);
+              const Policy *policy = policyCache->Get(policyId);
+              UW_ASSERT(policy != nullptr);
+              Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
+              c2client->HandlePolicyUpdate(policy);
+            }
           }
 
           ReadMessage* add_read = txn.add_read_set();

@@ -690,6 +690,11 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second);
   }
 
+  if (!sintr_params.includeReadsetForTxnPolicy && !sintr_params.checkPolicyLeak) {
+    // no need to consider readset for policy or leak check
+    return;
+  }
+
   // policies from readset to add into policyClient
   std::unordered_set<const Policy *> readsetPoliciesToAdd;
 
@@ -708,9 +713,12 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
     std::pair<Timestamp, const Policy*> tsPolicy;
     policyStore.get(policyId, ts, tsPolicy);
 
-    if (policiesChecked.find(policyId) == policiesChecked.end()) {
-      readsetPoliciesToAdd.insert(tsPolicy.second);
-      policiesChecked.insert(policyId);
+    // at least one of includeReadsetForTxnPolicy and checkPolicyLeak is true
+    if (sintr_params.includeReadsetForTxnPolicy) {
+      if (policiesChecked.find(policyId) == policiesChecked.end()) {
+        readsetPoliciesToAdd.insert(tsPolicy.second);
+        policiesChecked.insert(policyId);
+      }
     }
 
     if (sintr_params.checkPolicyLeak) {
@@ -725,8 +733,10 @@ void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyCl
     }
   }
 
-  for (const auto &p : readsetPoliciesToAdd) {
-    policyClient.AddPolicy(p);
+  if (sintr_params.includeReadsetForTxnPolicy) {
+    for (const auto &p : readsetPoliciesToAdd) {
+      policyClient.AddPolicy(p);
+    }
   }
 
   // struct timespec ts_end;

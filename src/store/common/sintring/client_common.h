@@ -32,8 +32,9 @@
 #include <string>
 #include "store/common/policy/policy.h"
 #include "store/common/sintring/estimate_policy.h"
+#include "store/common/sintring/params.h"
 
 bool IsPolicyChangeTxn(const TxnState &protoTxnState);
-void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache);
+void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache, SintrParameters sintr_params);
 
 #endif /* CLIENT_SINTR_COMMON_H */

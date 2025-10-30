@@ -81,6 +81,10 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       }
       case ::tpcc::TXN_ORDER_STATUS:
       {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
         ::tpcc::validation::proto::OrderStatus valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
@@ -95,6 +99,10 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       }
       case ::tpcc::TXN_STOCK_LEVEL:
       {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
         ::tpcc::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
@@ -157,6 +165,10 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         break;
       }
       case ::tpcc_sql::SQL_TXN_ORDER_STATUS: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
         ::tpcc_sql::validation::proto::OrderStatus valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
@@ -175,6 +187,10 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         break;
       }
       case ::tpcc_sql::SQL_TXN_STOCK_LEVEL: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
         ::tpcc_sql::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
@@ -197,6 +213,12 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       case ::rwsql::RW_SQL_TRANSACTION: {
         ::rwsql::validation::proto::RWSql valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (valTxnData.read_only() && !include_readset_for_txn_policy) {
+          break;
+        }
+
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
           const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
           UW_ASSERT(temp_policy != nullptr);

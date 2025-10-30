@@ -557,6 +557,7 @@ static bool ValidateSintrFailureType(const char* flagname,
 DEFINE_string(sintr_failure_type, sintr_fail_args[0], "sintr specific type of failure");
 DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
 DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
+DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
 
 
 ///////////////////////////////////////////////////////////
@@ -1761,7 +1762,8 @@ int main(int argc, char **argv) {
       FLAGS_sintr_separate_transport,
       FLAGS_sintr_max_clients_connect,
       FLAGS_sintr_use_endorsement_cb,
-      sintrFailure
+      sintrFailure,
+      FLAGS_sintr_include_readset_for_txn_policy
     );
 
     switch (mode) {

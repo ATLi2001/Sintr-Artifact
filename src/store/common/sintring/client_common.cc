@@ -24,11 +24,16 @@
  *
  **********************************************************************/
 
- #include "store/common/sintring/client_common.h"
- #include "store/common/policy/policy_id.h"
- #include "lib/message.h"
+#include "store/common/sintring/client_common.h"
+#include "store/common/policy/policy_id.h"
+#include "lib/message.h"
 
- void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache) {
+
+bool IsPolicyChangeTxn(const TxnState &protoTxnState) {
+  return protoTxnState.txn_name().find("policy") != std::string::npos;
+}
+
+void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache, SintrParameters sintr_params) {
   if (IsPolicyChangeTxn(protoTxnState)) {
     // policy change transaction could require separate handling
     const Policy *policy = policyCache.Get(PolicyIdString(0));
@@ -38,11 +43,7 @@
     policyClient->AddPolicy(policy);
   } 
   else {
-    EstimatePolicy est_policy_obj;
+    EstimatePolicy est_policy_obj(sintr_params.includeReadsetForTxnPolicy, sintr_params.policyFunctionName);
     est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, policyCache);
   }
-}
-
-bool IsPolicyChangeTxn(const TxnState &protoTxnState) {
-  return protoTxnState.txn_name().find("policy") != std::string::npos;
 }

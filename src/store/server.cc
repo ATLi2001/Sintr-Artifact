@@ -485,6 +485,7 @@ DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to v
 DEFINE_bool(sintr_server_skip_endorsement_check, false, "server skip endorsement check completely");
 DEFINE_bool(sintr_policy_CCC, true, "perform CCC for policies");
 DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
+DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
 
 
 /**
@@ -830,7 +831,8 @@ int main(int argc, char **argv) {
     FLAGS_sintr_policy_CCC,
     false, false, true,
     FLAGS_sintr_hash_query_gen_id,
-    false, 0, false, SintrFailure()
+    false, 0, false, SintrFailure(),
+    FLAGS_sintr_include_readset_for_txn_policy
   );
 
   switch (proto) {

@@ -3268,6 +3268,11 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second.policy);
   }
 
+  if (!params.sintr_params.includeReadsetForTxnPolicy && !params.sintr_params.checkPolicyLeak) {
+    // no need to consider readset for policy or leak check
+    return true;
+  }
+
   // map that stores policyID to latest policy TS
   std::set<std::pair<std::string, Timestamp>> policyTSSet;
   // policies from readset to add into policyClient
@@ -3284,17 +3289,19 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
 
     std::string policyId = policyIdFunction(read.key(), "");
 
-    if (policiesChecked.find(policyId) == policiesChecked.end()) {
-      // use txn timestamp for endorsement check on readset policies
-      Debug(
-        "Extracting policy %s at time %lu.%lu for read to key %s",
-        policyId.c_str(), ts.getTimestamp(), ts.getID(), read.key().c_str()
-      );
-      std::pair<Timestamp, PolicyStoreValue> tsPolicy;
-      GetPolicy(policyId, ts, tsPolicy, false);
-      readsetPoliciesToAdd.insert(tsPolicy.second.policy);
+    if (params.sintr_params.includeReadsetForTxnPolicy) {
+      if (policiesChecked.find(policyId) == policiesChecked.end()) {
+        // use txn timestamp for endorsement check on readset policies
+        Debug(
+          "Extracting policy %s at time %lu.%lu for read to key %s",
+          policyId.c_str(), ts.getTimestamp(), ts.getID(), read.key().c_str()
+        );
+        std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+        GetPolicy(policyId, ts, tsPolicy, false);
+        readsetPoliciesToAdd.insert(tsPolicy.second.policy);
 
-      policiesChecked.insert(policyId);
+        policiesChecked.insert(policyId);
+      }
     }
 
     if (params.sintr_params.checkPolicyLeak) {
@@ -3326,8 +3333,10 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     }
   }
 
-  for (const auto &p : readsetPoliciesToAdd) {
-    policyClient.AddPolicy(p);
+  if (params.sintr_params.includeReadsetForTxnPolicy) {
+    for (const auto &p : readsetPoliciesToAdd) {
+      policyClient.AddPolicy(p);
+    }
   }
 
   // struct timespec ts_end;
