@@ -46,6 +46,7 @@ class NewCommentResponse : public AuctionMarkTransaction {
   std::string seller_id;
   uint64_t comment_id;
   std::string response;
+  uint64_t current_time;
 
   std::mt19937_64 &gen;
   AuctionMarkProfile &profile;

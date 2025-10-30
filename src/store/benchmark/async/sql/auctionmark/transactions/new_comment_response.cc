@@ -66,6 +66,7 @@ NewCommentResponse::NewCommentResponse(uint32_t timeout, AuctionMarkProfile &pro
   seller_id = valNewCommentResponseMsg.seller_id();
   comment_id = valNewCommentResponseMsg.comment_id();
   response = valNewCommentResponseMsg.response();
+  current_time = valNewCommentResponseMsg.current_time();
 }
 
 NewCommentResponse::~NewCommentResponse(){
@@ -80,11 +81,10 @@ transaction_status_t NewCommentResponse::BaseExecute(SyncClient &client, bool se
 
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
-
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
    statement = fmt::format("UPDATE {} SET ic_response = '{}', ic_updated = {} WHERE ic_id = {} AND ic_i_id = '{}' AND ic_u_id = '{}'", 
                           TABLE_ITEM_COMMENT, response, current_time, comment_id, item_id, seller_id);
@@ -111,6 +111,7 @@ void NewCommentResponse::SerializeTxnState(std::string &txnState) {
   curr_txn.set_seller_id(seller_id);
   curr_txn.set_comment_id(comment_id);
   curr_txn.set_response(response);
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

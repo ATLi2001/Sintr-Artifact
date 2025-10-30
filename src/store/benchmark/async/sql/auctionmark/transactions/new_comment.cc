@@ -62,6 +62,7 @@ NewComment::NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt199
   seller_id = valNewCommentMsg.seller_id();
   buyer_id = valNewCommentMsg.buyer_id();
   question = valNewCommentMsg.question();
+  current_time = valNewCommentMsg.current_time();
 }
 
 NewComment::~NewComment(){
@@ -76,6 +77,7 @@ transaction_status_t NewComment::BaseExecute(SyncClient &client, bool serialize)
 
   std::string txnState;
   if(serialize) {
+    current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
     SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
@@ -98,8 +100,6 @@ transaction_status_t NewComment::BaseExecute(SyncClient &client, bool serialize)
   
   Debug("Num comments: %d. query: %s", ic_id, statement.c_str());
   ++ic_id;
-
-  uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
   //insertItemComment
   statement = fmt::format("INSERT INTO {} (ic_id, ic_i_id, ic_u_id, ic_buyer_id, ic_question, ic_response, ic_created, ic_updated) "
@@ -153,6 +153,7 @@ void NewComment::SerializeTxnState(std::string &txnState) {
   curr_txn.set_seller_id(seller_id);
   curr_txn.set_buyer_id(buyer_id);
   curr_txn.set_question(question);
+  curr_txn.set_current_time(current_time);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);

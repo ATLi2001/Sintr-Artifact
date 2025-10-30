@@ -29,6 +29,7 @@ message NewCommentResponse {
     required string seller_id = 2;
     required uint64 comment_id = 3;
     required string response = 4;
+    required uint64 current_time = 5;
 }
 
 message NewComment {
@@ -36,6 +37,7 @@ message NewComment {
     required string seller_id = 2;
     required string buyer_id = 3;
     required string question = 4;
+    required uint64 current_time = 5;
 }
 
 message NewFeedback {
