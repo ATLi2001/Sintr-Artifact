@@ -37,7 +37,7 @@ namespace rwsql {
 
 class RWSQLValPolicyChange : public ValidationTransaction, public RWSQLBasePolicyChange {
  public:
-  RWSQLValPolicyChange(uint32_t timeout, const validation::proto::RWSqlPolicyChange &msg, const std::string &policy_function_name);
+  RWSQLValPolicyChange(uint32_t timeout, const validation::proto::RWSqlPolicyChange &msg);
   ~RWSQLValPolicyChange();
 
   transaction_status_t Validate(SyncClient &client) override;

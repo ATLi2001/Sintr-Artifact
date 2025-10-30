@@ -34,7 +34,7 @@ namespace rwsql {
 
 class RWSQLBasePolicyChange {
  public:
-  RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name);
+  RWSQLBasePolicyChange(uint64_t policy_id, uint32_t policy_weight);
   RWSQLBasePolicyChange() {};
   virtual ~RWSQLBasePolicyChange();
 
@@ -43,9 +43,8 @@ class RWSQLBasePolicyChange {
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
   void SerializeTxnState(std::string &txnState);
 
-  uint64_t table;
+  uint64_t policy_id;
   uint32_t policy_weight;
-  std::string policy_function_name;
 };
 
 } // namespace rwsql

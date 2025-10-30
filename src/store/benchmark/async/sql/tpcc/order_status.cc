@@ -144,10 +144,20 @@ void SQLOrderStatus::SerializeTxnState(std::string &txnState) {
   curr_txn.set_o_id(o_id);
   curr_txn.set_c_by_last_name(c_by_last_name);
   curr_txn.set_c_last(c_last);
+  std::vector<TPCC_Table> est_tables = SQLOrderStatus::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+
   std::string txn_data;
   curr_txn.SerializeToString(&txn_data);
   currTxnState.set_txn_data(txn_data);
 
   currTxnState.SerializeToString(&txnState);
 }
+
+std::vector<TPCC_Table> SQLOrderStatus::HeuristicFunction() {
+  return {CUSTOMER, ORDER, ORDER_LINE};
+}
+
 } // namespace tpcc_sql

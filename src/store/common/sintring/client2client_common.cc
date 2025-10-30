@@ -39,7 +39,7 @@ Client2ClientCommon::Client2ClientCommon(uint64_t client_id, transport::Configur
     group(group), sintr_params(sintr_params), endorseClient(endorseClient), valClientSelector(valClientSelector), rand(rand),
     keys(keys), done(false) {
 
-  valParseClient = new ValidationParseClient(10000, sintr_params.policyFunctionName, keys); // TODO: pass arg for timeout length
+  valParseClient = new ValidationParseClient(10000, keys); // TODO: pass arg for timeout length
   transport->Register(this, *clients_config, group, client_id);
   if(sintr_params.maxClientsConnect > 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));

@@ -119,8 +119,10 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
     if (sintr_params.clientEstimatePolicy) {
       policyClient = new PolicyClient();
       protoTxnState.ParseFromString(txnState);
-      EstimateTxnPolicy(protoTxnState, policyClient, *policyCache);
+      EstimateTxnPolicy(protoTxnState, policyClient, *policyCache, sintr_params);
     }
+
+    perTxnPolicyIds.clear();
 
     Debug("BEGIN tx: ", client_seq_num);
     if(!sintr_params.ignorePolicyUpdate) {
@@ -226,6 +228,9 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
 
         for (auto &read : txn_msg->readset()) {
           Debug("Client read key: %s", read.key().c_str());
+          if (sintr_params.includeReadsetForTxnPolicy) {
+            handlePolicyUpdateOnKey(read.key());
+          }
           *this->txn_msg->add_readset() = std::move(read);
         }
         for (auto &write : txn_msg->writeset()) {
@@ -298,12 +303,15 @@ void Client::handlePolicyUpdateOnKey(const std::string &key) {
   if(!sintr_params.ignorePolicyUpdate) {
     // TODO: need to also handle policy change functions
     std::string policyId = policyIdFunction(key, "");
-    const Policy *policy = policyCache->Get(policyId);
-    if(policy == nullptr) {
-      Panic("Policy for policy id %s not found in policy cache", policyId.c_str());
+    if (perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+      perTxnPolicyIds.insert(policyId);
+      const Policy *policy = policyCache->Get(policyId);
+      if(policy == nullptr) {
+        Panic("Policy for policy id %s not found in policy cache", policyId.c_str());
+      }
+      Debug("handle policy update for policy id %s in write", policyId.c_str());
+      c2client->HandlePolicyUpdate(policy);
     }
-    Debug("handle policy update for policy id %lu in write", policyId);
-    c2client->HandlePolicyUpdate(policy);
   }
 }
 

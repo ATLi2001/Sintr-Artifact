@@ -35,12 +35,12 @@
 #include "store/common/policy/policy_cache.h"
 
 
-// this class takes parses TxnState proto message and estimates the policy needed for the transaction
+// this class takes TxnState proto message and estimates the policy needed for the transaction
 class EstimatePolicy {
  public:
-  EstimatePolicy() {}
-  EstimatePolicy(const std::string &policy_function_name) : policy_function_name(policy_function_name) {}
-  ~EstimatePolicy(){}
+  EstimatePolicy(bool include_readset_for_txn_policy, const std::string &policy_function_name)
+      : include_readset_for_txn_policy(include_readset_for_txn_policy), policy_function_name(policy_function_name) {}
+  ~EstimatePolicy() {}
   // takes in transaction state, policy, and endorsement client and returns an estimated policy
   void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache) const;
 
@@ -51,6 +51,7 @@ class EstimatePolicy {
   */
   std::string TableToPolicyID(const uint64_t t, const std::string &txn_bench) const;
 
+  const bool include_readset_for_txn_policy;
   std::string policy_function_name;
 };
 

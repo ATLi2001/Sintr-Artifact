@@ -28,6 +28,7 @@
 #include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/common/common-proto.pb.h"
 #include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/policy_id.h"
 #include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
 
 #include <fmt/core.h>
@@ -35,14 +36,14 @@
 
 namespace rwsql {
 
-RWSQLBasePolicyChange::RWSQLBasePolicyChange(uint64_t table, uint32_t policy_weight, const std::string &policy_function_name) 
-  : table(table), policy_weight(policy_weight), policy_function_name(policy_function_name) {}
+RWSQLBasePolicyChange::RWSQLBasePolicyChange(uint64_t policy_id, uint32_t policy_weight)
+  : policy_id(policy_id), policy_weight(policy_weight) {}
 
 RWSQLBasePolicyChange::~RWSQLBasePolicyChange() {}
 
 transaction_status_t RWSQLBasePolicyChange::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
   Debug("POLICY_CHANGE");
-  Debug("table: %lu", table);
+  Debug("policy_id: %lu", policy_id);
 
   std::string txnState;
   if (serialize) {
@@ -59,8 +60,7 @@ transaction_status_t RWSQLBasePolicyChange::BaseExecute(SyncClient &client, uint
   std::string policy_str;
   policy.SerializeToString(&policy_str);
 
-  std::string policy_id = GetPolicyIdForTable(table, policy_function_name);
-  client.Put(policy_id, policy_str, timeout);
+  client.Put(PolicyIdString(policy_id), policy_str, timeout);
 
   return client.Commit(timeout);
 }
@@ -74,7 +74,7 @@ void RWSQLBasePolicyChange::SerializeTxnState(std::string &txnState) {
   currTxnState.set_txn_name(txn_name);
 
   validation::proto::RWSqlPolicyChange curr_txn = validation::proto::RWSqlPolicyChange();
-  curr_txn.set_table(table);
+  curr_txn.set_policy_id(policy_id);
   curr_txn.set_policy_weight(policy_weight);
   std::string txn_data;
   curr_txn.SerializeToString(&txn_data);

@@ -220,6 +220,51 @@ def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string, tp
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.csv"), index=False)
     return out_df
 
+def tput_time_csv(logs_df, output_dir, now_string):
+    data = []
+
+    logs_df["commit_timestamp_ns"] = logs_df["commit_timestamp_ns"].astype(float)
+    logs_df["commit_timestamp_ns"] = logs_df["commit_timestamp_ns"] / 1e9
+
+    policy_change_time_s = []
+    tput_interval_s = 2.5 
+    for (experiment_name, exp_timestamp), group in logs_df.groupby(["experiment_name", "exp_timestamp"]):
+        # group by client_id and normalize each client's time to start at 0
+        # then combine all clients' data
+        # this ensures that we are not affected by clock skew between clients
+        combined_group = pd.DataFrame()
+        for client_id, client_group in group.groupby("client_id"):
+            client_group = client_group.sort_values(by=["commit_timestamp_ns"])
+            t0 = client_group["commit_timestamp_ns"].iloc[0]
+            client_group["commit_timestamp_ns"] = client_group["commit_timestamp_ns"] - t0
+            if int(client_id) == 0:
+                # find policy change time
+                policy_change = client_group[client_group["operation"] == "policy_change"]
+                if len(policy_change) > 0:
+                    policy_change_time_s = policy_change["commit_timestamp_ns"].tolist()
+                    print(f"{experiment_name}: policy change at {[f'{time:.2f}' for time in policy_change_time_s]}s")
+
+            combined_group = pd.concat([combined_group, client_group.loc[client_group["operation"] != "abort"]])
+        
+        # calculate throughput at intervals
+        time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
+        combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
+        # throughput is number of transactions in bin
+        tput = combined_group.groupby("time_bin").size() / tput_interval_s
+
+        overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
+        print(f"{experiment_name}: avg tput {overall_tput:.2f} txn/s")
+
+        for i in range(1, len(time_bins)):
+            time_s = time_bins[i]
+            tput_value = tput.iat[i-1]
+            data.append([experiment_name, exp_timestamp, time_s, tput_value])
+
+    out_df = pd.DataFrame(data, columns=["experiment_name", "exp_timestamp", "time_s", "tput"])
+
+    out_df.sort_values(by=["experiment_name", "exp_timestamp"], inplace=True)
+    out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.csv"), index=False)
+    return out_df, policy_change_time_s
 
 def create_lat_tput_plots(df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
@@ -239,7 +284,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
-def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
+def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
     # spacing if too many bars per group
     bars_per_group = len(grouped_data)
     x = np.arange(len(x_labels)) * (bars_per_group // 4 + 1)  # the label locations
@@ -260,6 +305,7 @@ def create_grouped_bar_plot(grouped_data, x_labels, y_label, output_dir, analysi
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel(y_label)
     ax.set_xticks(x + width, x_labels)
+    ax.set_xlabel(x_axis_label)
     fig.legend(loc="outside lower center", ncol=2)
 
     plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
@@ -299,6 +345,7 @@ def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
     create_grouped_bar_plot(
         sig_no_sig_data,
         experiment_labels,
+        "",
         y_label,
         output_dir,
         analysis_type,
@@ -468,6 +515,7 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
     create_grouped_bar_plot(
         grouped_data,
         x_labels,
+        "",
         "Latency (ms)",
         output_dir,
         ANALYSIS_TYPES[4],
@@ -475,98 +523,79 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
         grouped_yerr=grouped_err
     )
 
-def create_tput_time_plot(df, output_dir, now_string):
+def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Throughput (txn/s)")
     ax.grid(True)
 
-    df["commit_timestamp_ns"] = df["commit_timestamp_ns"].astype(float)
-    df["commit_timestamp_ns"] = df["commit_timestamp_ns"] / 1e9
+    for experiment_name, group in tput_time_df.groupby("experiment_name"):
+        # group by time_s to get average tput per time interval
+        time_groups = group.groupby("time_s")
+        tput = time_groups["tput"].mean()
+        ax.plot(tput, "-", label=experiment_name)
 
-    policy_change_time_s = -1
-    tput_interval_s = 2
-    plot_abort = False
-    plot_latency = False
-    for experiment_name, group in df.groupby(["experiment_name"]):
-        # group by client_id and normalize each client's time to start at 0
-        # then combine all clients' data
-        # this ensures that we are not affected by clock skew between clients
-        combined_group = pd.DataFrame()
-        combined_abort = pd.DataFrame()
-        for client_id, client_group in group.groupby("client_id"):
-            client_group = client_group.sort_values(by=["commit_timestamp_ns"])
-            t0 = client_group["commit_timestamp_ns"].iloc[0]
-            client_group["commit_timestamp_ns"] = client_group["commit_timestamp_ns"] - t0
-            if int(client_id) == 0:
-                # find policy change time
-                policy_change = client_group[client_group["operation"] == "policy_change"]
-                if len(policy_change) > 0:
-                    policy_change_time_s = policy_change["commit_timestamp_ns"].iloc[0]
-                    print(f"{experiment_name[0]}: policy change at {policy_change_time_s:.2f}s")
-
-            combined_group = pd.concat([combined_group, client_group.loc[client_group["operation"] != "abort"]])
-            combined_abort = pd.concat([combined_abort, client_group.loc[client_group["operation"] == "abort"]])
-
-        # calculate throughput at intervals
-        time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
-        combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
-        # throughput is number of transactions in bin
-        tput = combined_group.groupby("time_bin").size() / tput_interval_s
-        # average latency in bin in ms
-        latency = combined_group.groupby("time_bin")["latency_ns"].mean() / 1e6
-
-        overall_tput = len(combined_group) / combined_group["commit_timestamp_ns"].max()
-        print(f"{experiment_name[0]}: avg tput {overall_tput:.2f} txn/s")
-
-        ax.plot(time_bins[1:], tput, "-", label=experiment_name[0])
-
-        if plot_latency:
-            # also plot latency over time on secondary y-axis
-            ax_lat = ax.twinx()
-            ax_lat.set_ylabel("Latency (ms)", color="green")
-            ax_lat.plot(time_bins[1:], latency, "--", label=f"{experiment_name[0]} latency", color="green")
-            ax_lat.tick_params(axis='y', labelcolor="green")
-
-        if plot_abort:
-            ax2 = ax.twinx()
-            ax2.set_ylabel("Aborts", color="red")
-            ax2.plot(combined_abort["commit_timestamp_ns"], np.repeat(1, len(combined_abort)), "o", label=f"{experiment_name[0]} aborts", color="red")
-
-    if policy_change_time_s > 0:
-        ax.axvline(x=policy_change_time_s, color="black", linestyle="--", label="Policy Change")
+    for i, policy_change_time in enumerate(policy_change_time_s):
+        # all policy changes have same line color, only label once in legend
+        label = "Policy Change" if i == 0 else None
+        ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
     fig.legend(loc="outside lower center", ncol=2)
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] + 100)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 
 def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
-    fig, ax = plt.subplots(layout="constrained")
-    ax.set_xlabel("# Byzantine Clients")
-    if combined:
-        ax.set_ylabel("Throughput per Client (txn/s)")
-    else:
-        ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
-    ax.grid(True)
+
+    target_num_byz_clients = [0, 2, 5]
+    grouped_data = {}
+    x_labels = [str(x) for x in target_num_byz_clients]
+
+    # fig, ax = plt.subplots(layout="constrained")
+    # ax.set_xlabel("# Byzantine Clients")
+    # if combined:
+    #     ax.set_ylabel("Throughput per Client (txn/s)")
+    # else:
+    #     ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
+    # ax.grid(True)
 
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
         client_groups = group.groupby("num_byz_clients")
         num_byz_clients = client_groups["num_byz_clients"].mean()
         tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
-        ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
+
+        for target in target_num_byz_clients:
+            if target in num_byz_clients.values:
+                tput_per_correct_client_value = tput_per_correct_client.loc[num_byz_clients == target].values[0]
+                grouped_data.setdefault(experiment_name, []).append(tput_per_correct_client_value)
+            else:
+                grouped_data.setdefault(experiment_name, []).append(0)
+
+        # ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
     
     if combined:
         for experiment_name, group in byz_client_df.groupby("experiment_name"):
             client_groups = group.groupby("num_byz_clients")
             num_byz_clients = client_groups["num_byz_clients"].mean()
             tput_per_byz_client = client_groups["tput_per_byz_client"].mean()
-            ax.plot(num_byz_clients, tput_per_byz_client, "-o", label=experiment_name + " (Byz)")
+            # ax.plot(num_byz_clients, tput_per_byz_client, "-o", label=experiment_name + " (Byz)")
 
-    fig.legend(loc="outside lower center", ncol=2)
-    ylims = ax.get_ylim()
-    ax.set_ylim(0, ylims[1] + 10)
-    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
-    plt.close()
+    create_grouped_bar_plot(
+        grouped_data,
+        [str(x) for x in x_labels],
+        "# Byzantine Clients",
+        "Throughput per Correct Client (txn/s)" if not combined else "Throughput per Client (txn/s)",
+        output_dir,
+        ANALYSIS_TYPES[6],
+        now_string
+    )
+
+    # fig.legend(loc="outside lower center", ncol=2)
+    # ylims = ax.get_ylim()
+    # ax.set_ylim(0, ylims[1] + 10)
+    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
+    # plt.close()
 
 
 if __name__ == "__main__":
@@ -613,12 +642,6 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
-    parser.add_argument(
-        "-l", "--logs",
-        type=str,
-        required=False,
-        help="Path to directory that contains logs to analyze for throughput over time plot. If provided, generates plot from these logs instead of going through original_stats_dir."
-    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -631,9 +654,7 @@ if __name__ == "__main__":
     logs_df = pd.DataFrame()
     if args.csv:
         df = pd.read_csv(args.csv)
-    if args.logs:
-        logs_df = pd.read_csv(args.logs)
-    if not args.csv and not args.logs:
+    else:
         df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
@@ -645,9 +666,14 @@ if __name__ == "__main__":
     elif args.analysis_type == ANALYSIS_TYPES[4]:
         create_overheads_lat_grouped_bar_plot(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[5]:
-        create_tput_time_plot(logs_df, args.output_plot_dir, now_string)
+        tput_time_df, policy_change_time_s = tput_time_csv(logs_df, args.output_csv_dir, now_string)
+        create_tput_time_plot(tput_time_df, policy_change_time_s, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
-        client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
+        client_failures_df = pd.DataFrame()
+        if args.csv:
+            client_failures_df = df
+        else:
+            client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
         # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         # create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
         create_client_failures_plot(client_failures_df, None, args.output_plot_dir, now_string)

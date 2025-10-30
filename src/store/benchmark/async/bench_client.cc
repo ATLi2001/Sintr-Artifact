@@ -45,14 +45,14 @@ DEFINE_LATENCY(op);
 BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 		int numRequests, int expDuration, uint64_t delay, int warmupSec,
     int cooldownSec, int tputInterval, const std::string &latencyFilename,
-    uint64_t policyChangeTime) :
+    const std::string &govTxnConfigPath) :
     id(id),
     tputInterval(tputInterval),
     transport(transport),
     rand(id),
     numRequests(numRequests), expDuration(expDuration),	delay(delay),
     warmupSec(warmupSec), cooldownSec(cooldownSec),
-    latencyFilename(latencyFilename), policyChangeTime(policyChangeTime) {
+    latencyFilename(latencyFilename) {
 	if (delay != 0) {
 		Notice("Delay between requests: %ld ms", delay);
 	} else {
@@ -61,6 +61,9 @@ BenchmarkClient::BenchmarkClient(Transport &transport, uint64_t id,
 	started = false;
 	done = false;
   cooldownStarted = false;
+  if (govTxnConfigPath.size() > 0) {
+    govTxnConfig = GovTxnConfig(govTxnConfigPath);
+  }
   isNextPolicyChange = false;
   if (numRequests > 0) {
 	  latencies.reserve(numRequests);
@@ -104,11 +107,17 @@ void BenchmarkClient::TimeInterval() {
 }
 
 void BenchmarkClient::WarmupDone() {
-  if (policyChangeTime > 0) {
-    Notice("Will change transaction policy after %lu seconds", policyChangeTime);
-    transport.Timer(policyChangeTime * 1000, [this]() {
-      isNextPolicyChange = true;
-    });
+  if (govTxnConfig.policyChangeTimes.size() > 0) {
+    for (size_t i = 0; i < govTxnConfig.policyChangeTimes.size(); i++) {
+      uint64_t changeTime = govTxnConfig.policyChangeTimes[i];
+      uint64_t policyId = govTxnConfig.policyChangeIds[i];
+      uint32_t newWeight = govTxnConfig.newPolicyWeights[i];
+      Notice("Scheduling policy change for policyId %lu to weight %u at time %lu seconds",
+             policyId, newWeight, changeTime);
+      transport.Timer(changeTime * 1000, [this]() {
+        isNextPolicyChange = true;
+      });
+    }
   }
   started = true;
   Notice("Completed warmup period of %d seconds with %d requests", warmupSec, n);

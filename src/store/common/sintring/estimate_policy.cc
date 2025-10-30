@@ -25,6 +25,7 @@
  **********************************************************************/
 
 #include "store/common/sintring/estimate_policy.h"
+#include "store/common/policy/policy_id.h"
 #include "store/benchmark/async/tpcc/validation/tpcc_transaction.h"
 #include "store/benchmark/async/tpcc/validation/delivery.h"
 #include "store/benchmark/async/tpcc/validation/new_order.h"
@@ -78,9 +79,31 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         repeated_values = valTxnData.est_tables();
         break;
       }
+      case ::tpcc::TXN_ORDER_STATUS:
+      {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
       case ::tpcc::TXN_PAYMENT:
       {
         ::tpcc::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_STOCK_LEVEL:
+      {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
         break;
@@ -107,7 +130,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
     }
     else {
       // txn will have writes
-      const Policy *temp_policy = policyCache.Get("p#0");
+      const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
       UW_ASSERT(temp_policy != nullptr);
       policyClient->AddPolicy(temp_policy);
     }
@@ -141,6 +164,16 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         repeated_values = valTxnData.est_tables();
         break;
       }
+      case ::tpcc_sql::SQL_TXN_ORDER_STATUS: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_sql::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
       case ::tpcc_sql::SQL_TXN_PAYMENT: {
         ::tpcc_sql::validation::proto::Payment valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
@@ -149,6 +182,16 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       }
       case ::tpcc_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
         ::tpcc_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_STOCK_LEVEL: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_sql::validation::proto::StockLevel valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         repeated_values = valTxnData.est_tables();
         break;
@@ -170,23 +213,26 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
       case ::rwsql::RW_SQL_TRANSACTION: {
         ::rwsql::validation::proto::RWSql valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
-        if (!valTxnData.read_only()) {
-          // txn will have writes
-          if (policy_function_name.empty() || policy_function_name == "basic_id") {
-            const Policy *temp_policy = policyCache.Get("p#0");
+
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (valTxnData.read_only() && !include_readset_for_txn_policy) {
+          break;
+        }
+
+        if (policy_function_name.empty() || policy_function_name == "basic_id") {
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+          UW_ASSERT(temp_policy != nullptr);
+          policyClient->AddPolicy(temp_policy);
+        }
+        else if (policy_function_name == "rw_sql_policy_change_grouped") {
+          for (const uint64_t &t : valTxnData.tables()) {
+            const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
             UW_ASSERT(temp_policy != nullptr);
             policyClient->AddPolicy(temp_policy);
           }
-          else if (policy_function_name == "rw_sql_policy_change_grouped") {
-            for (const uint64_t &t : valTxnData.tables()) {
-              const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
-              UW_ASSERT(temp_policy != nullptr);
-              policyClient->AddPolicy(temp_policy);
-            }
-          }
-          else {
-            Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
-          }
+        }
+        else {
+          Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
         }
         break;
       }
@@ -194,12 +240,12 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
-          const Policy *temp_policy = policyCache.Get("p#0");
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
         else if (policy_function_name == "rw_sql_policy_change_grouped") {
-          const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(valTxnData.table(), txn_bench));
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(valTxnData.policy_id()));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
         }
@@ -212,7 +258,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
   }
   else {
     // return default policy ID (policy ID 0)
-    const Policy *temp_policy = policyCache.Get("p#0");
+    const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
     UW_ASSERT(temp_policy != nullptr);
     policyClient->AddPolicy(temp_policy);
   }
@@ -223,27 +269,27 @@ std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string 
     ::tpcc::Tables table = static_cast<::tpcc::Tables>(t);
     switch (table) {
     case ::tpcc::Tables::WAREHOUSE:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::DISTRICT:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::CUSTOMER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::HISTORY:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::NEW_ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER_LINE:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ITEM:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::STOCK:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::ORDER_BY_CUSTOMER:
-      return "p#0";
+      return PolicyIdString(0);
     case ::tpcc::Tables::EARLIEST_NEW_ORDER:
-      return "p#0";
+      return PolicyIdString(0);
     default:
       Panic("Received unexpected table type for tpcc: %d", t);
     }
@@ -251,25 +297,25 @@ std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string 
     ::tpcc_sql::TPCC_Table table = static_cast<::tpcc_sql::TPCC_Table>(t);
     switch (table) {
       case ::tpcc_sql::TPCC_Table::WAREHOUSE:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::DISTRICT:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::CUSTOMER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::HISTORY:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::NEW_ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ORDER_LINE:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::ITEM:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::STOCK:
-        return "p#0";
+        return PolicyIdString(0);
       case ::tpcc_sql::TPCC_Table::EARLIEST_NEW_ORDER:
-        return "p#0";
+        return PolicyIdString(0);
       default:
         Panic("Received unexpected table type for tpcc sql: %lu", t);
     }

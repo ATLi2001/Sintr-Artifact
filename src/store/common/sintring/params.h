@@ -67,6 +67,7 @@ typedef struct SintrParameters {
   const uint32_t maxClientsConnect; // max number of clients that a single client connects to
   const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
   const SintrFailure sintrFailure; // sintr failure injection configuration
+  const bool includeReadsetForTxnPolicy; // include readset for determining transaction policy
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -76,7 +77,7 @@ typedef struct SintrParameters {
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
-    bool useEndorsementCB, const SintrFailure &sintrFailure) :
+    bool useEndorsementCB, const SintrFailure &sintrFailure, bool includeReadsetForTxnPolicy) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -108,7 +109,8 @@ typedef struct SintrParameters {
     separateTransport(separateTransport),
     maxClientsConnect(maxClientsConnect),
     useEndorsementCB(useEndorsementCB),
-    sintrFailure(sintrFailure)
+    sintrFailure(sintrFailure),
+    includeReadsetForTxnPolicy(includeReadsetForTxnPolicy)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering

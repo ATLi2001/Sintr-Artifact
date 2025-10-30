@@ -32,6 +32,7 @@
 
 #include "store/common/frontend/async_client.h"
 #include "store/common/stats.h"
+#include "store/common/sintring/gov_txn_config.h"
 #include "lib/latency.h"
 #include "lib/transport.h"
 #include <random>
@@ -43,7 +44,7 @@ class BenchmarkClient {
   BenchmarkClient(Transport &transport, uint64_t id, int numRequests,
       int expDuration, uint64_t delay, int warmupSec, int cooldownSec,
       int tputInterval, const std::string &latencyFilename = "",
-      uint64_t policyChangeTime = 0);
+      const std::string &govTxnConfigPath = "");
   virtual ~BenchmarkClient();
 
   void Start(bench_done_callback bdcb);
@@ -78,6 +79,8 @@ class BenchmarkClient {
   Stats stats;
   Transport &transport;
 
+  GovTxnConfig govTxnConfig;
+
   // if we want to track aborts over time 
   // we need the id accessible to sync transaction bench client
   // const uint64_t id;
@@ -100,7 +103,6 @@ class BenchmarkClient {
   struct timeval endTime;
   struct timeval startMeasureTime;
   string latencyFilename;
-  uint64_t policyChangeTime;
   bool isNextPolicyChange;
   int msSinceStart;
   int opLastInterval;

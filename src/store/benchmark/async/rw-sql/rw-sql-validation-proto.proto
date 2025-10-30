@@ -23,6 +23,6 @@ message RWSql {
 }
 
 message RWSqlPolicyChange {
-  required uint64 table = 1;
+  required uint64 policy_id = 1;
   required uint32 policy_weight = 2;
 }

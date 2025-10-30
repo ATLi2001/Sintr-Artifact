@@ -50,8 +50,7 @@ class RWSQLClient : public SyncTransactionBenchClient {
       int warmupSec, int cooldownSec, int tputInterval,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, 
       const uint32_t timeout,
-      uint64_t policyChangeTime, uint64_t policyChangeTable, uint32_t newPolicyWeight,
-      const std::string &policyFunctionName,
+      const std::string &govTxnConfigPath,
       const std::string &latencyFilename = "");
 
 
@@ -77,11 +76,7 @@ class RWSQLClient : public SyncTransactionBenchClient {
   bool execPointScanParallel;
   std::string lastOp;
   // For policy change
-  uint64_t policyChangeTime;
-  uint64_t policyChangeTable;
-  uint32_t newPolicyWeight;
-  std::string policyFunctionName;
-
+  size_t policyChangeCount = 0;
 
   uint64_t tid = 0;
 };
