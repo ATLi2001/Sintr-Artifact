@@ -35,10 +35,13 @@
 
 namespace auctionmark {
 
-class AuctionMarkTransaction : public SyncTransaction {
+class AuctionMarkTransaction {
  public:
   AuctionMarkTransaction(uint32_t timeout);
   virtual ~AuctionMarkTransaction();
+  virtual void SerializeTxnState(std::string &txnState) = 0;
+ protected:
+  uint32_t timeout;
 };
 //////////////
 

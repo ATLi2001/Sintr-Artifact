@@ -28,7 +28,7 @@
 
 namespace auctionmark {
 
-AuctionMarkTransaction::AuctionMarkTransaction(uint32_t timeout) : SyncTransaction(timeout) {
+AuctionMarkTransaction::AuctionMarkTransaction(uint32_t timeout) : timeout(timeout) {
 }
 
 AuctionMarkTransaction::~AuctionMarkTransaction() {

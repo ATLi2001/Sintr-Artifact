@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/new_feedback.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -59,7 +62,7 @@ NewFeedback::NewFeedback(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
 NewFeedback::~NewFeedback(){
 }
 
-transaction_status_t NewFeedback::Execute(SyncClient &client) {
+transaction_status_t NewFeedback::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -68,7 +71,11 @@ transaction_status_t NewFeedback::Execute(SyncClient &client) {
 
   uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   //checkUserFeedback
   statement = fmt::format("SELECT uf_i_id, uf_i_u_id, uf_from_id FROM {} WHERE uf_u_id = '{}' AND uf_i_id = '{}' AND uf_i_u_id = '{}' AND uf_from_id = '{}'", 
@@ -92,5 +99,26 @@ transaction_status_t NewFeedback::Execute(SyncClient &client) {
   Debug("COMMIT NEW_FEEDBACK");
   return client.Commit(timeout);
 }
+
+void NewFeedback::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_NEW_FEEDBACK));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewFeedback curr_txn;
+  curr_txn.set_user_id(user_id);
+  curr_txn.set_i_id(i_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_from_id(from_id);
+  curr_txn.set_rating(rating);
+  curr_txn.set_feedback(feedback);
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
+}
+
 
 } // namespace auctionmark

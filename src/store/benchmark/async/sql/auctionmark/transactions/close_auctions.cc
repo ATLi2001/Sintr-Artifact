@@ -144,4 +144,6 @@ void CloseAuctions::UpdateProfile(){
   profile.update_item_queues();
 }
 
+void CloseAuctions::SerializeTxnState(std::string &txnState) {}
+
 } // namespace auctionmark

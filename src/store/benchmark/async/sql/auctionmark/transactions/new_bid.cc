@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/new_bid.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -99,7 +102,7 @@ NewBid::NewBid(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &g
 NewBid::~NewBid(){
 }
 
-transaction_status_t NewBid::Execute(SyncClient &client) {
+transaction_status_t NewBid::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -113,7 +116,11 @@ transaction_status_t NewBid::Execute(SyncClient &client) {
   uint64_t current_time = GetProcTimestamp(benchmark_times);
   double i_current_price;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   //getItem
       //Use Select * so it is cached for future update. In this case, use a different deserializer.
@@ -275,12 +282,33 @@ transaction_status_t NewBid::Execute(SyncClient &client) {
   auto tx_result = client.Commit(timeout);
   if(tx_result != transaction_status_t::COMMITTED) return tx_result;
    
-   //////////////// UPDATE PROFILE /////////////////////
+  // skip updating profile if validating client
+  if (!serialize) return tx_result;
+
+  //////////////// UPDATE PROFILE /////////////////////
   ItemRecord item_rec(item_id, seller_id, "", i_current_price, ir.i_num_bids + 1, ir.i_end_date, ir.i_status, newBidId, newBidMaxBuyerId);
   ItemId itemId = profile.processItemRecord(item_rec);
 
   Debug("COMMIT");
   return tx_result;
+}
+
+void NewBid::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_NEW_BID));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewBid curr_txn;
+  curr_txn.set_item_id(item_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_buyer_id(buyer_id);
+  curr_txn.set_new_bid(newBid);
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace auctionmark

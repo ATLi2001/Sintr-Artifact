@@ -30,16 +30,16 @@
 
 #include <random>
 
-#include "store/benchmark/async/sql/auctionmark/transactions/close_auctions.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/get_item.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/get_user_info.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_bid.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_comment_response.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_comment.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_feedback.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_item.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/new_purchase.h"
-#include "store/benchmark/async/sql/auctionmark/transactions/update_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/close_auctions.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/get_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/get_user_info.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_bid.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_comment_response.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_comment.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_feedback.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/new_purchase.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/update_item.h"
 
 namespace auctionmark
 {
@@ -98,45 +98,45 @@ SyncTransaction *AuctionMarkClient::GetNextTransaction()
     std::cerr << "last close auction time (scaled):" << profile.get_last_close_auctions_time() << std::endl;
     std::cerr << "current time (scaled):" << now << std::endl;
     lastOp = "close_auctions";
-    return new CloseAuctions(GetTimeout(), profile, gen);
+    return new SyncCloseAuctions(GetTimeout(), profile, gen);
   } 
   
   else if (ttype <= (freq += FREQUENCY_GET_ITEM)) {
     lastOp = "get_item";
-    return new GetItem(GetTimeout(), profile, gen);
+    return new SyncGetItem(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_GET_USER_INFO)) {
     lastOp = "get_user_info";
-    return new GetUserInfo(GetTimeout(), profile, gen);
+    return new SyncGetUserInfo(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_NEW_BID)) {
     lastOp = "new_bid";
-    return new NewBid(GetTimeout(), profile, gen);
+    return new SyncNewBid(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_NEW_COMMENT)) {
     lastOp = "new_comment";
-    return new NewComment(GetTimeout(), profile, gen);
+    return new SyncNewComment(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_NEW_COMMENT_RESPONSE) && profile.num_pending_comment_responses() != 0) {
     lastOp = "new_comment_response";
-    return new NewCommentResponse(GetTimeout(), profile, gen);
+    return new SyncNewCommentResponse(GetTimeout(), profile, gen);
   } 
   
   else if (ttype <= (freq += FREQUENCY_NEW_FEEDBACK)) {
     lastOp = "new_feedback";
-    return new NewFeedback(GetTimeout(), profile, gen);
+    return new SyncNewFeedback(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_NEW_ITEM)) {
     lastOp = "new_item";
-    return new NewItem(GetTimeout(), profile, gen);
+    return new SyncNewItem(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_NEW_PURCHASE)) {
     lastOp = "new_purchase";
-    return new NewPurchase(GetTimeout(), profile, gen);
+    return new SyncNewPurchase(GetTimeout(), profile, gen);
   } 
   else if (ttype <= (freq += FREQUENCY_UPDATE_ITEM)) {
     lastOp = "update_item";
-    return new UpdateItem(GetTimeout(), profile, gen);
+    return new SyncUpdateItem(GetTimeout(), profile, gen);
   } 
   else {
     Panic("Invalid transaction type %d", ttype);

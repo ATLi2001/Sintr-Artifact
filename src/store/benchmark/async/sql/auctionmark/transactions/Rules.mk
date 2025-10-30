@@ -8,3 +8,6 @@ OBJ-auctionmark-transaction := $(LIB-store-frontend) $(LIB-auctionmark-utils) $(
 LIB-auctionmark-transactions := $(OBJ-auctionmark-transaction) $(o)close_auctions.o $(o)get_item.o $(o)get_user_info.o $(o)new_bid.o \
 					$(o)new_comment.o $(o)new_comment_response.o $(o)new_feedback.o $(o)new_item.o \
 					$(o)new_purchase.o $(o)update_item.o
+
+cd := $(d)
+include $(cd)sync/Rules.mk

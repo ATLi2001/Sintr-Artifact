@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/new_item.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/auctionmark/utils/auctionmark_utils.h"
 #include <fmt/core.h>
 
@@ -80,7 +83,7 @@ NewItem::NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 
 NewItem::~NewItem(){
 }
 
-transaction_status_t NewItem::Execute(SyncClient &client) {
+transaction_status_t NewItem::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results = {};
@@ -89,7 +92,11 @@ transaction_status_t NewItem::Execute(SyncClient &client) {
   Debug("NEW ITEM");
   Debug("ItemID: %s", item_id.c_str());
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
   uint64_t end_date = current_time + (duration * MILLISECONDS_IN_A_DAY);
@@ -239,6 +246,8 @@ transaction_status_t NewItem::Execute(SyncClient &client) {
   Debug("COMMIT");
   auto tx_result = client.Commit(timeout);
   if(tx_result != transaction_status_t::COMMITTED) return tx_result;
+
+  if (!serialize) return tx_result;
    
   //////////////// UPDATE PROFILE /////////////////////
   ItemRecord item_rec(item_id, seller_id, name, initial_price, 0, end_date, ItemStatus::OPEN);
@@ -246,6 +255,38 @@ transaction_status_t NewItem::Execute(SyncClient &client) {
 
 
   return tx_result;
+}
+
+
+void NewItem::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_NEW_ITEM));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewItem curr_txn;
+  curr_txn.set_item_id(item_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_category_id(category_id);
+  curr_txn.set_name(name);
+  curr_txn.set_description(description);
+  curr_txn.set_duration(duration);
+  curr_txn.set_initial_price(initial_price);
+  curr_txn.set_attributes(attributes);
+  for (const auto &gag_id : gag_ids) {
+    curr_txn.add_gag_ids(gag_id);
+  }
+  for (const auto &gav_id : gav_ids) {
+    curr_txn.add_gav_ids(gav_id);
+  }
+  for (const auto &image : images) {
+    curr_txn.add_images(image);
+  }
+
+  currTxnState.set_txn_data(curr_txn.SerializeAsString());
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace auctionmark

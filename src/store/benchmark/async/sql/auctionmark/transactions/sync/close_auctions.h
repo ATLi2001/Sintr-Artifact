@@ -24,38 +24,22 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef AUCTION_MARK_NEW_ITEM_H
-#define AUCTION_MARK_NEW_ITEM_H
+#ifndef AUCTION_MARK_SYNC_CLOSE_AUCTIONS_H
+#define AUCTION_MARK_SYNC_CLOSE_AUCTIONS_H
 
-#include "store/benchmark/async/sql/auctionmark/transactions/auctionmark_transaction.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/close_auctions.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/sync/auctionmark_transaction.h"
 
 namespace auctionmark {
 
-class NewItem : public AuctionMarkTransaction {
+class SyncCloseAuctions : public CloseAuctions, public AuctionMarkSyncTransaction {
  public:
-  NewItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
-  virtual ~NewItem();
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
-  virtual void SerializeTxnState(std::string &txnState) override;
- 
- private:
-  std::string item_id;
-  std::string seller_id;
-  uint64_t category_id;
-  std::string name;
-  std::string description;
-  uint64_t duration;
-  double initial_price;
-  std::string attributes;
-  std::vector<std::string> gag_ids;
-  std::vector<std::string> gav_ids;
-  std::vector<std::string> images;
-
-  AuctionMarkProfile &profile;
-  std::mt19937_64 &gen;
+  SyncCloseAuctions(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
+  virtual ~SyncCloseAuctions();
+  transaction_status_t Execute(SyncClient &client);
 };
+
 
 } // namespace auctionmark
 
-#endif /* AUCTION_MARK_NEW_ITEM_H */
+#endif /* AUCTION_MARK_SYNC_CLOSE_AUCTIONS_H */

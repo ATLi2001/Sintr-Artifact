@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/new_comment.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -54,14 +57,18 @@ NewComment::NewComment(uint32_t timeout, AuctionMarkProfile &profile, std::mt199
 NewComment::~NewComment(){
 }
 
-transaction_status_t NewComment::Execute(SyncClient &client) {
+transaction_status_t NewComment::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
 
   Notice("NEW COMMENT EXEC");
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   //Set comment_id;
   uint64_t ic_id = 0;
@@ -112,12 +119,33 @@ transaction_status_t NewComment::Execute(SyncClient &client) {
   Debug("COMMIT");
   auto tx_result = client.Commit(timeout);
   if(tx_result != transaction_status_t::COMMITTED) return tx_result;
+
+  // skip updating profile if validating client
+  if (!serialize) return tx_result;
    
    //////////////// UPDATE PROFILE /////////////////////
   ItemCommentResponse icr(ic_id, item_id, seller_id);
   profile.add_pending_item_comment_response(icr);
 
   return tx_result;
+}
+
+void NewComment::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_NEW_COMMENT));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewComment curr_txn;
+  curr_txn.set_item_id(item_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_buyer_id(buyer_id);
+  curr_txn.set_question(question);
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace auctionmark

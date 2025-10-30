@@ -1,0 +1,76 @@
+syntax = "proto2";
+
+package auctionmark.validation.proto;
+
+message GetItem {
+    required string item_id = 1;
+    required string seller_id = 2;
+}
+
+message GetUserInfo {
+    required string user_id = 1;
+    required bool get_feedback = 2;
+    required bool get_comments = 3;
+    required bool get_seller_items = 4;
+    required bool get_buyer_items = 5;
+    required bool get_watched_items = 6;
+}
+
+message NewBid {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required string buyer_id = 3;
+    required double new_bid = 4;
+}
+
+message NewCommentResponse {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required uint64 comment_id = 3;
+    required string response = 4;
+}
+
+message NewComment {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required string buyer_id = 3;
+    required string question = 4;
+}
+
+message NewFeedback {
+    required string user_id = 1;
+    required string i_id = 2;
+    required string seller_id = 3;
+    required string from_id = 4;
+    required int32 rating = 5;
+    required string feedback = 6;
+}
+
+message NewItem {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required uint64 category_id = 3;
+    required string name = 4;
+    required string description = 5;
+    required uint64 duration = 6;
+    required double initial_price = 7;
+    required string attributes = 8;
+    repeated string gag_ids = 9;
+    repeated string gav_ids = 10;
+    repeated string images = 11;
+}
+
+message NewPurchase {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required uint64 ip_id = 3;
+    required float buyer_credit = 4;
+}
+
+message UpdateItem {
+    required string item_id = 1;
+    required string seller_id = 2;
+    required string description = 3;
+    required bool delete_attribute = 4;
+    repeated string add_attribute = 5;
+}

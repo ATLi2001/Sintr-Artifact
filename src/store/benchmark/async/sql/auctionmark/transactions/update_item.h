@@ -36,7 +36,8 @@ class UpdateItem : public AuctionMarkTransaction {
  public:
   UpdateItem(uint32_t timeout, AuctionMarkProfile &profile, std::mt19937_64 &gen);
   virtual ~UpdateItem();
-  virtual transaction_status_t Execute(SyncClient &client);
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+  virtual void SerializeTxnState(std::string &txnState) override;
  
  private:
   std::string item_id;

@@ -25,9 +25,6 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/get_item.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
-#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
-#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -65,7 +62,7 @@ transaction_status_t GetItem::BaseExecute(SyncClient &client, bool serialize) {
 
   std::string txnState;
   if(serialize) {
-    SerializeTxnState(txnState);
+      SQLDeleteReservation::SerializeTxnState(txnState);
   }
   client.Begin(timeout, txnState);
 
@@ -124,6 +121,7 @@ void GetItem::SerializeTxnState(std::string &txnState) {
   curr_txn.set_item_id(item_id);
   curr_txn.set_seller_id(seller_id);
 
+  std::string txn_data;
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);
 }

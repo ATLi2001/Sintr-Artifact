@@ -38,6 +38,7 @@ class CloseAuctions : public AuctionMarkTransaction {
   virtual ~CloseAuctions();
   virtual transaction_status_t Execute(SyncClient &client);
   void UpdateProfile();
+  virtual void SerializeTxnState(std::string &txnState) override;
 
  private:
   uint64_t start_time;

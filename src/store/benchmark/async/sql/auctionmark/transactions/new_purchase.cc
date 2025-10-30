@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/new_purchase.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/auctionmark/utils/auctionmark_utils.h"
 #include <fmt/core.h>
 
@@ -66,14 +69,19 @@ NewPurchase::NewPurchase(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
 NewPurchase::~NewPurchase(){
 }
 
-transaction_status_t NewPurchase::Execute(SyncClient &client) {
+transaction_status_t NewPurchase::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
 
   Debug("NEW PURCHASE");
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
 
   uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
@@ -164,6 +172,8 @@ transaction_status_t NewPurchase::Execute(SyncClient &client) {
   Debug("COMMIT");
   auto tx_result = client.Commit(timeout);
   if(tx_result != transaction_status_t::COMMITTED) return tx_result;
+
+  if (!serialize) return tx_result;
    
    //////////////// UPDATE PROFILE /////////////////////
   ItemRecord item_rec(item_id, seller_id, "", iir.i_current_price, iir.i_num_bids, iir.i_end_date, ItemStatus::CLOSED); // iir.ib_id, iir.ib_buyer_id, ip_id missing? Doesn't seem to be needed.
@@ -171,5 +181,24 @@ transaction_status_t NewPurchase::Execute(SyncClient &client) {
 
   return tx_result;
 }
+
+void NewPurchase::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_NEW_PURCHASE));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewPurchase curr_txn;
+  curr_txn.set_item_id(item_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_ip_id(ip_id);
+  curr_txn.set_buyer_credit(buyer_credit);
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
+}
+
 
 } // namespace auctionmark

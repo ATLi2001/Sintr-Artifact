@@ -25,6 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/update_item.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -63,14 +66,18 @@ UpdateItem::UpdateItem(uint32_t timeout,  AuctionMarkProfile &profile, std::mt19
 UpdateItem::~UpdateItem(){
 };
 
-transaction_status_t UpdateItem::Execute(SyncClient &client) {
+transaction_status_t UpdateItem::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
 
   Debug("UPDATE ITEM");
 
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   uint64_t current_time = GetProcTimestamp({profile.get_loader_start_time(), profile.get_client_start_time()});
 
@@ -120,6 +127,27 @@ transaction_status_t UpdateItem::Execute(SyncClient &client) {
   
   Debug("COMMIT");
   return client.Commit(timeout);
+}
+
+void UpdateItem::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_UPDATE_ITEM));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::UpdateItem curr_txn;
+  curr_txn.set_item_id(item_id);
+  curr_txn.set_seller_id(seller_id);
+  curr_txn.set_description(description);
+  curr_txn.set_delete_attribute(delete_attribute);
+  for (const auto &attr : add_attribute) {
+    curr_txn.add_add_attribute(attr);
+  }
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace auctionmark

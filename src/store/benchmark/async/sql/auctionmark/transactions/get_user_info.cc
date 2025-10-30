@@ -25,7 +25,9 @@
  *
  **********************************************************************/
 #include "store/benchmark/async/sql/auctionmark/transactions/get_user_info.h"
-
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include <fmt/core.h>
 
 namespace auctionmark {
@@ -58,7 +60,7 @@ GetUserInfo::GetUserInfo(uint32_t timeout, AuctionMarkProfile &profile, std::mt1
 GetUserInfo::~GetUserInfo(){
 }
 
-transaction_status_t GetUserInfo::Execute(SyncClient &client) {
+transaction_status_t GetUserInfo::BaseExecute(SyncClient &client, bool serialize) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -68,8 +70,11 @@ transaction_status_t GetUserInfo::Execute(SyncClient &client) {
   Debug("Get Buyer Items: %lu", get_buyer_items);
   Debug("Get Feedback: %lu", get_feedback);
 
-
-  client.Begin(timeout);
+  std::string txnState;
+  if(serialize) {
+    SerializeTxnState(txnState);
+  }
+  client.Begin(timeout, txnState);
 
   //TODO: Could make these static/global strings of the txn. Just fmt on demand with input.
 
@@ -140,6 +145,9 @@ transaction_status_t GetUserInfo::Execute(SyncClient &client) {
   auto tx_result = client.Commit(timeout);
   if(tx_result != transaction_status_t::COMMITTED) return tx_result;
 
+  // skip updating profile if validating client
+  if (!serialize) return tx_result;
+
   //////////////// UPDATE PROFILE /////////////////////
 
   //Deserialize
@@ -203,6 +211,26 @@ transaction_status_t GetUserInfo::Execute(SyncClient &client) {
 
 
   return tx_result;
+}
+
+void GetUserInfo::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState;
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TXN_GET_USER_INFO));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::GetUserInfo curr_txn;
+  curr_txn.set_user_id(user_id);
+  curr_txn.set_get_feedback(get_feedback);
+  curr_txn.set_get_comments(get_comments);
+  curr_txn.set_get_seller_items(get_seller_items);
+  curr_txn.set_get_buyer_items(get_buyer_items);
+  curr_txn.set_get_watched_items(get_watched_items);
+
+  curr_txn.SerializeToString(currTxnState.mutable_txn_data());
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace auctionmark

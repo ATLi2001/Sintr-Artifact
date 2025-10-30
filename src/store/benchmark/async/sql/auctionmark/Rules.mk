@@ -8,6 +8,8 @@ SRCS += $(addprefix $(d), auctionmark_client.cc auctionmark_generator.cc auction
 # SRCS += $(addprefix $(d), close_auctions.cc get_item.cc get_user_info.cc new_bid.cc new_comment_response.cc \
 # 						 new_comment.cc new_feedback.cc new_item.cc new_purchase.cc update_item.cc )
 
+PROTOS += $(addprefix $(d), auctionmark-validation-proto.proto)
+
 LIB-auctionmark-profile := $(o)auctionmark_profile.o
 
 OBJ-auctionmark-client := $(o)auctionmark_client.o
@@ -17,7 +19,8 @@ OBJ-auctionmark-client := $(o)auctionmark_client.o
 # 					$(o)new_comment.o $(o)new_comment_response.o $(o)new_feedback.o $(o)new_item.o \
 # 					$(o)new_purchase.o $(o)update_item.o
 
-LIB-auctionmark :=  $(LIB-auctionmark-profile)  $(LIB-auctionmark-transactions) $(OBJ-auctionmark-client) 
+LIB-auctionmark :=  $(LIB-auctionmark-profile)  $(LIB-auctionmark-transactions) $(LIB-sync-auctionmark-transactions) \
+	$(OBJ-auctionmark-client) $(o)auctionmark-validation-proto.o
 
 
 $(d)sql_auctionmark_generator: $(LIB-io-utils) $(LIB-auctionmark-utils) $(LIB-auctionmark-profile) $(o)auctionmark_generator.o
