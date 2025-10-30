@@ -47,6 +47,7 @@ class ValidationParseClient {
   const std::vector<std::string> &keys;
   // even though validation transactions don't use randomness, need it for some constructors
   std::mt19937 rand;
+  std::mt19937_64 rand64;
 };
 
 #endif

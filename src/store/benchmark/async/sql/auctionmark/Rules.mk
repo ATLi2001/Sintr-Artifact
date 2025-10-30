@@ -20,7 +20,7 @@ OBJ-auctionmark-client := $(o)auctionmark_client.o
 # 					$(o)new_purchase.o $(o)update_item.o
 
 LIB-auctionmark :=  $(LIB-auctionmark-profile)  $(LIB-auctionmark-transactions) $(LIB-sync-auctionmark-transactions) \
-	$(OBJ-auctionmark-client) $(o)auctionmark-validation-proto.o
+	$(LIB-val-auctionmark-transactions) $(OBJ-auctionmark-client) $(o)auctionmark-validation-proto.o
 
 
 $(d)sql_auctionmark_generator: $(LIB-io-utils) $(LIB-auctionmark-utils) $(LIB-auctionmark-profile) $(o)auctionmark_generator.o

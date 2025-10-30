@@ -66,6 +66,18 @@
 #include "store/benchmark/async/sql/seats/validation/update_reservation.h"
 #include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include "store/benchmark/async/sql/seats/seats_profile.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_common.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/get_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/get_user_info.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_bid.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_comment_response.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_comment.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_feedback.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_item.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/new_purchase.h"
+#include "store/benchmark/async/sql/auctionmark/transactions/validation/update_item.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark-validation-proto.pb.h"
+#include "store/benchmark/async/sql/auctionmark/auctionmark_profile.h"
 
 ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
   std::string txn_name(txnState.txn_name());
@@ -260,6 +272,59 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::seats_sql::validation::proto::UpdateReservation valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         return new ::seats_sql::ValidationSQLUpdateReservation(timeout, rand, profile, valTxnData);
+      }
+      default:
+        Panic("Received unexpected txn type: %s", txn_type.c_str());
+    }
+  }
+  else if (txn_bench == ::auctionmark::BENCHMARK_NAME) {
+    ::auctionmark::AuctionMarkTransactionType auctionmark_txn_type = ::auctionmark::GetBenchmarkTxnTypeEnum(txn_type);
+    ::auctionmark::AuctionMarkProfile profile(0, 0, 0);
+    switch (auctionmark_txn_type) {
+      case ::auctionmark::TXN_GET_ITEM: {
+        ::auctionmark::validation::proto::GetItem valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationGetItem(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_GET_USER_INFO: {
+        ::auctionmark::validation::proto::GetUserInfo valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationGetUserInfo(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_BID: {
+        ::auctionmark::validation::proto::NewBid valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewBid(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_COMMENT_RESPONSE: {
+        ::auctionmark::validation::proto::NewCommentResponse valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewCommentResponse(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_COMMENT: {
+        ::auctionmark::validation::proto::NewComment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewComment(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_FEEDBACK: {
+        ::auctionmark::validation::proto::NewFeedback valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewFeedback(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_ITEM: {
+        ::auctionmark::validation::proto::NewItem valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewItem(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_NEW_PURCHASE: {
+        ::auctionmark::validation::proto::NewPurchase valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationNewPurchase(timeout, profile, rand64, valTxnData);
+      }
+      case ::auctionmark::TXN_UPDATE_ITEM: {
+        ::auctionmark::validation::proto::UpdateItem valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::auctionmark::ValidationUpdateItem(timeout, profile, rand64, valTxnData);
       }
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());
