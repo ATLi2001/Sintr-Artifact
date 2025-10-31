@@ -386,8 +386,11 @@ bool DeleteExecutor::DExecute() {
   
     size_t indirection_offset = tile_group_header->GetIndirectionOffset(old_location.offset);
     new_tile_group_header->SetIndirectionOffset(new_location.offset, indirection_offset);
+    std::mutex &m = target_table_->active_indirection_mutexes_[indirection_offset % 32];
+    m.lock(); //TODO: Hold this lock much earlier... (starting in data table)
 
     transaction_manager.PerformUpdate(current_txn, old_location, new_location);
+    m.unlock();
 
     executor_context_->num_processed += 1; // deleted one
     
