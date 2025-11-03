@@ -1615,7 +1615,7 @@ void Server::HandlePhase1(const TransportAddress &remote, proto::Phase1 &msg) {
 //Sends P1Reply to client. Sends no reply if P1 receives was simply forwarded by another replica.
 //TODO: move p1Decision into this function (not sendp1: Then, can unlock here.)
 void Server::HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result result,
-  const proto::CommittedProof* &committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote, 
+  const proto::CommittedProof* committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote, 
   const proto::Transaction *abstain_conflict, bool isGossip, bool forceMaterialize, bool failEndorsementCheck, bool tooManyEndorsements){
 
   // struct timespec ts_end;
@@ -1715,6 +1715,7 @@ void Server::SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result r
     phase1Reply->mutable_cc()->set_involved_group(groupIdx);
     // Set Abort proof or Sign message
     if (result == proto::ConcurrencyControl::ABORT) {
+      UW_ASSERT(conflict != nullptr);
       *phase1Reply->mutable_cc()->mutable_committed_conflict() = *conflict;
     } else if (params.signedMessages) { // Only need to sign reply if voting something else than Abort -- i.e. if there is an Abort Commit Proof there is no need for a replica to sign the
                                         // reply for authentication -- the proof is absolute (it contains a quorum ofsigs).
