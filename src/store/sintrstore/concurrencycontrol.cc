@@ -724,7 +724,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
       //   if (committedWrite.first < ts) {
           if (params.validateProofs) {
               conflict = committedWrite.second.proof;
-              UW_ASSERT(conflict != nullptr);
+              UW_ASSERT(conflict != nullptr && conflict->has_txn());
           }
           
           //std::cerr << "key: " << read.key() << std::endl;
@@ -871,7 +871,7 @@ proto::ConcurrencyControl::Result Server::DoMVTSOOCCCheck(
 
               if (params.validateProofs) {
                 conflict = std::get<2>(*ritr);
-                UW_ASSERT(conflict != nullptr);
+                UW_ASSERT(conflict != nullptr && conflict->has_txn());
               }
               Debug("[%lu:%lu][%s] ABORT rw conflict committed read for key %s [plain:%s]: committed"
                   " read ts %lu.%lu < this txn's ts %lu.%lu < committed ts %lu.%lu.",

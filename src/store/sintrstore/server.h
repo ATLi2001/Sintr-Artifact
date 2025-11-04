@@ -208,7 +208,7 @@ class Server : public TransportReceiver, public ::Server, public PingServer {
   void HandlePhase1(const TransportAddress &remote,
       proto::Phase1 &msg);
   void HandlePhase1CB(uint64_t reqId, proto::ConcurrencyControl::Result result,
-        const proto::CommittedProof* &committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote,
+        const proto::CommittedProof* committedProof, std::string &txnDigest, proto::Transaction *txn, const TransportAddress &remote,
         const proto::Transaction *abstain_conflict, bool isGossip = false, bool forceMaterialize = false, bool failEndorsementCheck = false,
         bool tooManyEndorsements = false);
   void SendPhase1Reply(uint64_t reqId, proto::ConcurrencyControl::Result result,

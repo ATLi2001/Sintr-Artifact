@@ -67,6 +67,9 @@ def parse_original_stats_dir(original_stats_dir, output_dir, now_string, save_cs
             if file != "stats.json" and file.endswith(".json"):
                 analysis_name, num_clients, num_byz_clients, total_recorded_time = parse_config_file(os.path.join(subdir_path, file))
 
+        if not os.path.exists(os.path.join(subdir_path, "stats.json")):
+            print(f"Skipping {subdir_path} as it does not contain stats.json file.")
+            continue
         tput, latency = parse_stats_json(os.path.join(subdir_path, "stats.json"))
         if tput is None or latency is None:
             continue
