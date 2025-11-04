@@ -19,9 +19,9 @@
       "sintr_client_estimate_policy": false,
       "sintr_hash_query_gen_id": false
     },
-    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
-    "client_processes_per_client_node": [[4, 4, 4, 4, 4, 4, 4, 4]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_total": [[4, 8, 12, 16, 20, 24, 28]],
+    "client_processes_per_client_node": [[4, 4, 4, 4, 4, 4, 4]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
     "pin_client_processes": [0, 2, 4, 6],
     "client_nodes_per_server": 2
   },
@@ -31,9 +31,9 @@
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_total": [[4, 8, 12, 16, 20, 24, 28]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
     "client_nodes_per_server": 3
   },
   "policy2U": {
@@ -42,9 +42,9 @@
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_total": [[4, 8, 12, 16, 20, 24, 28]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
     "client_nodes_per_server": 3
   },
   "policy3U": {
@@ -53,9 +53,9 @@
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
       "sintr_val_client_selector": "ring"
     },
-    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_total": [[4, 8, 12, 16, 20, 24, 28]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
     "client_nodes_per_server": 3
   },
   "policy1Z": {
@@ -65,9 +65,9 @@
       "sintr_val_client_selector": "zipf",
       "sintr_val_client_selector_zipf": 0.9
     },
-    "client_total": [[4, 8, 12, 16, 20, 24, 28, 32]],
-    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2, 2]],
-    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1, 1]],
+    "client_total": [[4, 8, 12, 16, 20, 24, 28]],
+    "client_processes_per_client_node": [[2, 2, 2, 2, 2, 2, 2]],
+    "client_threads_per_process": [[1, 1, 1, 1, 1, 1, 1]],
     "client_nodes_per_server": 3
   }
 }
