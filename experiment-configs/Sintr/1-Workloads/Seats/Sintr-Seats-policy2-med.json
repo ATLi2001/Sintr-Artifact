@@ -159,7 +159,7 @@
     "sintr_profile_one_client_load": false,
     "sintr_val_client_selector": "ring",
     "sintr_val_client_selector_zipf": 1.1,
-    "sintr_hide_timestamps": false,
+    "sintr_hide_timestamps": true,
     "sintr_server_skip_endorsement_check": false,
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
