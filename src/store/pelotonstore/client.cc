@@ -104,9 +104,6 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
   transport->Timer(0, [this, bcb, btcb, timeout, &txnState]() {
     
     client_seq_num++;
-    if(!sintr_params.ignorePolicyUpdate) {
-      endorseClient->SetClientSeqNum(client_seq_num);
-    }
 
     // no need to call delete as moved into TryCommit message
     if(txn_msg != nullptr) {

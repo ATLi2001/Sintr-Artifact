@@ -141,6 +141,7 @@ class Client2Client : public Client2ClientCommon {
 
   KeyManager *keyManager;
   bool failureActive;
+  mutable std::shared_mutex seq_num_lock;
 
   ValidationClient *valClient;
 
