@@ -347,6 +347,13 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
     if(!EndorsementCheck(TransactionDigest(try_commit.txn_msg()), &try_commit)) {
       //TODO: abort...
       // for now just panic
+      for (const auto &read : try_commit.txn_msg().readset()) {
+        Warning("read key: %s", read.key().c_str());
+      }
+      for (const auto &write : try_commit.txn_msg().writeset()) {
+        Warning("write key: %s", write.key().c_str());
+        Warning("write value: %s", BytesToHex(write.value(), 16).c_str());
+      }
       Panic("Endorsement check failed for txn %s for client_id %lu seq num %lu ",
         BytesToHex(TransactionDigest(try_commit.txn_msg()), 16).c_str(), client_id, tx_id);
     }
@@ -780,6 +787,8 @@ bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, 
   }
   // then check that data is all same as well
   if (txnDigest != endorsement.packed_msg()) {
+    Warning("Mismatch in endorsements");
+    Warning("Transaction digest %s is not same as endorsement msg %s", BytesToHex(txnDigest, 16).c_str(), BytesToHex(endorsement.packed_msg(), 16).c_str());
     return false;
   }
 

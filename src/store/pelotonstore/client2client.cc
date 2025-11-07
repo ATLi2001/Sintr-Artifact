@@ -86,7 +86,10 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
     UW_ASSERT(policyClient == nullptr);
     // still some bookkeeping to do
     ResetTrackingState();
+    std::unique_lock lock(seq_num_lock);
     this->client_seq_num = client_seq_num;
+    endorseClient->SetClientSeqNum(client_seq_num);
+    lock.unlock();
     beginValSent.insert(client_id);
     return;
   }
@@ -112,8 +115,13 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     PolicyClient *policyClient) {
   UW_ASSERT(policyClient != nullptr);
 
-  ResetTrackingState();
-  this->client_seq_num = client_seq_num;
+  if(sintr_params.clientEstimatePolicy) {
+    ResetTrackingState();
+    std::unique_lock lock(seq_num_lock);
+    this->client_seq_num = client_seq_num;
+    endorseClient->SetClientSeqNum(client_seq_num);
+    lock.unlock();
+  }
   // for tracking purposes, must have self in beginValSent
   beginValSent.insert(client_id);
 
@@ -180,7 +188,10 @@ void Client2Client::SendForwardSQLResultMessageHelper(const std::string &sql_gen
   fwdSQLResult->set_sql_gen_id(sql_gen_id);
   fwdSQLResult->set_sql_result(sql_result);
   fwdSQLResult->set_client_id(client_id);
+  std::shared_lock seq_lock(seq_num_lock);
+  // not sure if necessary to acquire this lock
   fwdSQLResult->set_client_seq_num(client_seq_num);
+  seq_lock.unlock();
   fwdSQLResult->set_allocated_txn_msg(txn_msg); //TODO: Figure out a better way to move this than copying
 
   // copy into sentFwdResultState
@@ -424,6 +435,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   // client_time_to_endorse_us[peer_client_id].add(duration);
 
   // stale finish validation message
+  std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
     Debug(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
@@ -432,6 +444,9 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
       client_seq_num
     );
     return;
+  }
+  if(sintr_params.optimisticReceiveEndorsement) {
+    lock.unlock();
   }
 
   std::string valTxnDigest;
@@ -490,6 +505,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
   uint64_t peer_client_id = finishValTxnMsg.client_id();
   uint64_t val_txn_seq_num = finishValTxnMsg.validation_txn_seq_num();
   // stale finish validation message
+  std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
     Debug(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
@@ -516,6 +532,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
       signedMsg
     );
   }
+  lock.unlock();
 }
 
 bool Client2Client::CheckPreparedCommittedEvidence(const proto::ForwardSQLResult &fwdSQLResult,
