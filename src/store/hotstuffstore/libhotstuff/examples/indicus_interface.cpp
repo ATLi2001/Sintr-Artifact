@@ -155,7 +155,7 @@ namespace hotstuffstore {
                     throw HotStuffError("client port not specified");
                 }
             }
-
+        std::cerr << "binding address netaddr is: %s" << split_ip_port_cport(binding_addr).first << std::endl;
         NetAddr plisten_addr{split_ip_port_cport(binding_addr).first};
 
         auto parent_limit = opt_parent_limit->get();
@@ -209,6 +209,7 @@ namespace hotstuffstore {
         for (auto &r: replicas)
             {
                 auto p = split_ip_port_cport(std::get<0>(r));
+                std::cerr << "netaddr is: %s" << p.first << std::endl;
                 reps.push_back(std::make_tuple(
                                                NetAddr(p.first),
                                                hotstuff::from_hex(std::get<1>(r)),

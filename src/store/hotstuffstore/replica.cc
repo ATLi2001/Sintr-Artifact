@@ -59,7 +59,7 @@ Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
                  uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuff_cpu, int numShards, Transport *transport)
     : config(config),
 #ifdef USE_HOTSTUFF_STORE
-      hotstuff_interface(groupIdx, idx, hotstuff_cpu),
+      hotstuff_interface(groupIdx, idx, hotstuff_cpu, false),
 #endif
       keyManager(keyManager), app(app), groupIdx(groupIdx), idx(idx),
     id(groupIdx * config.n + idx), signMessages(signMessages), maxBatchSize(maxBatchSize),
@@ -343,7 +343,7 @@ void Replica::HandleRequest(const TransportAddress &remote,
                   //FIXME: For Hotstuff this code seems essentially useless: It just creates a mapping back to itself... (Seems to be a relic of PBFT code handling)
                   proto::BatchedRequest batchedRequest;
                   (*batchedRequest.mutable_digests())[0] = digest_param;
-                  string batchedDigest = BatchedDigest(batchedRequest);
+                  std::string batchedDigest = BatchedDigest(batchedRequest);
                   batchedRequests[batchedDigest] = batchedRequest;
 
                   pendingExecutions[seqnum] = batchedDigest; // => change to digest_param.

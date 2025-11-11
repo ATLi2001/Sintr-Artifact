@@ -76,7 +76,13 @@ bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
 }
 
 bool CheckSignature(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager) {
+    KeyManager *keyManager, bool client) {
+    uint64_t replica_id;
+    if (client) {
+      replica_id = keyManager->GetClientKeyId(signedMessage.replica_id());
+    } else {
+      replica_id = signedMessage.replica_id();
+    }
     crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(
         signedMessage.replica_id());
     // verify that the replica actually sent this reply and that we are expecting
@@ -138,18 +144,19 @@ std::string TransactionDigest(const proto::Transaction &txn) {
   return digest;
 }
 
-std::string BatchedDigest(proto::BatchedRequest& breq) {
+std::string BatchedDigest(const proto::BatchedRequest& breq) {
 
   CryptoPP::SHA256 hash;
   std::string digest;
 
-  for (int i = 0; i < breq.digests_size(); i++) {
-    std::string dig = (*breq.mutable_digests())[i];
-    hash.Update((CryptoPP::byte*) &dig[0], dig.length());
-  }
+    // Iterate over key-value pairs in the protobuf map
+    for (const auto& pair : breq.digests()) {
+        const std::string& dig = pair.second;
+        hash.Update(reinterpret_cast<const CryptoPP::byte*>(dig.data()), dig.size());
+    }
 
   digest.resize(hash.DigestSize());
-  hash.Final((CryptoPP::byte*) &digest[0]);
+  hash.Final(reinterpret_cast<CryptoPP::byte*>(&digest[0]));
 
   return digest;
 }
@@ -631,6 +638,15 @@ bool verifyGDecision_Abort_parallel(const proto::GroupedDecision& gdecision,
     return remaining_shards.size() == 0;
   }
 
+}
+
+void SignBytes(const std::string &data, 
+    crypto::PrivKey* privateKey, uint64_t processId, 
+    proto::SignedMessage &signedMessage) {
+  signedMessage.set_replica_id(processId);
+  signedMessage.set_packed_msg(data);
+  *signedMessage.mutable_signature() = crypto::Sign(privateKey,
+      signedMessage.packed_msg());
 }
 
 

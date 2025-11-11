@@ -1370,12 +1370,12 @@ int main(int argc, char **argv) {
   config = new transport::Configuration(configStream);
 
   std::ifstream clientsConfigStream(FLAGS_clients_config_path);
-  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) && clientsConfigStream.fail()) {
+  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR || mode == PROTO_HOTSTUFF || mode == PROTO_BFTSMART) && clientsConfigStream.fail()) {
     std::cerr << "Did not provide valid clients config path for Sintr: " << FLAGS_clients_config_path
               << std::endl;
     return -1;
   }
-  else if(mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) {
+  else if(mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR || mode == PROTO_HOTSTUFF || mode == PROTO_BFTSMART) {
     clients_config = new transport::Configuration(clientsConfigStream);
   }
 
@@ -1962,9 +1962,9 @@ int main(int argc, char **argv) {
 																			  tport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-                                       keyManager,
+                                       keyManager, sintr_params, clients_config, sintrValClientSelector,
 																			 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
-																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error));
+																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), keys);
         break;
     }
 

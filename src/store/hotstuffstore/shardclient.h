@@ -47,7 +47,7 @@
 namespace hotstuffstore {
 
 // status, key, value
-typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&)> read_callback;
+typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&, const proto::SignedMessage&, const proto::CommitProof&)> read_callback;
 typedef std::function<void(int, const std::string&)> read_timeout_callback;
 
 typedef std::function<void(int, const proto::TransactionDecision&)> prepare_callback;

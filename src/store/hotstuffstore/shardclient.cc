@@ -240,7 +240,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply& readReply, const proto
       std::string key = readReply.key();
       uint64_t status = pendingRead->status;
       pendingReads.erase(reqId);
-      rcb(status, key, value, readts);
+      rcb(status, key, value, readts, signedMsg, pendingRead->maxCommitProof);
     }
   }
 }

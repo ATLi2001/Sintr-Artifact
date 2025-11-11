@@ -38,6 +38,15 @@
 #include "store/common/frontend/client.h"
 #include "store/hotstuffstore/pbft-proto.pb.h"
 #include "store/hotstuffstore/shardclient.h"
+#include "store/hotstuffstore/client2client.h"
+#include "store/common/sintring/endorsement_client.h"
+#include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/policy_cache.h"
+#include "store/common/sintring/params.h"
+#include "store/common/sintring/client_common.h"
 
 #include <unordered_map>
 
@@ -49,9 +58,10 @@ class Client : public ::Client {
       const std::vector<int> &closestReplicas,
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, KeyManager *keyManager,
+      bool validateProofs, KeyManager *keyManager, SintrParameters sintr_params,
+      transport::Configuration *clients_config = nullptr, ClientSelector *valClientSelector = nullptr,
       bool order_commit = false, bool validate_abort = false,
-      TrueTime timeserver = TrueTime(0,0));
+      TrueTime timeserver = TrueTime(0,0), const std::vector<std::string> &keys = std::vector<std::string>());
   ~Client();
 
   // Begin a transaction.
@@ -79,6 +89,8 @@ class Client : public ::Client {
   uint64_t client_id;
   /* Configuration State */
   transport::Configuration config;
+  // client to client transport configuration state
+  transport::Configuration *clients_config;
   // Number of replica groups.
   uint64_t nshards;
   // Number of replica groups.
@@ -151,6 +163,27 @@ class Client : public ::Client {
   void AbortTxn(const proto::Transaction& txn);
 
   bool IsParticipant(int g);
+
+  //SINTR STUFF
+
+  void getEndorsementsAndCommit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num, const std::string &digest);
+
+  void handlePolicyUpdateOnKey(const std::string &key);
+
+  // client for other clients
+  Client2Client *c2client;
+  const std::vector<std::string> &keys;
+  EndorsementClient *endorseClient;
+  PolicyParseClient policyParseClient;
+  policy_id_function policyIdFunction;
+  std::unique_ptr<PolicyCache> policyCache;
+  std::mt19937 rand;
+
+  ClientSelector *valClientSelector;
+  SintrParameters sintr_params;
+  std::unordered_map<uint64_t, bool> endorsementsReceived;
+  Timeout *waitingForEndorsementsTimeout;
+  std::unordered_set<std::string> perTxnPolicyIds;
 };
 
 } // namespace hotstuffstore

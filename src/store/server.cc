@@ -1059,7 +1059,7 @@ int main(int argc, char **argv) {
       
       server = new hotstuffstore::Server(config, &keyManager,
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
-                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
                                      FLAGS_indicus_watermark_time_delta, part, tport,
 																	   FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
 
