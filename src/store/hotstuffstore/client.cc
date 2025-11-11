@@ -25,7 +25,7 @@
  *
  **********************************************************************/
 #include "store/hotstuffstore/client.h"
-
+#include "store/common/util.h"
 #include "store/hotstuffstore/common.h"
 
 namespace hotstuffstore {
@@ -457,9 +457,26 @@ void Client::getEndorsementsAndCommit(commit_callback ccb, commit_timeout_callba
   // add endorsements to the txn
   if (endorsements.size() > 0) {
     for (auto &endorsement : endorsements) {
-      *currentTxn.mutable_endorsements()->add_sig_msgs() = *dynamic_cast<proto::SignedMessage*>(endorsement.get());
+      proto::SignedMessage *signedEndorsement = dynamic_cast<proto::SignedMessage*>(endorsement.get());
+      if(signedEndorsement && signedEndorsement->packed_msg() != digest) {
+        Warning("Endorsements not the same, %s vs original %s", BytesToHex(signedEndorsement->packed_msg(), 16).c_str(), BytesToHex(digest, 16).c_str());
+      } else if (!signedEndorsement) {
+        Panic("endorsement pointer is null");
+      }
+      *currentTxn.mutable_endorsements()->add_sig_msgs() = *signedEndorsement;
     }
   }
+  if (true) {
+    Debug("Trying to send txn: [%lu:%lu] %s", client_id, seq_num, BytesToHex(digest, 16).c_str());
+    for (const auto &read : currentTxn.readset()) {
+      Debug("Validation read key: %s", read.key().c_str());
+    }
+    for (const auto &write : currentTxn.writeset()) {
+      Debug("Validation write key: %s", write.key().c_str());
+      Debug("Validation write value: %s", write.value().c_str());
+    }
+  }
+
 
   PendingPrepare pendingPrepare;
   pendingPrepare.ccb = ccb;

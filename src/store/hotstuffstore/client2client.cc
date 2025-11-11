@@ -209,8 +209,9 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     fwdReadResultMsgToSend->set_allocated_fwd_read_result(fwdReadResult);
   }
 
-  if (validateProofs) {
+  if (validateProofs && (timestamp.getID() != 0 || timestamp.getTimestamp() != 0)) {
     *fwdReadResultMsgToSend->mutable_commit_proof() = proof;
+    Warning("Proof writeback msg status is %lu", proof.writeback_message().status());
   }
   *fwdReadResultMsgToSend->mutable_server_read_sig() = signedMsg;
 
@@ -574,12 +575,14 @@ bool Client2Client::CheckReadSigHelper(const proto::SignedMessage &signedMessage
       Panic("Key mismatch: expected %s, got %s", key.c_str(), readReply.key().c_str());
     }
     if (readReply.value() != value) {
-      Panic("Value mismatch: expected %s, got %s", value.c_str(), readReply.value().c_str());
+      Panic("Value mismatch: expected %s, got %s", BytesToHex(value, 16).c_str(), BytesToHex(readReply.value(), 16).c_str());
     }
     if (Timestamp(readReply.value_timestamp()) != ts) {
       Panic("Timestamp mismatch");
     }
-    UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(readReply.commit_proof(), proof));
+    if((ts.getID() != 0 || ts.getTimestamp() != 0) && validateProofs) {
+      UW_ASSERT(google::protobuf::util::MessageDifferencer::Equals(readReply.commit_proof(), proof));
+    }
   } else {
     Warning("Signed message not of type readreply");
     return false;
@@ -626,8 +629,8 @@ void Client2Client::ValidationThreadFunction() {
     if (sintr_params.debugEndorseCheck) {
       finishValTxnMsg.set_allocated_val_txn_msg(txn.release());
     }
-    if (false) {
-      Debug("Trying to send validation txn: [%lu:%lu]", curr_client_id, curr_client_seq_num);
+    if (true) {
+      Debug("Trying to send validation txn: [%lu:%lu] %s", curr_client_id, curr_client_seq_num, BytesToHex(digest, 16).c_str());
       for (const auto &read : txn->readset()) {
         Debug("Validation read key: %s", read.key().c_str());
       }

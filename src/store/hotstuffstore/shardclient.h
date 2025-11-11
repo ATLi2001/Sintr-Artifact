@@ -119,6 +119,7 @@ class ShardClient : public TransportReceiver {
     Timestamp maxTs;
     std::string maxValue;
     proto::CommitProof maxCommitProof;
+    proto::SignedMessage signedMsg;
 
     // the current status of the reply (default to fail)
     uint64_t status;

@@ -225,6 +225,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply& readReply, const proto
         pendingRead->maxTs = rts;
         pendingRead->maxValue = readReply.value();
         pendingRead->maxCommitProof = readReply.commit_proof();
+        pendingRead->signedMsg = signedMsg;
         pendingRead->status = REPLY_OK;
       }
     }
@@ -239,8 +240,11 @@ void ShardClient::HandleReadReply(const proto::ReadReply& readReply, const proto
       Timestamp readts = pendingRead->maxTs;
       std::string key = readReply.key();
       uint64_t status = pendingRead->status;
+      proto::SignedMessage server_sig = pendingRead->signedMsg;
+      proto::CommitProof proof = pendingRead->maxCommitProof;
       pendingReads.erase(reqId);
-      rcb(status, key, value, readts, signedMsg, pendingRead->maxCommitProof);
+      Debug("pending read max status is %lu", proof.writeback_message().status());
+      rcb(status, key, value, readts, server_sig, proof);
     }
   }
 }

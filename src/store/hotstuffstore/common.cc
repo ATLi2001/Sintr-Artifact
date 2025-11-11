@@ -83,8 +83,7 @@ bool CheckSignature(const proto::SignedMessage &signedMessage,
     } else {
       replica_id = signedMessage.replica_id();
     }
-    crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(
-        signedMessage.replica_id());
+    crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(replica_id);
     // verify that the replica actually sent this reply and that we are expecting
     // this reply
     return crypto::IsMessageValid(replicaPublicKey, signedMessage.packed_msg(),

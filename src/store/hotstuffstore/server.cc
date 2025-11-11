@@ -54,8 +54,8 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   dummyProof->mutable_txn()->mutable_timestamp()->set_timestamp(0);
   dummyProof->mutable_txn()->mutable_timestamp()->set_id(0);
   Notice("Loading Policy Store from config file: %s. ", sintr_params.policyConfigPath.c_str());
-  // LoadPolicyStore(sintr_params.policyConfigPath);
-  // policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
+  LoadPolicyStore(sintr_params.policyConfigPath);
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
 }
 
 Server::~Server() {}
@@ -308,6 +308,11 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     return results;
   }
 
+  // endorsement check
+  if(!EndorsementCheck(transaction)) {
+    Panic("Endorsement check failed for txn %s", TransactionDigest(transaction));
+  }
+
   // OCC check
   if (CCC2(transaction)) {
     stats.Increment("ccc_succeed",1);
@@ -343,6 +348,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
       //it was only used for Writeback Acks...
       stats.Increment("gdec_failed_buf",1);
       // abort the tx
+      Warning("cleaning up %s here", BytesToHex(digest, 16).c_str());
       cleanupPendingTx(digest);
       proto::GroupedDecisionAck* groupedDecisionAck = new proto::GroupedDecisionAck();
       groupedDecisionAck->set_status(REPLY_FAIL);
@@ -450,6 +456,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     atomicMutex.unlock();
     return nullptr;
   }
+  proto::Transaction pendingTxn = pendingTransactions[digest];
   atomicMutex.unlock();
   // verify gdecision
 
@@ -457,7 +464,9 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     // gettimeofday(&tp, NULL);
     // long int us = tp.tv_sec * 1000 * 1000 + tp.tv_usec;
 
-  if (verifyGDecision_parallel(gdecision, pendingTransactions[digest], keyManager, signMessages, config.f, tp)) {
+  Debug("Before gdecision verification");
+  if (verifyGDecision_parallel(gdecision, pendingTxn, keyManager, signMessages, config.f, tp)) {
+    Debug("After gdecision verification");
   //if (verifyGDecision(gdecision, pendingTransactions[digest], keyManager, signMessages, config.f)) {
  //if(true){
     // gettimeofday(&tp, NULL);
@@ -466,7 +475,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
 
     std::unique_lock lock(atomicMutex);
     stats.Increment("apply_tx",1);
-    proto::Transaction txn = pendingTransactions[digest];
+    proto::Transaction txn = pendingTxn;
     Timestamp ts(txn.timestamp());
     // apply tx
     Debug("applying tx");
@@ -475,7 +484,8 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
         continue;
       }
       Debug("applying read to key %s", BytesToHex(read.key(), 16).c_str());
-      committedReads[read.key()][ts] = read.readtime();
+      std::string read_key = std::string(read.key());
+      committedReads[read_key][ts] = Timestamp(read.readtime());
     }
 
     proto::CommitProof proof;
@@ -507,6 +517,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     }
 
     // mark txn as commited
+    Warning("cleaning up %s handle commit", BytesToHex(digest, 16).c_str());
     cleanupPendingTx(digest);
     // groupedDecisionAck->set_status(REPLY_OK);
   } else {
@@ -562,6 +573,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
 
   stats.Increment("gdec_failed",1);
   // abort the tx
+  Warning("cleaning up %s handle abort", BytesToHex(digest, 16).c_str());
   cleanupPendingTx(digest);
   // there is a chance that this abort comes before we see the tx, so save the decision
   abortedTxs.insert(digest);
@@ -741,7 +753,7 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
     for (const auto &endorsement : endorsements->sig_msgs()) {
       if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
         Debug(
-          "Txn %s failed to validate endorsement from client %lu",
+          "Endorsement txn %s failed to validate endorsement from client %lu",
           BytesToHex(txnDigest, 16).c_str(),
           endorsement.replica_id()
         );
@@ -760,6 +772,7 @@ bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto:
 bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest) {
   // cannot have empty data
   if (endorsement.packed_msg().length() == 0) {
+    Warning("packed msg length is 0");
     return false;
   }
   // then check that data is all same as well

@@ -87,6 +87,7 @@ class ValidationClient : public ::ValidationClientCommon {
     ~PendingValidationGet() {
       if (timeout != nullptr) {
         delete timeout;
+        timeout = nullptr;
       }
     }
     uint64_t txn_client_id;
@@ -96,7 +97,7 @@ class ValidationClient : public ::ValidationClientCommon {
     validation_read_callback vrcb;
     Timestamp ts;
     validation_read_timeout_callback vrtcb;
-    Timeout *timeout;
+    Timeout *timeout = nullptr;
   };
 
 
