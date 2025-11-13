@@ -80,6 +80,13 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const T
 
   if (sintr_params.clientEstimatePolicy) {
     UW_ASSERT(policyClient != nullptr);
+    if(sintr_params.c2cSendThread) {
+      std::unique_lock lock(seq_num_lock);
+      this->client_seq_num = client_seq_num;
+      endorseClient->SetClientSeqNum(client_seq_num);
+      // set endorse client sequence number right away when sending begin validate txn msg
+      lock.unlock();
+    }
   }
   else {
     // no estimate, so no need to send any begin validate messages
@@ -116,10 +123,6 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
   UW_ASSERT(policyClient != nullptr);
   if(sintr_params.clientEstimatePolicy) {
     ResetTrackingState();
-    std::unique_lock lock(seq_num_lock);
-    this->client_seq_num = client_seq_num;
-    endorseClient->SetClientSeqNum(client_seq_num);
-    lock.unlock();
   }
   // for tracking purposes, must have self in beginValSent
   beginValSent.insert(client_id);

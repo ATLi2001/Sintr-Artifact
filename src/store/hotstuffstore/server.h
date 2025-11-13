@@ -32,6 +32,8 @@
 #include <unordered_map>
 #include <mutex>
 #include <shared_mutex>
+#include "tbb/concurrent_unordered_map.h"
+#include "tbb/concurrent_unordered_set.h"
 
 #include "lib/message.h"
 #include "store/hotstuffstore/app.h"
@@ -113,26 +115,26 @@ private:
 
   ::google::protobuf::Message* returnMessage(::google::protobuf::Message* msg);
 
-  // map from tx digest to transaction
-  std::unordered_map<std::string, proto::Transaction> pendingTransactions;
-  // map from key to ordered map of prepared tx timestamps to read timestamps
-  std::unordered_map<std::string, std::map<Timestamp, Timestamp>> preparedReads;
-  // map from key to ordered set of prepared transaction timestamps that write the key
-  std::unordered_map<std::string, std::set<Timestamp>> preparedWrites;
+  // map from tx digest to transaction (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<std::string, proto::Transaction> pendingTransactions;
+  // map from key to ordered map of prepared tx timestamps to read timestamps (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<std::string, std::map<Timestamp, Timestamp>> preparedReads;
+  // map from key to ordered set of prepared transaction timestamps that write the key (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<std::string, std::set<Timestamp>> preparedWrites;
 
-  // map from key to ordered map of committed timestamps to read timestamp
+  // map from key to ordered map of committed timestamps to read timestamp (thread-safe concurrent map)
   // so if a transaction with timestamp 5 reads version 3 of key A, we have A -> 5 -> 3
   // we wont have key collisions for the map because there each transaction has at
   // most 1 read for a key
-  std::unordered_map<std::string, std::map<Timestamp, Timestamp>> committedReads;
+  tbb::concurrent_unordered_map<std::string, std::map<Timestamp, Timestamp>> committedReads;
 
   bool CCC(const proto::Transaction& txn);
   bool CCC2(const proto::Transaction& txn);
 
   void cleanupPendingTx(std::string digest);
 
-  std::unordered_map<std::string, proto::GroupedDecision> bufferedGDecs;
-  std::unordered_set<std::string> abortedTxs;
+  tbb::concurrent_unordered_map<std::string, proto::GroupedDecision> bufferedGDecs;
+  tbb::concurrent_unordered_set<std::string> abortedTxs;
 
   // return true if this key is owned by this shard
   inline bool IsKeyOwned(const std::string &key) const {

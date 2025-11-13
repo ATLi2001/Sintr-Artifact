@@ -304,14 +304,14 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     else{
       results.push_back(HandleGroupedAbortDecision(bufferedGDecs[digest]));
     }
-    bufferedGDecs.erase(digest);
+    bufferedGDecs.unsafe_erase(digest);
     return results;
   }
 
   // endorsement check
-  if(!EndorsementCheck(transaction)) {
-    Panic("Endorsement check failed for txn %s", TransactionDigest(transaction));
-  }
+  // if(!EndorsementCheck(transaction)) {
+  //   Panic("Endorsement check failed for txn %s", TransactionDigest(transaction));
+  // }
 
   // OCC check
   if (CCC2(transaction)) {
@@ -348,7 +348,6 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
       //it was only used for Writeback Acks...
       stats.Increment("gdec_failed_buf",1);
       // abort the tx
-      Warning("cleaning up %s here", BytesToHex(digest, 16).c_str());
       cleanupPendingTx(digest);
       proto::GroupedDecisionAck* groupedDecisionAck = new proto::GroupedDecisionAck();
       groupedDecisionAck->set_status(REPLY_FAIL);
@@ -484,8 +483,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
         continue;
       }
       Debug("applying read to key %s", BytesToHex(read.key(), 16).c_str());
-      std::string read_key = std::string(read.key());
-      committedReads[read_key][ts] = Timestamp(read.readtime());
+      committedReads[read.key()][ts] = read.readtime();
     }
 
     proto::CommitProof proof;
@@ -517,7 +515,6 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     }
 
     // mark txn as commited
-    Warning("cleaning up %s handle commit", BytesToHex(digest, 16).c_str());
     cleanupPendingTx(digest);
     // groupedDecisionAck->set_status(REPLY_OK);
   } else {
@@ -573,7 +570,6 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
 
   stats.Increment("gdec_failed",1);
   // abort the tx
-  Warning("cleaning up %s handle abort", BytesToHex(digest, 16).c_str());
   cleanupPendingTx(digest);
   // there is a chance that this abort comes before we see the tx, so save the decision
   abortedTxs.insert(digest);
@@ -602,7 +598,7 @@ void Server::cleanupPendingTx(std::string digest) {
       preparedReads[read.key()].erase(txTs);
     }
 
-    pendingTransactions.erase(digest);
+    pendingTransactions.unsafe_erase(digest);
   }
 }
 

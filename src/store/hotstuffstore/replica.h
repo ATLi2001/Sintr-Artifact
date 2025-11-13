@@ -81,7 +81,7 @@ public:
  private:
 #ifdef USE_HOTSTUFF_STORE
   IndicusInterface hotstuff_interface;
-  std::unordered_map<std::string, proto::PackedMessage> requests_dup;
+  tbb::concurrent_unordered_map<std::string, proto::PackedMessage> requests_dup;
 #endif
 
   const transport::Configuration &config;
@@ -142,16 +142,16 @@ public:
   bool sendMessageToAll(const ::google::protobuf::Message& msg);
   bool sendMessageToPrimary(const ::google::protobuf::Message& msg);
 
-  // map from batched digest to received batched requests
-  std::unordered_map<std::string, proto::BatchedRequest> batchedRequests;
-  // map from digest to received requests
-  std::unordered_map<std::string, proto::PackedMessage> requests;
+  // map from batched digest to received batched requests (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<std::string, proto::BatchedRequest> batchedRequests;
+  // map from digest to received requests (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<std::string, proto::PackedMessage> requests;
 
   // the next sequence number to be executed
   uint64_t execSeqNum;
   uint64_t execBatchNum;
-  // map from seqnum to the digest pending execution at that sequence number
-  std::unordered_map<uint64_t, std::string> pendingExecutions;
+  // map from seqnum to the digest pending execution at that sequence number (thread-safe concurrent map)
+  tbb::concurrent_unordered_map<uint64_t, std::string> pendingExecutions;
 
   void SendPreprepare(uint64_t seqnum, const proto::Preprepare& preprepare);
   // map from seqnum to timer ids. If the primary commits the sequence number
