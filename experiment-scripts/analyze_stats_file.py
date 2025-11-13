@@ -251,7 +251,7 @@ def tput_time_csv(logs_df, output_dir, now_string):
         
         # calculate throughput at intervals
         time_bins = np.arange(0, combined_group["commit_timestamp_ns"].max(), tput_interval_s)
-        combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False)
+        combined_group["time_bin"] = pd.cut(combined_group["commit_timestamp_ns"], bins=time_bins, right=False) # type: ignore
         # throughput is number of transactions in bin
         tput = combined_group.groupby("time_bin").size() / tput_interval_s
 
@@ -281,6 +281,13 @@ def create_lat_tput_plots(df, output_dir, now_string):
         latency = client_groups["latency"].mean()
         ax.plot(tput, latency, "-o", label=experiment_name[0])
     fig.legend(loc="outside lower center", ncol=2)
+    # for RW-SQL U/Z, keep scale consistent
+    # ax.set_xlim(left=0, right=6500)
+    # ax.set_ylim(bottom=0, top=10)
+    # otherwise just make sure x and y axes start at 0
+    ax.set_xlim(left=0)
+    ylims = ax.get_ylim()
+    ax.set_ylim(bottom=0, top=ylims[1] * 1.1)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
     plt.close()
 
@@ -544,8 +551,9 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
     fig.legend(loc="outside lower center", ncol=2)
+    ax.set_xlim(left=0, right=tput_time_df["time_s"].max())
     ylims = ax.get_ylim()
-    ax.set_ylim(0, ylims[1] + 100)
+    ax.set_ylim(0, ylims[1] * 1.1)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.close()
 
