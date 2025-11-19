@@ -24,11 +24,32 @@
 
 import pandas as pd
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import json
 import os
 import argparse
 import time
+
+matplotlib.use("pgf")
+plt.style.use("fivethirtyeight")
+plt.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    "font.family": "serif",
+    "text.usetex": True,
+    "pgf.rcfonts": False,
+    "lines.linewidth": 2.0,
+})
+colors_538_extended = {
+    "blue": ["#30a2da", "#1f77b4", "#9edae5"],
+    "red": ["#d62728",  "#ff9da7"],
+    "orange": ["#fc4f30", "#ff7f0e"],
+    "yellow": ["#e5ae38"],
+    "green": ["#2ca02c", "#6d904f"],
+    "purple": ["#9467bd"],
+    "gray": ["#8b8b8b"],
+    "brown": ["#8c564b",]
+}
 
 
 BASE_DIR = "experiment-results"
@@ -271,24 +292,51 @@ def tput_time_csv(logs_df, output_dir, now_string):
 
 def create_lat_tput_plots(df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
-    ax.set_xlabel("Throughput (txn/s)")
-    ax.set_ylabel("Latency (ms)")
+    fig.set_size_inches(8, 6)
+    ax.set_xlabel("Throughput (tx/s)")
+    ax.set_ylabel("Mean Latency (ms)")
     ax.grid(True)
 
-    for experiment_name, group in df.groupby(["experiment_name"]):
+    # order = [
+    #     "Sintr-policy1", "Sintr-policy2", "Pesto",
+    #     "Peloton-HS-policy1", "Peloton-HS-policy2", "Peloton-HS",
+    #     "Peloton-Smart-policy1", "Peloton-Smart-policy2", "Peloton-Smart",
+    # ]
+    # df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
+    # color_order = [
+    #     colors_538_extended["blue"][0], colors_538_extended["blue"][1], colors_538_extended["purple"][0],
+    #     colors_538_extended["orange"][0], colors_538_extended["orange"][1], colors_538_extended["brown"][0],
+    #     colors_538_extended["green"][0], colors_538_extended["green"][1], colors_538_extended["yellow"][0],
+    # ]
+
+    for experiment_name, group in df.groupby("experiment_name"):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
         latency = client_groups["latency"].mean()
-        ax.plot(tput, latency, "-o", label=experiment_name[0])
-    fig.legend(loc="outside lower center", ncol=2)
-    # for RW-SQL U/Z, keep scale consistent
-    # ax.set_xlim(left=0, right=6500)
-    # ax.set_ylim(bottom=0, top=10)
-    # otherwise just make sure x and y axes start at 0
-    ax.set_xlim(left=0)
-    ylims = ax.get_ylim()
-    ax.set_ylim(bottom=0, top=ylims[1] * 1.1)
+        ax.plot(tput, latency, "--o", label=experiment_name)
+        # ax.plot(tput, latency, "--o", label=experiment_name, color=color_order[order.index(experiment_name)])
+    ax.legend(loc="upper center", ncol=3, fontsize=12, framealpha=0.5)
+
+    # tpcc
+    # ax.set_ylim(bottom=0, top=120)
+    # ax.set_yticks(np.arange(0, 121, 20))
+    # seats
+    # ax.set_ylim(bottom=0, top=50)
+    # ax.set_yticks(np.arange(0, 51, 10))
+
+    # ax.set_xlim(left=0)
+
+    # rw-sql u/z
+    ax.set_xlim(left=0, right=6500)
+    ax.set_ylim(bottom=0, top=10)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
+    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
