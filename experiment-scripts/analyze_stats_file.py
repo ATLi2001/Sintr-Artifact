@@ -327,16 +327,16 @@ def create_lat_tput_plots(df, output_dir, now_string):
     # ax.set_xlim(left=0)
 
     # rw-sql u/z
-    ax.set_xlim(left=0, right=6500)
-    ax.set_ylim(bottom=0, top=10)
+    # ax.set_xlim(left=0, right=6500)
+    # ax.set_ylim(bottom=0, top=10)
 
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
         spine.set_linewidth(1.0)
     ax.tick_params(axis="both", which="both", length=5)
-    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
-    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
+    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
