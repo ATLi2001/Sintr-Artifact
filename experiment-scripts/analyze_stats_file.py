@@ -583,8 +583,9 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
 
 def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
+    fig.set_size_inches(8, 6)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Throughput (txn/s)")
+    ax.set_ylabel("Throughput (tx/s)")
     ax.grid(True)
 
     for experiment_name, group in tput_time_df.groupby("experiment_name"):
@@ -598,11 +599,19 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         label = "Policy Change" if i == 0 else None
         ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
-    fig.legend(loc="outside lower center", ncol=2)
+    ax.legend(loc="lower center", ncol=3, fontsize=12, framealpha=1.0)
     ax.set_xlim(left=0, right=tput_time_df["time_s"].max())
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
-    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
+
+    # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
 def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
@@ -725,7 +734,13 @@ if __name__ == "__main__":
     elif args.analysis_type == ANALYSIS_TYPES[4]:
         create_overheads_lat_grouped_bar_plot(df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[5]:
-        tput_time_df, policy_change_time_s = tput_time_csv(logs_df, args.output_csv_dir, now_string)
+        tput_time_df = pd.DataFrame()
+        policy_change_time_s = []
+        if args.csv:
+            tput_time_df = df
+            policy_change_time_s = [15,45]
+        else:
+            tput_time_df, policy_change_time_s = tput_time_csv(logs_df, args.output_csv_dir, now_string)
         create_tput_time_plot(tput_time_df, policy_change_time_s, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[6]:
         client_failures_df = pd.DataFrame()
