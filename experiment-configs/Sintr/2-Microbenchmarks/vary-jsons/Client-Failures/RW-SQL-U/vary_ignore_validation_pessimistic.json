@@ -1,5 +1,5 @@
 {
-  "ignore-val-byz0": {
+  "ignore-val-pess-byz0": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
@@ -16,7 +16,7 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ignore-val-byz1": {
+  "ignore-val-pess-byz1": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
@@ -35,7 +35,7 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ignore-val-byz2": {
+  "ignore-val-pess-byz2": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
@@ -54,7 +54,7 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ignore-val-byz3": {
+  "ignore-val-pess-byz3": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
@@ -73,7 +73,7 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ignore-val-byz4": {
+  "ignore-val-pess-byz4": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
@@ -92,7 +92,7 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ignore-val-byz5": {
+  "ignore-val-pess-byz5": {
     "analysis_name": "ignore-val-pessimistic",
     "replication_protocol_settings": [
       {
