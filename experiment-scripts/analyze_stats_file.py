@@ -342,7 +342,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
-def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None):
+def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None, bar_label=False):
     # spacing if too many bars per group
     bars_per_group = len(grouped_data)
     x = np.arange(len(x_labels)) * (bars_per_group // 4 + 1)  # the label locations
@@ -350,6 +350,7 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
     multiplier = 0
 
     fig, ax = plt.subplots(layout="constrained")
+    fig.set_size_inches(8, 6)
 
     for attribute, measurement in grouped_data.items():
         offset = width * multiplier
@@ -357,16 +358,27 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
             rects = ax.bar(x + offset, measurement, width, label=attribute, yerr=grouped_yerr[attribute], capsize=5)
         else:
             rects = ax.bar(x + offset, measurement, width, label=attribute)
-        ax.bar_label(rects, label_type="center", fmt="%.2f")
+        if bar_label:
+            ax.bar_label(rects, label_type="center", fmt="%.2f")
         multiplier += 1
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel(y_label)
     ax.set_xticks(x + width, x_labels)
     ax.set_xlabel(x_axis_label)
-    fig.legend(loc="outside lower center", ncol=2)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] * 1.1)
+    ax.legend(loc="upper center", ncol=bars_per_group, fontsize=12, framealpha=0.5)
 
-    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
+
+    # plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
+    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
 def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
@@ -618,6 +630,7 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
 
     target_num_byz_clients = [0, 2, 5]
     grouped_data = {}
+    grouped_err = {}
     x_labels = [str(x) for x in target_num_byz_clients]
 
     # fig, ax = plt.subplots(layout="constrained")
@@ -628,17 +641,24 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     #     ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
     # ax.grid(True)
 
+    order = ["ignore-val-ideal", "ignore-val-pessimistic", "ddos"]
+    df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
+
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
         client_groups = group.groupby("num_byz_clients")
         num_byz_clients = client_groups["num_byz_clients"].mean()
         tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
+        std_dev_per_correct_client = client_groups["tput_per_correct_client"].std()
 
         for target in target_num_byz_clients:
             if target in num_byz_clients.values:
                 tput_per_correct_client_value = tput_per_correct_client.loc[num_byz_clients == target].values[0]
+                std_dev_value = std_dev_per_correct_client.loc[num_byz_clients == target].values[0]
                 grouped_data.setdefault(experiment_name, []).append(tput_per_correct_client_value)
+                grouped_err.setdefault(experiment_name, []).append(std_dev_value)
             else:
                 grouped_data.setdefault(experiment_name, []).append(0)
+                grouped_err.setdefault(experiment_name, []).append(0)
 
         # ax.plot(num_byz_clients, tput_per_correct_client, "-o", label=experiment_name)
     
@@ -652,11 +672,12 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     create_grouped_bar_plot(
         grouped_data,
         [str(x) for x in x_labels],
-        "# Byzantine Clients",
-        "Throughput per Correct Client (txn/s)" if not combined else "Throughput per Client (txn/s)",
+        "Num Byzantine Clients",
+        "Throughput / Correct Client (tx/s)" if not combined else "Throughput / Client (tx/s)",
         output_dir,
         ANALYSIS_TYPES[6],
-        now_string
+        now_string,
+        grouped_yerr=grouped_err
     )
 
     # fig.legend(loc="outside lower center", ncol=2)
