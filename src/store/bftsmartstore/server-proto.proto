@@ -39,6 +39,12 @@ message Transaction {
   repeated WriteMessage writeset = 2;
   required TimestampMessage timestamp = 3;
   repeated uint64 participating_shards = 4;
+  optional SignedMessages endorsements = 5;
+  optional uint64 client_id = 6;
+}
+
+message SignedMessages {
+  repeated SignedMessage sig_msgs = 1;
 }
 
 // This is the reply that a shard sends to the client after it finished its

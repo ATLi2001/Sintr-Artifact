@@ -35,12 +35,13 @@
 EndorsementClient::EndorsementClient(uint64_t client_id) : client_id(client_id) {}
 EndorsementClient::~EndorsementClient() {}
 
-const std::vector<std::shared_ptr<::google::protobuf::Message>> &EndorsementClient::GetEndorsements() const {
+const std::vector<std::shared_ptr<::google::protobuf::Message>> &EndorsementClient::GetEndorsements(const uint64_t sequence_number) const {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   endorsementCheckStatesMap::const_accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called from the client main thread before the txn is sent to the server
     // so the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", seq_num);
   }
   return *a->second->endorsements;
 }
@@ -59,26 +60,28 @@ void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   a->second = new EndorsementCheckState();
 }
 
-void EndorsementClient::SetEndorsementsUsed() {
+void EndorsementClient::SetEndorsementsUsed(const uint64_t sequence_number) {
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called from client main thread Commit() before the txn is sent to the server
     // so the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", seq_num);
   }
   a->second->endorsementsUsed = true;
   if (a->second->Done()) {
-    Debug("Removing endorsement check state for client seq num %lu", client_seq_num);
+    Debug("Removing endorsement check state for client seq num %lu", seq_num);
     endorsementCheckStates.erase(a);
   }
 }
 
-void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest) {
+void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest, const uint64_t sequence_number) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called from client main thread Commit() before the txn is sent to the server
     // so the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", seq_num);
   }
 
   a->second->expectedTxnDigest = expectedTxnDigest;
@@ -157,36 +160,39 @@ void EndorsementClient::DebugCheck(std::unique_ptr<::google::protobuf::Message> 
   DebugCheckFunction(expectedTxn, txn.get());
 }
 
-void EndorsementClient::UpdateRequirement(const Policy *policy) {
+void EndorsementClient::UpdateRequirement(const Policy *policy, const uint64_t sequence_number) {
   UW_ASSERT(policy != nullptr);
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called from client main thread before the txn is sent to the server
     // so the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", seq_num);
   }
   a->second->policyClient->AddPolicy(policy);
 }
 
-std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements) const {
+std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements, const uint64_t sequence_number) const {
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this could happen if transaction completes while this was scheduled off critical path
     // and the update requirement did not end up affecting the policy
-    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    Debug("No endorsement check state found for client seq num %lu", seq_num);
     return {};
   }
   return a->second->policyClient->DifferenceToSatisfied(potentialEndorsements);
 }
 
 void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest,
-    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest) {
+    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number) {
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called in the non-optimistic case but could be from a signature check thread
     // it is possible that while the signature check is happening, the client has moved on to the next txn
     // and enough overall checks have been completed, so the endorsement check state has been removed
-    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    Warning("No endorsement check state found for client seq num %lu", seq_num);
     return;
   }
   std::set<uint64_t> &client_ids_received = a->second->client_ids_received;
@@ -221,19 +227,20 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
   }
 }
 
-void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest) {
+void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called in the optimistic case but on the main thread
     // and before this is called the seq num is checked to be stale
     // it is possible that the client requested more validations than necessary
     // so the endorsement check state has been removed already
-    Debug("No endorsement check state found for client seq num %lu", client_seq_num);
+    Debug("No endorsement check state found for client seq num %lu", seq_num);
     return;
   }
   // if new peer
   if (a->second->client_ids_received.find(peer_client_id) == a->second->client_ids_received.end()) {
-    Debug("Adding optimistic validation from peer client %lu, seq num %lu", peer_client_id, client_seq_num);
+    Debug("Adding optimistic validation from peer client %lu, seq num %lu", peer_client_id, seq_num);
     a->second->client_ids_received.insert(peer_client_id);
     a->second->endorsements->push_back(signedValTxnDigest);
   }
@@ -274,12 +281,13 @@ void EndorsementClient::CheckValidation(const uint64_t peer_client_id, uint64_t 
   }
 }
 
-bool EndorsementClient::IsSatisfied() {
+bool EndorsementClient::IsSatisfied(const uint64_t sequence_number) {
+  uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
   endorsementCheckStatesMap::accessor a;
-  if (!endorsementCheckStates.find(a, client_seq_num)) {
+  if (!endorsementCheckStates.find(a, seq_num)) {
     // this is called from the client main thread before the txn is sent to the server
     // so the endorsement check state should always exist
-    Panic("No endorsement check state found for client seq num %lu", client_seq_num);
+    Panic("No endorsement check state found for client seq num %lu", seq_num);
   }
   bool satisfied = a->second->policyClient->IsSatisfied(a->second->client_ids_received);
   if (!satisfied) {

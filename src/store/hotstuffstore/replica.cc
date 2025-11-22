@@ -55,14 +55,14 @@ using namespace std;
 //      commit messages
 
 Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
-  App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
+  App *app, int groupIdx, int idx, bool signMessages, bool signClientProposals, uint64_t maxBatchSize,
                  uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuff_cpu, int numShards, Transport *transport)
     : config(config),
 #ifdef USE_HOTSTUFF_STORE
-      hotstuff_interface(groupIdx, idx, hotstuff_cpu),
+      hotstuff_interface(groupIdx, idx, hotstuff_cpu, false),
 #endif
       keyManager(keyManager), app(app), groupIdx(groupIdx), idx(idx),
-    id(groupIdx * config.n + idx), signMessages(signMessages), maxBatchSize(maxBatchSize),
+    id(groupIdx * config.n + idx), signMessages(signMessages), signClientProposals(signClientProposals), maxBatchSize(maxBatchSize),
       batchTimeoutMS(batchTimeoutMS), EbatchSize(EbatchSize), EbatchTimeoutMS(EbatchTimeoutMS), primaryCoordinator(primaryCoordinator), requestTx(requestTx), numShards(numShards), transport(transport) {
   transport->Register(this, config, groupIdx, idx);
 
@@ -185,8 +185,8 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &t,
       stats->Increment("request_rr",1);
       DebugHash(digest);
       proto::Request reqReply;
-      reqReply.set_digest(digest);
-      *reqReply.mutable_packed_msg() = requests[digest];
+      reqReply.mutable_req()->set_digest(digest);
+      *reqReply.mutable_req()->mutable_packed_msg() = requests[digest];
       transport->SendMessage(this, remote, reqReply);
     }
     if (batchedRequests.find(digest) != batchedRequests.end()) {
@@ -313,21 +313,31 @@ bool Replica::sendMessageToAll(const ::google::protobuf::Message& msg) {
 void Replica::HandleRequest(const TransportAddress &remote,
                                const proto::Request &request) {
   Debug("Handling request message");
-
-  string digest = request.digest();
+  proto::RequestInternal req_internal;
+  // if sql then no signatures expected
+  if (signClientProposals && request.has_signed_req()) {
+    if(!ValidateSignedMessage(request.signed_req(), keyManager, req_internal, true)) {
+      Warning("Failed to validate client signed message");
+      return;
+    }
+  }
+  else {
+    req_internal = request.req();
+  }
+  string digest = req_internal.digest();
   DebugHash(digest);
 
 #ifdef USE_HOTSTUFF_STORE
 
   if (requests_dup.find(digest) == requests_dup.end()) {
-      Debug("new request: %s", request.packed_msg().type().c_str());
+      Debug("new request: %s", req_internal.packed_msg().type().c_str());
       stats->Increment("handle_new_count",1);
 
       // This unordered map is only used here so read doesn't require locks.
-      requests_dup[digest] = request.packed_msg();
+      requests_dup[digest] = req_internal.packed_msg();
 
       TransportAddress* clientAddr = remote.clone();
-      proto::PackedMessage packedMsg = request.packed_msg();
+      proto::PackedMessage packedMsg = req_internal.packed_msg();
       
       std::function<void(const std::string&, uint32_t seqnum)> execb = [this, digest, packedMsg, clientAddr](const std::string &digest_param, uint32_t seqnum) {
           if(numShards <= 6 || numShards == 12){
@@ -400,9 +410,9 @@ void Replica::HandleRequest(const TransportAddress &remote,
 #else // use PBFT store
 
   if (requests.find(digest) == requests.end()) {
-    Debug("new request: %s", request.packed_msg().type().c_str());
+    Debug("new request: %s", req_internal.packed_msg().type().c_str());
 
-    requests[digest] = request.packed_msg();
+    requests[digest] = req_internal.packed_msg();
 
     // clone remote mapped to request for reply
     //replyAddrsMutex.lock();

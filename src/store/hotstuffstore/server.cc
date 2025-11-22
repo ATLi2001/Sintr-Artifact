@@ -36,14 +36,14 @@ using namespace std;
 
 Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   int groupIdx, int idx, int numShards, int numGroups, bool signMessages,
-  bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp,
+  bool validateProofs, SintrParameters sintr_params, uint64_t timeDelta, Partitioner *part, Transport* tp,
   bool order_commit, bool validate_abort,
   TrueTime timeServer) : config(config), keyManager(keyManager),
   groupIdx(groupIdx), idx(idx), id(groupIdx * config.n + idx),
   numShards(numShards), numGroups(numGroups), signMessages(signMessages),
   validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp),
   order_commit(order_commit), validate_abort(validate_abort),
-  timeServer(timeServer) {
+  timeServer(timeServer), sintr_params(sintr_params) {
   dummyProof = std::make_shared<proto::CommitProof>();
 
   dummyProof->mutable_writeback_message()->set_status(REPLY_OK);
@@ -53,6 +53,9 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
 
   dummyProof->mutable_txn()->mutable_timestamp()->set_timestamp(0);
   dummyProof->mutable_txn()->mutable_timestamp()->set_id(0);
+  Notice("Loading Policy Store from config file: %s. ", sintr_params.policyConfigPath.c_str());
+  LoadPolicyStore(sintr_params.policyConfigPath);
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
 }
 
 Server::~Server() {}
@@ -305,6 +308,11 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     return results;
   }
 
+  // endorsement check
+  if(!EndorsementCheck(transaction)) {
+    Panic("Endorsement check failed for txn %s", TransactionDigest(transaction));
+  }
+
   // OCC check
   if (CCC2(transaction)) {
     stats.Increment("ccc_succeed",1);
@@ -471,7 +479,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
       if(!IsKeyOwned(read.key())) {
         continue;
       }
-      Debug("applying read to key %s", read.key().c_str());
+      Debug("applying read to key %s", BytesToHex(read.key(), 16).c_str());
       committedReads[read.key()][ts] = read.readtime();
     }
 
@@ -608,6 +616,185 @@ Stats &Server::GetStats() {
 
 Stats* Server::mutableStats() {
   return &stats;
+}
+
+////////////////////////////////////////////
+/*        SINTR SPECIFIC FUNCTIONS        */
+////////////////////////////////////////////
+
+
+//TODO: Move to common folder
+void Server::LoadPolicyStore(const std::string &policyStorePath) {
+  std::unique_ptr<PolicyCache> policies = policyParseClient.ParseConfigFile(policyStorePath);
+  std::vector<std::string> policyIds = policies->GetAllKeys();
+
+  for (const auto &p : policyIds) {
+    std::unique_ptr<Policy> policy = policies->Take(p);
+    policyStore.put(p, policy.get(), Timestamp());
+    policiesToFree.push_back(std::move(policy));
+  }
+}
+
+//TODO: Move to common folder
+//RETURNS True if endorsement check passed, otherwise false
+bool Server::EndorsementCheck(const proto::Transaction &txn) {
+
+  PolicyClient policyClient;
+  ExtractPolicy(txn, policyClient);
+  return ValidateEndorsements(policyClient, &txn.endorsements(), txn.client_id(), TransactionDigest(txn));
+}
+
+//TODO: Move to common folder
+void Server::ExtractPolicy(const proto::Transaction &txn, PolicyClient &policyClient) {
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  //TODO: Implement versioning for policy store
+  std::unordered_set<std::string> policiesChecked;
+
+  for (const auto &write : txn.writeset()) {
+    if (write.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(write.key())) {
+    //   // skip if write key is not owned
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(write.key(), write.value());
+
+    if (policiesChecked.find(policyId) != policiesChecked.end()) {
+      continue;
+    }
+    else {
+      policiesChecked.insert(policyId);
+    }
+
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
+
+    std::pair<Timestamp, const Policy*> tsPolicy;
+    policyStore.get(policyId, Timestamp(txn.timestamp()), tsPolicy);
+    policyClient.AddPolicy(tsPolicy.second);
+  }
+
+  if (!sintr_params.includeReadsetForTxnPolicy && !sintr_params.checkPolicyLeak) {
+    // no need to consider readset for policy or leak check
+    return;
+  }
+
+  // policies from readset to add into policyClient
+  std::unordered_set<const Policy *> readsetPoliciesToAdd;
+
+  for (const auto &read : txn.readset()) {
+    if (read.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(read.key())) {
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(read.key(), "");
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
+    std::pair<Timestamp, const Policy*> tsPolicy;
+    policyStore.get(policyId, Timestamp(read.readtime()), tsPolicy);
+
+    // at least one of includeReadsetForTxnPolicy and checkPolicyLeak is true
+    if (sintr_params.includeReadsetForTxnPolicy) {
+      if (policiesChecked.find(policyId) == policiesChecked.end()) {
+        readsetPoliciesToAdd.insert(tsPolicy.second);
+        policiesChecked.insert(policyId);
+      }
+    }
+
+    if (sintr_params.checkPolicyLeak) {
+      // disallow readset to contain a policy that does not imply the write set policy
+      if (!policyClient.IsImpliedBy(tsPolicy.second)) {
+        Panic(
+          "Read policy (%s) does not imply write policy (%s)",
+          tsPolicy.second->ToString().c_str(),
+          policyClient.ToString().c_str()
+        );
+      }
+    }
+  }
+
+  if (sintr_params.includeReadsetForTxnPolicy) {
+    for (const auto &p : readsetPoliciesToAdd) {
+      policyClient.AddPolicy(p);
+    }
+  }
+
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = end - start;
+  // extract_policy_us.add(duration);
+}
+
+bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest) {
+
+  // client initiating txn is always an endorser
+  std::set<uint64_t> endorsers;
+  endorsers.insert(client_id);
+
+  if (endorsements != nullptr) {
+    for (const auto &endorsement : endorsements->sig_msgs()) {
+      if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
+        Debug(
+          "Endorsement txn %s failed to validate endorsement from client %lu",
+          BytesToHex(txnDigest, 16).c_str(),
+          endorsement.replica_id()
+        );
+        continue;
+      }
+      endorsers.insert(endorsement.replica_id());
+    }
+  }
+
+  // check if endorsers satisfy policy
+  return policyClient.IsSatisfied(endorsers);
+}
+
+
+
+bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest) {
+  // cannot have empty data
+  if (endorsement.packed_msg().length() == 0) {
+    Warning("packed msg length is 0");
+    return false;
+  }
+  // then check that data is all same as well
+  if (txnDigest != endorsement.packed_msg()) {
+    Warning("Mismatch in endorsements");
+    Warning("Transaction digest %s is not same as endorsement msg %s", BytesToHex(txnDigest, 16).c_str(), BytesToHex(endorsement.packed_msg(), 16).c_str());
+    return false;
+  }
+
+  // check signature
+  if (sintr_params.signFinishValidation) {
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    if (!CheckSignature(endorsement, keyManager, true)) {
+      Warning(
+        "Txn %s failed to validate endorsement from client %lu",
+        BytesToHex(txnDigest, 16).c_str(),
+        endorsement.replica_id()
+      );
+      return false;
+    }
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
+    // validate_endorsements_us.add(duration);
+  }
+  return true;
 }
 
 }

@@ -593,7 +593,7 @@ int main(int argc, char **argv) {
 
   int threadpool_mode = 0; //default for Basil.   //|| proto == PROTO_PELOTON_SMR
   if(proto == PROTO_HOTSTUFF || proto == PROTO_AUGUSTUS) threadpool_mode = 1;
-  if(proto == PROTO_BFTSMART || proto == PROTO_AUGUSTUS_SMART) threadpool_mode = 2;
+  if(proto == PROTO_BFTSMART || proto == PROTO_AUGUSTUS_SMART) threadpool_mode = 0;
   if((proto == PROTO_PEQUIN || proto == PROTO_SINTR) && FLAGS_sql_bench) threadpool_mode = 0;
   // if(proto == PROTO_PG_SMR) threadpool_mode = 3;
 
@@ -1059,13 +1059,14 @@ int main(int argc, char **argv) {
       
       server = new hotstuffstore::Server(config, &keyManager,
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
-                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
                                      FLAGS_indicus_watermark_time_delta, part, tport,
 																	   FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
 
       replica = new hotstuffstore::Replica(config, &keyManager,
                                        dynamic_cast<hotstuffstore::App *>(server),
                                        FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
                                        FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx,
@@ -1139,13 +1140,14 @@ int main(int argc, char **argv) {
 	case PROTO_BFTSMART: {
 			server = new bftsmartstore::Server(config, &keyManager,
 																		 FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
-																		 FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+																		 FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
 																		 FLAGS_indicus_watermark_time_delta, part, tport,
 																		 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
       std::cerr << "FLAGS: bftsmart config path: " << FLAGS_bftsmart_codebase_dir << std::endl;
 			replica = new bftsmartstore::Replica(config, &keyManager,
 																			 dynamic_cast<bftsmartstore::App *>(server),
 																			 FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
 																			 FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
 																			 FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
 																			 FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx,

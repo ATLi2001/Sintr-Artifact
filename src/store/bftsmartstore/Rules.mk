@@ -1,8 +1,8 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
 
-SRCS += $(addprefix $(d), app.cc replica.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc bftsmartagent.cc)
+SRCS += $(addprefix $(d), app.cc replica.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc bftsmartagent.cc validation_client.cc client2client.cc)
 
-PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto)
+PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto bftsmart-sintr-proto.proto)
 
 # HotStuff static libraries
 #LIB-hotstuff-interface := store/bftsmartstore/libhotstuff/examples/libindicus_interface.a store/bftsmartstore/libhotstuff/salticidae/libsalticidae.a store/bftsmartstore/libhotstuff/libhotstuff.a store/bftsmartstore/libhotstuff/secp256k1/.libs/libsecp256k1.a
@@ -11,9 +11,16 @@ LIB-hotstuff-interface := store/hotstuffstore/libhotstuff/examples/libindicus_in
 LIB-pbft-batched-sigs := $(LIB-crypto) $(o)pbft_batched_sigs.o 
 
 LIB-bftsmart-store := $(o)common.o $(o)slots.o $(o)replica.o $(o)server.o \
-	$(o)pbft-proto.o $(o)server-proto.o $(o)app.o $(o)bftsmartagent.o $(o)shardclient.o \
-	$(o)client.o $(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
+	$(o)pbft-proto.o $(o)bftsmart-sintr-proto.o $(o)server-proto.o $(o)app.o $(o)bftsmartagent.o \
+	$(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
 	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface)
+
+
+LIB-bftsmart-client := $(o)common.o $(o)slots.o \
+    $(o)pbft-proto.o $(o)server-proto.o $(o)shardclient.o $(o)app.o $(o)replica.o \
+    $(o)bftsmart-sintr-proto.o $(o)validation_client.o $(o)client2client.o $(o)bftsmartagent.o \
+    $(o)client.o $(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
+    $(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface) $(LIB-common-sintring)
 
 # LIB-pbft-client := $(LIB-udptransport) \
 # 	$(LIB-store-frontend) $(LIB-store-common) $(o)pbft-proto.o \

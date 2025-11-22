@@ -47,7 +47,7 @@
 namespace hotstuffstore {
 
 // status, key, value
-typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&)> read_callback;
+typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&, const proto::SignedMessage&, const proto::CommitProof&)> read_callback;
 typedef std::function<void(int, const std::string&)> read_timeout_callback;
 
 typedef std::function<void(int, const proto::TransactionDecision&)> prepare_callback;
@@ -62,7 +62,7 @@ class ShardClient : public TransportReceiver {
   /* Constructor needs path to shard config. */
   ShardClient(const transport::Configuration& config, Transport *transport,
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-      bool signMessages, bool validateProofs,
+      bool signMessages, bool validateProofs, bool signClientProposals,
       KeyManager *keyManager, Stats* stats, bool order_commit = false, bool validate_abort = false);
   ~ShardClient();
 
@@ -99,8 +99,11 @@ class ShardClient : public TransportReceiver {
   Transport *transport; // Transport layer.
   int group_idx; // which shard this client accesses
   bool signMessages;
+  bool signClientProposals;
   bool validateProofs;
   KeyManager *keyManager;
+
+  uint64_t client_id;
 
   //addtional knobs: 1) order commit, 2) validate abort
   bool order_commit = false;
@@ -119,6 +122,7 @@ class ShardClient : public TransportReceiver {
     Timestamp maxTs;
     std::string maxValue;
     proto::CommitProof maxCommitProof;
+    proto::SignedMessage signedMsg;
 
     // the current status of the reply (default to fail)
     uint64_t status;

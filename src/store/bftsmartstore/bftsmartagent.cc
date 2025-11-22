@@ -132,6 +132,7 @@ bool BftSmartAgent::create_java_vm(const std::string& remote_home){
         // TO DO: error processing...
         // cin.get();
         // exit(EXIT_FAILURE);
+        Warning("JNI is false");
         return false;
     }
     //=============== Display JVM version =======================================
