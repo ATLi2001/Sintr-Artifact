@@ -218,7 +218,7 @@ def parse_logs_dir(logs_dir_path, analysis_name, client_total, num_byz_clients, 
 
 def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string, tput_per_correct=True):
     tput_col_name = "tput_per_correct_client" if tput_per_correct else "tput_per_byz_client"
-    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "num_byz_clients", tput_col_name, "exp_timestamp"])
+    out_df = pd.DataFrame(columns=["experiment_name", "num_clients", "num_byz_clients", tput_col_name, "tput_std_dev", "exp_timestamp"])
 
     for experiment_name, group in logs_df.groupby("experiment_name"):
         total_clients = group["num_clients"].values[0]
@@ -229,13 +229,13 @@ def client_failures_csv(logs_df, total_recorded_time, output_dir, now_string, tp
                 continue
 
             for exp_timestamp, exp_group in sub_group.groupby("exp_timestamp"):
-                tput = len(exp_group) / total_recorded_time / client_div
-
+                client_tputs = exp_group.groupby("client_id").size() / total_recorded_time
                 out_df.loc[len(out_df)] = [
                     experiment_name,
                     total_clients,
                     curr_num_byz_clients,
-                    tput,
+                    client_tputs.mean(),
+                    client_tputs.std(),
                     exp_timestamp
                 ]
 
@@ -641,14 +641,12 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     #     ax.set_ylabel(f"Throughput per Correct Client (txn/s)")
     # ax.grid(True)
 
-    order = ["ignore-val-ideal", "ignore-val-pessimistic", "ddos"]
-    df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
-
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
         client_groups = group.groupby("num_byz_clients")
         num_byz_clients = client_groups["num_byz_clients"].mean()
         tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
-        std_dev_per_correct_client = client_groups["tput_per_correct_client"].std()
+        # technically should not take mean of std devs but assume only 1 data point per num_byz_clients
+        std_dev_per_correct_client = client_groups["tput_std_dev"].mean()
 
         for target in target_num_byz_clients:
             if target in num_byz_clients.values:
