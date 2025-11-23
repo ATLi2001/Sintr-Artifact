@@ -367,6 +367,7 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
     ax.set_xticks(x + width, x_labels)
     ax.set_xlabel(x_axis_label)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    ax.grid(False, axis="x")
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
     ax.legend(loc="upper center", ncol=bars_per_group, fontsize=12, framealpha=0.5)
