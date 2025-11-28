@@ -436,6 +436,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   std::condition_variable cvSend;
   std::condition_variable cvReply;
   std::mutex tcpMutex;
+  mutable std::shared_mutex seq_num_lock;
   bool sendDone;
   bool replyDone;
 

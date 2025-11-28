@@ -392,7 +392,9 @@ void Client2Client::SendBeginValidateTxnMessage(uint64_t client_seq_num, const s
     UW_ASSERT(policyClient == nullptr);
     // still some bookkeeping to do
     ResetTrackingState();
+    std::unique_lock lock(seq_num_lock);
     this->client_seq_num = client_seq_num;
+    lock.unlock();
     beginValSent.insert(client_id);
     return;
   }
@@ -455,13 +457,21 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     ResetTrackingState();
     beginValSent.insert(client_id);
   }
-  this->client_seq_num = client_seq_num;
+  {
+    std::unique_lock lock(seq_num_lock);
+    this->client_seq_num = client_seq_num;
+    lock.unlock();
+  }
   // for tracking purposes, must have self in beginValSent
 
   sentBeginValTxnMsg.Clear();
   proto::BeginValidateTxn beginValTxn;
   beginValTxn.set_client_id(client_id);
-  beginValTxn.set_client_seq_num(client_seq_num);
+  {
+    std::shared_lock lock(seq_num_lock);
+    beginValTxn.set_client_seq_num(client_seq_num);
+    lock.unlock();
+  }
   *beginValTxn.mutable_txn_state() = protoTxnState;
   if(params.sintr_params.hideTimestamps) {
     beginValTxn.set_hashed_ts(tsDigest);
@@ -611,7 +621,11 @@ void Client2Client::SendForwardReadResultMessageHelper(const std::string &key, c
     tsDigest = nullptr;
   }
   fwdReadResult.set_client_id(client_id);
-  fwdReadResult.set_client_seq_num(client_seq_num);
+  {
+    std::shared_lock lock(seq_num_lock);
+    fwdReadResult.set_client_seq_num(client_seq_num);
+    lock.unlock();
+  }
   fwdReadResult.set_add_readset(addReadset);
 
   // only if addReadset is true did this result come from server
@@ -760,7 +774,11 @@ void Client2Client::SendForwardPointQueryResultMessageHelper(const std::string &
     tsDigest = nullptr;
   }
   fwdReadResult.set_client_id(client_id);
-  fwdReadResult.set_client_seq_num(client_seq_num);
+  {
+    std::shared_lock lock(seq_num_lock);
+    fwdReadResult.set_client_seq_num(client_seq_num);
+    lock.unlock();
+  }
   fwdReadResult.set_table_name(table_name);
   fwdReadResult.set_add_readset(addReadset);
 
@@ -922,7 +940,11 @@ void Client2Client::SendForwardQueryResultMessageHelper(const std::string &query
   fwdQueryResult.set_query_gen_id(query_gen_id);
   fwdQueryResult.set_query_result(query_result);
   fwdQueryResult.set_client_id(client_id);
-  fwdQueryResult.set_client_seq_num(client_seq_num);
+  {
+    std::shared_lock lock(seq_num_lock);
+    fwdQueryResult.set_client_seq_num(client_seq_num);
+    lock.unlock();
+  }
   fwdQueryResult.set_add_readset(addReadset);
   if(query_res_meta != nullptr && query_res_meta->IsInitialized()) {
     if(!params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient) {
@@ -1016,7 +1038,11 @@ void Client2Client::SendBlindWriteMessageHelper() {
   proto::BlindWriteMessage *blindWriteMsgToSend = new proto::BlindWriteMessage();
   proto::BlindWrite blindWrite;
   blindWrite.set_client_id(client_id);
-  blindWrite.set_client_seq_num(client_seq_num);
+  {
+    std::shared_lock lock(seq_num_lock);
+    blindWrite.set_client_seq_num(client_seq_num);
+    lock.unlock();
+  }
 
   // copy into sentFwdResultState
   sentFwdResultState->blindWrite = blindWrite;
@@ -1076,7 +1102,7 @@ void Client2Client::HandlePolicyUpdate(const Policy *policy) {
 }
 
 void Client2Client::HandlePolicyUpdateHelper(const Policy *policy) {
-  std::vector<int> diff = endorseClient->DifferenceToSatisfied(beginValSent);
+  std::vector<int> diff = endorseClient->DifferenceToSatisfied(beginValSent, client_seq_num);
   // if after updating the policy, and the current set of validations is not enough, initiate more
   if (diff.size() > 0) {
     std::set<uint64_t> clients;
@@ -1601,6 +1627,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   // client_time_to_endorse_us[peer_client_id].add(duration);
 
   // stale finish validation message
+  std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
     Debug(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
@@ -1610,6 +1637,10 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     );
     return;
   }
+  if(params.sintr_params.optimisticReceiveEndorsement) {
+    lock.unlock();
+  }
+
 
   std::string valTxnDigest;
   if (params.sintr_params.signFinishValidation) {
@@ -1655,9 +1686,9 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
 
   if (!params.sintr_params.optimisticReceiveEndorsement) {
-    endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg);
+    endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg, client_seq_num);
     // may have to acquire lock here
-    if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied()) {
+    if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied(client_seq_num)) {
       ecb();
       ecb = nullptr;
     }
@@ -1673,6 +1704,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
   uint64_t peer_client_id = finishValTxnMsg.client_id();
   uint64_t val_txn_seq_num = finishValTxnMsg.validation_txn_seq_num();
   // stale finish validation message
+  std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
     Debug(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
@@ -1685,7 +1717,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
 
   if (params.sintr_params.signFinishValidation) {
     UW_ASSERT(signedMsg != nullptr);
-    endorseClient->AddValidationOptimistic(peer_client_id, signedMsg);
+    endorseClient->AddValidationOptimistic(peer_client_id, signedMsg, client_seq_num);
   }
   else {
     // dummy signed message
@@ -1696,11 +1728,12 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
     signedMsg->set_signature("");
     endorseClient->AddValidationOptimistic(
       peer_client_id,
-      signedMsg
+      signedMsg,
+      client_seq_num
     );
   }
   // may have to acquire lock here
-  if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied()) {
+  if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied(client_seq_num)) {
     ecb();
     ecb = nullptr;
   }
@@ -2430,7 +2463,7 @@ void Client2Client::CreateHMACedMessage(const ::google::protobuf::Message &msg, 
 
 void Client2Client::setEndorsementCB(std::function<void*(void)> ecb) {
   // i don't put it on the receive thread for simplicity ...
-  if(endorseClient->IsSatisfied()) {
+  if(endorseClient->IsSatisfied(client_seq_num)) {
     ecb();
   } else {
     this->ecb = std::move(ecb);
