@@ -1309,6 +1309,14 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
     if (params.maxDepDepth > -2 && write->has_prepared_value() &&
         (write->has_prepared_timestamp() || (params.sintr_params.hideTimestamps && write->has_hashed_prepared_ts()))
         && write->has_prepared_txn_digest()) {
+        Timestamp preparedTs(params.sintr_params.hideTimestamps ? std::move(*reply.mutable_committed_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp()));
+        auto preparedItr = req->prepared.find(preparedTs);
+        if (preparedItr == req->prepared.end()) {
+            req->prepared.insert(std::make_pair(preparedTs, std::make_pair(*write, 1)));
+        } else if (preparedItr->second.first == *write) {
+            //stats->Increment("prepare_equality", 1); 
+            preparedItr->second.second += 1;
+        }
         // Timestamp preparedTs(write->prepared_timestamp());
         // Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", group, reqId, write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
         // auto preparedItr = req->prepared.find(preparedTs);
@@ -1330,7 +1338,6 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
 
         //std::cerr << "WriteValue (prepared): " << write->prepared_value() << std::endl;   
 
-        Timestamp preparedTs(params.sintr_params.hideTimestamps ? std::move(*reply.mutable_committed_pq_timestamp()) : std::move(*write->mutable_prepared_timestamp()));
         Debug("[group %i] ReadReply for %lu with prepared %lu byte value and ts %lu.%lu.", group, reqId, write->prepared_value().length(), preparedTs.getTimestamp(), preparedTs.getID());
 
         Debug("Read reply has txn_dig %s / %s (hex).", write->prepared_txn_digest().c_str(), BytesToHex(write->prepared_txn_digest(), 16).c_str());
@@ -1344,10 +1351,16 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
         auto &[count, sigs] = req->prepared_new[std::move(prepVal)];
         count++;
                                                                   
-        if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+        if (params.validateProofs && params.signedMessages) {
+            // add signature to dep for validating client
             proto::Signature *sig = sigs.add_sigs();
-            sig->set_process_id(reply.signed_write().process_id());
-            *sig->mutable_signature() = reply.signed_write().signature();
+            if(!reply.has_signed_write()) {
+                sig->set_process_id(req->maxWrite->process_id());
+                *sig->mutable_signature() = req->maxWrite->signature();
+            } else {
+                sig->set_process_id(reply.signed_write().process_id());
+                *sig->mutable_signature() = reply.signed_write().signature();
+            }
         }
         
     }
@@ -1400,14 +1413,19 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                         req->dep = std::make_unique<proto::Dependency>();
                     }
                     *req->dep->mutable_write()->mutable_prepared_txn_digest() = std::get<1>(preparedItr->first);
-                    if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+                    if (params.validateProofs && params.signedMessages) {
                         //FIXME: To succeed in verifyDeps verification: Need to set whole Write... ==> However, that makes no sense. Deprecate verifyDeps.
-                        *req->dep->mutable_write()->mutable_prepared_value() = req->maxValue; 
-                        if(params.sintr_params.hideTimestamps) {
-                            req->dep->mutable_write()->set_hashed_prepared_ts(txn.hashed_timestamp());
-                        } else {
-                            ts.serialize(req->dep->mutable_write()->mutable_prepared_timestamp());
+                        // *req->dep->mutable_write()->mutable_prepared_value() = req->maxValue; 
+                        // if(params.sintr_params.hideTimestamps) {
+                        //     req->dep->mutable_write()->set_hashed_prepared_ts(txn.hashed_timestamp());
+                        // } else {
+                        //     ts.serialize(req->dep->mutable_write()->mutable_prepared_timestamp());
+                        // }
+                        auto preparedItrDep = req->prepared.find(ts);
+                        if(preparedItrDep == req->prepared.end()) {
+                            Panic("TS %lu: %lu not found in prepared DS", ts.getID(), ts.getTimestamp());
                         }
+                        *req->dep->mutable_write() = preparedItrDep->second.first;
                         *req->dep->mutable_write_sigs() = std::move(sigs);
                     }
                     req->dep->set_involved_group(group);
