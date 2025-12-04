@@ -168,7 +168,7 @@
     "sintr_profile_one_client_load": false,
     "sintr_val_client_selector": "zipf",
     "sintr_val_client_selector_zipf": 0.9,
-    "sintr_hide_timestamps": true,
+    "sintr_hide_timestamps": false,
     "sintr_server_skip_endorsement_check": false,
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
