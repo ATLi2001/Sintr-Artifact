@@ -1176,10 +1176,16 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
       preparedItr->second.second += 1;
     }
     //if(!write->has_committed_value() && write->has_prepared_value()) std::cerr << "Prepared write was processed.\n";
-    if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+    if (params.validateProofs && params.signedMessages) {
+      // Add signature for prepared value
       proto::Signature *sig = req->preparedSigs[preparedTs].add_sigs();
-      sig->set_process_id(reply.signed_write().process_id());
-      *sig->mutable_signature() = reply.signed_write().signature();
+      if(!reply.has_signed_write()) {
+        sig->set_process_id(req->maxWrite->process_id());
+        *sig->mutable_signature() = req->maxWrite->signature();
+      } else {
+        sig->set_process_id(reply.signed_write().process_id());
+        *sig->mutable_signature() = reply.signed_write().signature();
+      }
     }
   }
 
@@ -1207,7 +1213,8 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
             req->dep = std::make_unique<proto::Dependency>();
           }
           *req->dep->mutable_write() = preparedItr->second.first;
-          if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+          if (params.validateProofs && params.signedMessages) {
+            // set write sigs to prepared sigs for validating client
             *req->dep->mutable_write_sigs() = req->preparedSigs[preparedItr->first];
           }
           req->dep->set_involved_group(group);

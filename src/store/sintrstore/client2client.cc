@@ -1781,7 +1781,7 @@ bool Client2Client::ReadSigHelper(const proto::ForwardReadResult &fwdReadResult,
 
   // if has dependency, then this is based on a prepared txn
   if (fwdReadResult.has_dep()) {
-    if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+    if (params.validateProofs && params.signedMessages) {
       if (!ValidateDependency(fwdReadResult.dep(), config, params.readDepSize, 
           keyManager, verifier)) {
         Debug(
@@ -1927,7 +1927,7 @@ bool Client2Client::PointQuerySigHelper(const proto::ForwardReadResult &fwdPoint
 
   // if has dependency, then this is based on a prepared txn
   if (fwdPointQueryResult.has_dep()) {
-    if (params.validateProofs && params.signedMessages && params.verifyDeps) {
+    if (params.validateProofs && params.signedMessages) {
       if (!ValidateDependency(fwdPointQueryResult.dep(), config, params.readDepSize, 
           keyManager, verifier)) {
         Debug(
