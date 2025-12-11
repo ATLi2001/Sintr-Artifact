@@ -35,7 +35,7 @@
 EndorsementClient::EndorsementClient(uint64_t client_id) : client_id(client_id) {}
 EndorsementClient::~EndorsementClient() {}
 
-const std::vector<std::shared_ptr<::google::protobuf::Message>> &EndorsementClient::GetEndorsements(const uint64_t sequence_number) const {
+const std::vector<std::shared_ptr<::google::protobuf::Message>> &EndorsementClient::GetEndorsements(const int64_t sequence_number) const {
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   endorsementCheckStatesMap::const_accessor a;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -60,7 +60,7 @@ void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   a->second = new EndorsementCheckState();
 }
 
-void EndorsementClient::SetEndorsementsUsed(const uint64_t sequence_number) {
+void EndorsementClient::SetEndorsementsUsed(const int64_t sequence_number) {
   endorsementCheckStatesMap::accessor a;
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -75,7 +75,7 @@ void EndorsementClient::SetEndorsementsUsed(const uint64_t sequence_number) {
   }
 }
 
-void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest, const uint64_t sequence_number) {
+void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number) {
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -160,7 +160,7 @@ void EndorsementClient::DebugCheck(std::unique_ptr<::google::protobuf::Message> 
   DebugCheckFunction(expectedTxn, txn.get());
 }
 
-void EndorsementClient::UpdateRequirement(const Policy *policy, const uint64_t sequence_number) {
+void EndorsementClient::UpdateRequirement(const Policy *policy, const int64_t sequence_number) {
   UW_ASSERT(policy != nullptr);
   endorsementCheckStatesMap::accessor a;
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
@@ -172,7 +172,7 @@ void EndorsementClient::UpdateRequirement(const Policy *policy, const uint64_t s
   a->second->policyClient->AddPolicy(policy);
 }
 
-std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements, const uint64_t sequence_number) const {
+std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements, const int64_t sequence_number) const {
   endorsementCheckStatesMap::accessor a;
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -185,7 +185,7 @@ std::vector<int> EndorsementClient::DifferenceToSatisfied(const std::set<uint64_
 }
 
 void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest,
-    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number) {
+    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const int64_t sequence_number) {
   endorsementCheckStatesMap::accessor a;
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -227,7 +227,7 @@ void EndorsementClient::AddValidation(const uint64_t peer_client_id, const std::
   }
 }
 
-void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number) {
+void EndorsementClient::AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const int64_t sequence_number) {
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -281,7 +281,7 @@ void EndorsementClient::CheckValidation(const uint64_t peer_client_id, uint64_t 
   }
 }
 
-bool EndorsementClient::IsSatisfied(const uint64_t sequence_number) {
+bool EndorsementClient::IsSatisfied(const int64_t sequence_number) {
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num; 
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, seq_num)) {
