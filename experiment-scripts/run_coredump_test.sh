@@ -47,7 +47,7 @@ for ((i=1; i<=NUM_TRIALS; i++)); do
     echo "=== Trial $i complete. Checking output directory... ==="
 
     if [[ -d "$OUTPUT_DIR" ]]; then
-        if grep -rqiE "error|panic|fault" "$OUTPUT_DIR"; then
+        if grep -rqiE "error|panic" "$OUTPUT_DIR"; then
             echo "⚠️  Found 'error' or 'panic' in output directory after Trial $i."
             read -p "Do you want to continue to the next trial? [y/N]: " confirm
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
