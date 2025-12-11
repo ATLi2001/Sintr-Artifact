@@ -1292,6 +1292,7 @@ void Server::HandleRead(const TransportAddress &remote,
         SignSendReadReply(write, readReply->mutable_signed_write(), sendCB);
   }
   else{
+    Warning("Did not sign read value");
       sendCB();
   }
 

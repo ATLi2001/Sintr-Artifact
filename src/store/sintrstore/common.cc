@@ -1896,14 +1896,18 @@ bool ValidateTransactionWritePolicy(const proto::CommittedProof &policyProof,
 bool ValidateDependency(const proto::Dependency &dep,
     const transport::Configuration *config, uint64_t readDepSize,
     KeyManager *keyManager, Verifier *verifier) {
-  if (dep.write_sigs().sigs_size() < readDepSize) {
+  if (dep.write_sigs().sig_msgs().size() < readDepSize) {
+    Warning("not enough sigs for dep");
     return false;
   }
 
-  std::string preparedData;
-  dep.write().SerializeToString(&preparedData);
-  for (const auto &sig : dep.write_sigs().sigs()) {
-    if (!verifier->Verify(keyManager->GetPublicKey(sig.process_id()), preparedData,
+  for (const auto &sig : dep.write_sigs().sig_msgs()) {
+    proto::Write preparedWrite;
+    preparedWrite.ParseFromString(sig.data());
+    if(preparedWrite != dep.write()) {
+      Panic("prepared write values are not equal");
+    }
+    if (!verifier->Verify(keyManager->GetPublicKey(sig.process_id()), sig.data(),
           sig.signature())) {
       return false;
     }

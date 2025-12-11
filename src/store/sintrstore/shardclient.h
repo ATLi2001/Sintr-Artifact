@@ -240,7 +240,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     uint64_t numReplies;
     uint64_t numOKReplies;
     std::map<Timestamp, std::pair<proto::Write, uint64_t>> prepared;
-    std::map<Timestamp, proto::Signatures> preparedSigs;
+    std::map<Timestamp, proto::SignedMessages> preparedSigs;
     std::unique_ptr<proto::Dependency> dep;
     bool hasDep;
     read_callback gcb;
@@ -249,7 +249,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
     bool get_from_put;
 
     //std::map<Timestamp, std::map<std::pair<std::string, std::string>, proto::Signatures>> prepared_new;
-    std::map<std::tuple<Timestamp, std::string, std::string>, std::pair<uint64_t, proto::Signatures>> prepared_new; //Tuple (Timestamp, TxnDigest, Value)
+    std::map<std::tuple<Timestamp, std::string, std::string>, std::pair<uint64_t, proto::SignedMessages>> prepared_new; //Tuple (Timestamp, TxnDigest, Value)
 
     point_result_callback prcb; //A hack to access from PendingQuorumGet
     std::string table_name;
