@@ -46,29 +46,29 @@ class EndorsementClient {
   EndorsementClient(uint64_t client_id);
   ~EndorsementClient();
 
-  const std::vector<std::shared_ptr<::google::protobuf::Message>> &GetEndorsements(const uint64_t sequence_number = -1) const;
+  const std::vector<std::shared_ptr<::google::protobuf::Message>> &GetEndorsements(const int64_t sequence_number = -1) const;
   const std::set<uint64_t> &GetBlacklistedClients() const;
   void SetClientSeqNum(uint64_t client_seq_num);
-  void SetEndorsementsUsed(const uint64_t sequence_number = -1);
-  void SetExpectedTxnDigest(const std::string &expectedTxnDigest, const uint64_t sequence_number = -1);
+  void SetEndorsementsUsed(const int64_t sequence_number = -1);
+  void SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number = -1);
   void DebugSetExpectedTxn(std::unique_ptr<::google::protobuf::Message> expectedTxn);
   void DebugCheck(std::unique_ptr<::google::protobuf::Message> txn);
   // update current policy by merging with passed in policy
-  void UpdateRequirement(const Policy *policy, const uint64_t sequence_number = -1);
+  void UpdateRequirement(const Policy *policy, const int64_t sequence_number = -1);
   // what additional client ids are needed so that this policy is satisfied by potentialEndorsements
   // if potentialEndorsements is good enough, return empty vector
-  std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements, const uint64_t sequence_number = -1) const;
+  std::vector<int> DifferenceToSatisfied(const std::set<uint64_t> &potentialEndorsements, const int64_t sequence_number = -1) const;
   // add validation from peer client
   // this can be called from a different thread than the rest of the functions
   void AddValidation(const uint64_t peer_client_id, const std::string &valTxnDigest, 
-    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number = -1);
+    std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const int64_t sequence_number = -1);
   // in optimistic case do not check if endorsement is correct, just add it
-  void AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const uint64_t sequence_number = -1);
+  void AddValidationOptimistic(const uint64_t peer_client_id, std::shared_ptr<::google::protobuf::Message> signedValTxnDigest, const int64_t sequence_number = -1);
   // check if the validation is correct, do not add it as an endorsement
   // this is used in optimistic case where endorsement is already added and we need to later check if correct
   void CheckValidation(const uint64_t peer_client_id, uint64_t client_seq_num, const std::string &valTxnDigest);
   // check if the policy is satisfied by actual endorsements collected so far
-  bool IsSatisfied(const uint64_t sequence_number = -1);
+  bool IsSatisfied(const int64_t sequence_number = -1);
   // function passed in by specific store defining its own debug check function
   void SetDebugCheckFunction(std::function<void(const ::google::protobuf::Message *, const ::google::protobuf::Message *)> func);
 
