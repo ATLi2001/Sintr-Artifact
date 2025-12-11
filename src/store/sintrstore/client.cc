@@ -1524,7 +1524,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     // if(!params.sintr_params.ignorePolicyUpdate) {
     //   endorseClient->SetExpectedTxnDigest(digest);
     // }
-    endorseClient->SetExpectedTxnDigest(digest);
+    endorseClient->SetExpectedTxnDigest(digest, client_seq_num);
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;
@@ -1585,7 +1585,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
 
 void Client::Phase1(PendingRequest *req) {
   // if endorsement is not satisfied yet, add back to event loop
-  if (!params.sintr_params.useEndorsementCB && !endorseClient->IsSatisfied()) {
+  if (!params.sintr_params.useEndorsementCB && !endorseClient->IsSatisfied(client_seq_num)) {
     transport->Timer(0, [this, req]() {
       Phase1(req);
     });
@@ -1596,7 +1596,7 @@ void Client::Phase1(PendingRequest *req) {
   // update txn digest with endorsements
   Debug("OLD TXN DIGEST CLIENT: %s", BytesToHex(req->txnDigest, 16).c_str());
 
-  const auto &endorsements = endorseClient->GetEndorsements();
+  const auto &endorsements = endorseClient->GetEndorsements(client_seq_num);
 
   if(PROFILING_LAT){
     struct timespec ts_start;
@@ -1622,7 +1622,7 @@ void Client::Phase1(PendingRequest *req) {
   // if(!params.sintr_params.ignorePolicyUpdate) {
   //   endorseClient->SetEndorsementsUsed();
   // }
-  endorseClient->SetEndorsementsUsed();
+  endorseClient->SetEndorsementsUsed(client_seq_num);
 
   // copy into req
   req->txn = txn;
