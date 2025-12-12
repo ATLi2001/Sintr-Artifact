@@ -55,11 +55,11 @@ using namespace std;
 //      commit messages
 
 Replica::Replica(const transport::Configuration &config, KeyManager *keyManager,
-  App *app, int groupIdx, int idx, bool signMessages, uint64_t maxBatchSize,
+  App *app, int groupIdx, int idx, bool signMessages, bool signClientProposals, uint64_t maxBatchSize,
                  uint64_t batchTimeoutMS, uint64_t EbatchSize, uint64_t EbatchTimeoutMS, bool primaryCoordinator, bool requestTx, int hotstuff_cpu, int numShards, Transport *transport, const std::string& bftsmart_config_path)
     : config(config),
       keyManager(keyManager), app(app), groupIdx(groupIdx), idx(idx),
-    id(groupIdx * config.n + idx), signMessages(signMessages), maxBatchSize(maxBatchSize),
+    id(groupIdx * config.n + idx), signMessages(signMessages), signClientProposals(signClientProposals), maxBatchSize(maxBatchSize),
       batchTimeoutMS(batchTimeoutMS), EbatchSize(EbatchSize), EbatchTimeoutMS(EbatchTimeoutMS), primaryCoordinator(primaryCoordinator), requestTx(requestTx), numShards(numShards), transport(transport) {
   transport->Register(this, config, groupIdx, idx);
 
@@ -151,7 +151,14 @@ void Replica::ReceiveFromBFTSmart(const string &type, const string &data){
     // myaddr.sin_family = static_cast<uint8_t>(caddr.sin_family());
     // // UDPTransportAddress client(myaddr);
     // TCPTransportAddress client(myaddr);
-    uint64_t client_id = recvrequest.client_id();
+
+    uint64_t client_id;
+    if (signClientProposals && recvrequest.has_signed_req()) {
+      client_id = recvrequest.signed_req().replica_id();
+    }
+    else {
+      client_id = recvrequest.req().client_id();
+    }
     std::unique_lock lock(client_cache_mutex);
     const TransportAddress* client = clientCache[client_id];
     Debug("handling the request here... ");
@@ -211,7 +218,13 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &t,
     // UDPTransportAddress client(myaddr);
     // Debug("client addr: %d %d %d", caddr.sin_port(), caddr.sin_addr(), caddr.sin_family());
     // TCPTransportAddress client(myaddr);
-    uint64_t client_id = recvrequest.client_id();
+    uint64_t client_id;
+    if (signClientProposals && recvrequest.has_signed_req()) {
+      client_id = recvrequest.signed_req().replica_id();
+    }
+    else {
+      client_id = recvrequest.req().client_id();
+    }
     std::unique_lock lock(client_cache_mutex);
     const TransportAddress* client = clientCache[client_id];
     Debug("handling the request here... ");
@@ -248,8 +261,8 @@ void Replica::ReceiveMessage(const TransportAddress &remote, const string &t,
       stats->Increment("request_rr",1);
       DebugHash(digest);
       proto::Request reqReply;
-      reqReply.set_digest(digest);
-      *reqReply.mutable_packed_msg() = requests[digest];
+      reqReply.mutable_req()->set_digest(digest);
+      *reqReply.mutable_req()->mutable_packed_msg() = requests[digest];
       transport->SendMessage(this, remote, reqReply);
     }
     if (batchedRequests.find(digest) != batchedRequests.end()) {
@@ -414,18 +427,29 @@ bool Replica::sendMessageToAll(const ::google::protobuf::Message& msg) {
 
 void Replica::HandleRequest(const TransportAddress &remote,
                                const proto::Request &request) {
-  string digest = request.digest();
+  proto::RequestInternal req_internal;
+  // if sql then no signatures expected
+  if (signClientProposals && request.has_signed_req()) {
+    if(!ValidateSignedMessage(request.signed_req(), keyManager, req_internal, true)) {
+      Warning("Failed to validate client signed message");
+      return;
+    }
+  }
+  else {
+    req_internal = request.req();
+  }
+  string digest = req_internal.digest();
   DebugHash(digest);
   if (requests_dup.find(digest) == requests_dup.end()) {
-    Debug("new request: %s", request.packed_msg().type().c_str());
+    Debug("new request: %s", req_internal.packed_msg().type().c_str());
     stats->Increment("handle_new_count",1);
 
     // This unordered map is only used here so read doesn't require locks.
-    requests_dup[digest] = request.packed_msg();
+    requests_dup[digest] = req_internal.packed_msg();
     Debug("cloning the transport address");
     TransportAddress* clientAddr = remote.clone();
     Debug("finished cloning the transport address!");
-    proto::PackedMessage packedMsg = request.packed_msg();
+    proto::PackedMessage packedMsg = req_internal.packed_msg();
 
     if (numShards <= 6 || numShards == 12){
       auto f = [this, digest, packedMsg, clientAddr](){

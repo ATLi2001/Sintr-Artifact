@@ -954,7 +954,8 @@ void ShardClient::HandleReadReplyCB2(proto::ReadReply* reply, proto::Write *writ
     }
 
     if (params.validateProofs && params.signedMessages && params.verifyDeps) {
-      proto::Signature *sig = req->preparedSigs[preparedTs].add_sigs();
+      proto::SignedMessage *sig = req->preparedSigs[preparedTs].add_sig_msgs();
+      *sig->mutable_data() = reply->signed_write().data();
       sig->set_process_id(reply->signed_write().process_id());
       *sig->mutable_signature() = reply->signed_write().signature();
     }
@@ -1174,17 +1175,24 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
     } else if (preparedItr->second.first == *write) {
       //stats->Increment("prepare_equality", 1); 
       preparedItr->second.second += 1;
+    } else {
+      Warning("Write is not equal to prepared ITR!");
     }
     //if(!write->has_committed_value() && write->has_prepared_value()) std::cerr << "Prepared write was processed.\n";
-    if (params.validateProofs && params.signedMessages) {
+    if (params.validateProofs && params.signedMessages &&
+        (preparedItr == req->prepared.end() || preparedItr->second.first == *write)) {
       // Add signature for prepared value
-      proto::Signature *sig = req->preparedSigs[preparedTs].add_sigs();
-      if(!reply.has_signed_write()) {
+      proto::SignedMessage *sig = req->preparedSigs[preparedTs].add_sig_msgs();
+      if(!reply.has_signed_write() && req->maxWrite != nullptr) {
+        *sig->mutable_data() = req->maxWrite->data();
         sig->set_process_id(req->maxWrite->process_id());
         *sig->mutable_signature() = req->maxWrite->signature();
-      } else {
+      } else if(reply.has_signed_write()){
+        *sig->mutable_data() = reply.signed_write().data();
         sig->set_process_id(reply.signed_write().process_id());
         *sig->mutable_signature() = reply.signed_write().signature();
+      } else {
+        Warning("Write is nullptr and reply does not have signed write");
       }
     }
   }
@@ -1215,7 +1223,7 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
           *req->dep->mutable_write() = preparedItr->second.first;
           if (params.validateProofs && params.signedMessages) {
             // set write sigs to prepared sigs for validating client
-            *req->dep->mutable_write_sigs() = req->preparedSigs[preparedItr->first];
+            *req->dep->mutable_write_sigs() = std::move(req->preparedSigs[preparedItr->first]);
           }
           req->dep->set_involved_group(group);
           req->hasDep = true;

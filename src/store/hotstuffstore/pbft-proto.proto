@@ -25,10 +25,16 @@ message GroupedSignedMessage {
 
 // a request is simply a message with a type
 message Request {
+  optional RequestInternal req = 1;
+  optional SignedMessage signed_req = 2;
+}
+
+message RequestInternal {
   required PackedMessage packed_msg = 1;
   // digest should correspond to an application specific digest of
   // the message in the packed message
   required bytes digest = 2;
+  required uint64 client_id = 3;
 }
 
 message RequestRequest {

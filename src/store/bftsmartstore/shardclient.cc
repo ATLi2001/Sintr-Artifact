@@ -32,11 +32,11 @@ namespace bftsmartstore {
 
 ShardClient::ShardClient(const transport::Configuration& config, Transport *transport,
     uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-    bool signMessages, bool validateProofs,
+    bool signMessages, bool validateProofs, bool signClientProposals,
     KeyManager *keyManager, Stats* stats, bool order_commit, bool validate_abort, const std::string& bftsmart_config_path) :
     config(config), transport(transport),
     group_idx(group_idx), client_id(client_id),
-    signMessages(signMessages), validateProofs(validateProofs),
+    signMessages(signMessages), validateProofs(validateProofs), signClientProposals(signClientProposals),
     keyManager(keyManager), stats(stats), order_commit(order_commit), validate_abort(validate_abort) {
   bftsmartagent = new BftSmartAgent(true, this, 1000 + client_id, group_idx, bftsmart_config_path);
   Debug("created bftsmart agent in shard client!");
@@ -239,6 +239,7 @@ void ShardClient::HandleReadReply(const proto::ReadReply& readReply, const proto
         pendingRead->maxTs = rts;
         pendingRead->maxValue = readReply.value();
         pendingRead->maxCommitProof = readReply.commit_proof();
+        pendingRead->signedMsg = signedMsg;
         pendingRead->status = REPLY_OK;
       }
     }
@@ -253,8 +254,11 @@ void ShardClient::HandleReadReply(const proto::ReadReply& readReply, const proto
       Timestamp readts = pendingRead->maxTs;
       std::string key = readReply.key();
       uint64_t status = pendingRead->status;
+      proto::SignedMessage server_sig = pendingRead->signedMsg;
+      proto::CommitProof proof = pendingRead->maxCommitProof;
       pendingReads.erase(reqId);
-      rcb(status, key, value, readts);
+      Debug("pending read max status is %lu", proof.writeback_message().status());
+      rcb(status, key, value, readts, server_sig, proof);
     }
   }
 }
@@ -556,11 +560,18 @@ void ShardClient::Prepare(const proto::Transaction& txn, prepare_callback pcb,
     stats->Increment("shard_prepare",1);
     proto::Request request;
     DebugHash(digest);
-    request.set_digest(digest);
-    request.mutable_packed_msg()->set_msg(txn.SerializeAsString());
-    request.mutable_packed_msg()->set_type(txn.GetTypeName());
-    request.set_groupidx(group_idx);
-
+    proto::RequestInternal requestInternal;
+    requestInternal.set_digest(digest);
+    requestInternal.mutable_packed_msg()->set_msg(txn.SerializeAsString());
+    requestInternal.mutable_packed_msg()->set_type(txn.GetTypeName());
+    requestInternal.set_client_id(client_id);
+    requestInternal.set_groupidx(group_idx);
+    if (signClientProposals) {
+      SignMessage(requestInternal, keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), client_id, *request.mutable_signed_req());
+    }
+    else {
+      *request.mutable_req() = std::move(requestInternal);
+    }
     Debug("Sending txn to all replicas in shard");
     // transport->SendMessageToGroup(this, group_idx, request);
     send_to_group(request, group_idx);
@@ -604,10 +615,18 @@ void ShardClient::SignedPrepare(const proto::Transaction& txn, signed_prepare_ca
   std::string digest = TransactionDigest(txn);
   if (pendingSignedPrepares.find(digest) == pendingSignedPrepares.end()) {
     proto::Request request;
-    request.set_digest(digest);
-    request.mutable_packed_msg()->set_msg(txn.SerializeAsString());
-    request.mutable_packed_msg()->set_type(txn.GetTypeName());
-    request.set_groupidx(group_idx);
+    proto::RequestInternal requestInternal;
+    requestInternal.set_digest(digest);
+    requestInternal.mutable_packed_msg()->set_msg(txn.SerializeAsString());
+    requestInternal.mutable_packed_msg()->set_type(txn.GetTypeName());
+    requestInternal.set_client_id(client_id);
+    requestInternal.set_groupidx(group_idx);
+    if (signClientProposals) {
+      SignMessage(requestInternal, keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), client_id, *request.mutable_signed_req());
+    }
+    else {
+      *request.mutable_req() = std::move(requestInternal);
+    }
     std::string payload = request.SerializeAsString();
     stats->Increment("shard_prepare_s",1);
 
@@ -712,10 +731,11 @@ void ShardClient::CommitSigned(const std::string& txn_digest, const proto::Shard
 
     if(order_commit){
       proto::Request request;
-      request.set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
-      request.mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
-      request.mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
-      request.set_groupidx(group_idx);
+      request.mutable_req()->set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
+      request.mutable_req()->mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
+      request.mutable_req()->mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
+      request.mutable_req()->set_client_id(client_id);
+      request.mutable_req()->set_groupidx(group_idx);
       // transport->SendMessageToGroup(this, group_idx, request);
       send_to_group(request, group_idx);
     }
@@ -766,10 +786,11 @@ void ShardClient::CommitSigned(const std::string& txn_digest, const proto::Shard
 
     if(order_commit){
       proto::Request request;
-      request.set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
-      request.mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
-      request.mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
-      request.set_groupidx(group_idx);
+      request.mutable_req()->set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
+      request.mutable_req()->mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
+      request.mutable_req()->mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
+      request.mutable_req()->set_client_id(client_id);
+      request.mutable_req()->set_groupidx(group_idx);
 
       // transport->SendMessageToGroup(this, group_idx, request);
       send_to_group(request, group_idx);
@@ -803,10 +824,11 @@ void ShardClient::Abort(std::string& txn_digest, const proto::ShardSignedDecisio
     }
 
     proto::Request request;
-    request.set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
-    request.mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
-    request.mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
-    request.set_groupidx(group_idx);
+    request.mutable_req()->set_digest(crypto::Hash(groupedDecision.SerializeAsString()));
+    request.mutable_req()->mutable_packed_msg()->set_msg(groupedDecision.SerializeAsString());
+    request.mutable_req()->mutable_packed_msg()->set_type(groupedDecision.GetTypeName());
+    request.mutable_req()->set_client_id(client_id);
+    request.mutable_req()->set_groupidx(group_idx);
 
     stats->Increment("shard_abort", 1);
     Debug("AB abort to all replicas in shard");
@@ -829,7 +851,6 @@ void ShardClient::send_to_group(proto::Request& msg, int group_idx){
   // msg.mutable_client_address()->set_sin_port(addr.addr.sin_port);
   // msg.mutable_client_address()->set_sin_family(addr.addr.sin_family);
   // Debug("client addr: %d %d %d", addr.addr.sin_port, addr.addr.sin_addr.s_addr, addr.addr.sin_family);
-  msg.set_client_id(client_id);
   Debug("sending to group with client id %d", client_id);
 
   // Serialize message

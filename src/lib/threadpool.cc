@@ -102,6 +102,7 @@ void ThreadPool::start(int process_id, int total_processes, bool hyperthreading,
       end = end - num_core_for_hotstuff; // use last core for Hotstuff only
     } else if (mode == 2) {              // TxBFTSmart && Pequin
       start = 0;    
+      use_load_bonus = false;
     }                     // use all cores
     else if (mode == 3){
       start = 1;

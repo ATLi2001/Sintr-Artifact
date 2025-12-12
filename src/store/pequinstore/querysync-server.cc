@@ -398,13 +398,13 @@ void Server::ProcessPointQuery(const uint64_t &reqId, proto::Query *query, const
     }; 
 
      //TODO: This code does not sign a message if there is no value at all (or if verifyDeps == false and there is only a prepared, i.e. no committed, value) -- change it so it always signs. 
-    if (params.validateProofs && params.signedMessages && (write->has_committed_value() || (params.verifyDeps && write->has_prepared_value()))) { 
+    if (params.validateProofs && params.signedMessages && (write->has_committed_value() || write->has_prepared_value())) { 
         write = pointQueryReply->release_write();
          
         SignSendReadReply(write, pointQueryReply->mutable_signed_write(), sendCB);
     }
     else{
-       
+        Warning("Not signing point query reply");
         sendCB();
     }
 }
