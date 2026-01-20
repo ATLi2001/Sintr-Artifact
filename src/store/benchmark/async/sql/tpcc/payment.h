@@ -29,13 +29,14 @@
 #define SQL_PAYMENT_H
 
 #include "store/benchmark/async/sql/tpcc/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
 
 class SQLPayment : public TPCCSQLTransaction {
  public:
   SQLPayment(uint32_t w_id, uint32_t c_c_last,
-      uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen);
+      uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
   SQLPayment(std::mt19937 &gen) : gen(gen) { };
   virtual ~SQLPayment();
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
@@ -57,6 +58,7 @@ class SQLPayment : public TPCCSQLTransaction {
   uint32_t random_row_id;
   bool c_by_last_name;
   std::string c_last;
+  TPCCLifts tpcc_lifts;
 };
 
 class SQLPaymentSequential : public TPCCSQLTransaction {

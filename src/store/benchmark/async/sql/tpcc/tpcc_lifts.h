@@ -1,6 +1,6 @@
 /***********************************************************************
  *
- * Copyright 2025 Daniel Lee <dhl93@cornell.edu>
+ * Copyright 2024 Austin Li <atl63@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,34 +23,31 @@
  * SOFTWARE.
  *
  **********************************************************************/
+#ifndef TPCC_LIFTS_H
+#define TPCC_LIFTS_H
 
-#include "store/benchmark/async/sql/tpcc/validation/payment.h"
-#include "store/benchmark/async/sql/tpcc/tpcc_utils.h"
+#include "store/common/policy/policy_cache.h"
 
+#include <string>
 
 namespace tpcc_sql {
 
-ValidationSQLPayment::ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, const validation::proto::Payment &valPaymentMsg,
-    const TPCCLifts &tpcc_lifts) : ValidationTPCCSQLTransaction(timeout), SQLPayment(gen) {
-  w_id = valPaymentMsg.w_id();
-  d_id = valPaymentMsg.d_id();
-  d_w_id = valPaymentMsg.d_w_id();
-  c_w_id = valPaymentMsg.c_w_id();
-  c_d_id = valPaymentMsg.c_d_id();
-  c_id = valPaymentMsg.c_id();
-  h_amount = valPaymentMsg.h_amount();
-  h_date = valPaymentMsg.h_date();
-  c_by_last_name = valPaymentMsg.c_by_last_name();
-  c_last = valPaymentMsg.c_last();
-  random_row_id = valPaymentMsg.random_row_id();
-  this->tpcc_lifts = tpcc_lifts;
+class TPCCLifts {
+ public:
+  TPCCLifts() {}
+  TPCCLifts(const std::string &policy_function_name) : policy_function_name(policy_function_name) {}
+  ~TPCCLifts() {}
+
+  bool IsLiftedPolicyFunction() const;
+
+  // lift functions return true if the transaction should be lifted
+  bool NewOrderLiftFunction(const PolicyCache &policy_cache) const;
+  bool PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount) const;
+  
+ private:
+  std::string policy_function_name;
+};
+
 }
 
-ValidationSQLPayment::~ValidationSQLPayment() {
-}
-
-transaction_status_t ValidationSQLPayment::Validate(SyncClient &client) {
-  return SQLPayment::BaseExecute(client, timeout, false);
-}
-
-} // namespace tpcc_sql
+#endif /* TPCC_LIFTS_H */

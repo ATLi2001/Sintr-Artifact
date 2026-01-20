@@ -39,9 +39,7 @@ class PolicyCache {
 
   // is empty
   bool IsEmpty() const;
-  // return true if policy exists for key, false otherwise
-  // given a reference to a policy pointer, update it with the policy in the cache
-  // does not allocate a new policy object
+  // return const pointer to policy, nullptr if not found
   const Policy *Get(const std::string &policyId) const;
   // take ownership and remove from underlying map
   std::unique_ptr<Policy> Take(const std::string &policyId);

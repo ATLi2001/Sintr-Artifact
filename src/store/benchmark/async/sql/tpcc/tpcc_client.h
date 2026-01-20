@@ -31,6 +31,7 @@
 #include <random>
 
 #include "store/benchmark/async/sync_transaction_bench_client.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
   
@@ -57,7 +58,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
       uint32_t delivery_ratio, uint32_t payment_ratio, uint32_t order_status_ratio,
       uint32_t stock_level_ratio, bool static_w_id,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts,
-      uint32_t timeout,
+      uint32_t timeout, const std::string &policy_function_name,
       const std::string &latencyFilename = "");
 
   virtual ~TPCCSQLClient();
@@ -87,6 +88,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
   uint32_t deliveryDId;
   int count;
   uint64_t id;
+  TPCCLifts tpcc_lifts;
 };
 
 } //namespace tpcc_sql

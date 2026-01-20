@@ -30,13 +30,15 @@
 #include "store/benchmark/async/sql/tpcc/validation/tpcc_transaction.h"
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
 
 class ValidationSQLPayment : public ValidationTPCCSQLTransaction, public SQLPayment {
  public:
   // even though gen is not needed for Validate, need it for calling SQLPayment constructor
-  ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, const validation::proto::Payment &valPaymentMsg);
+  ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, const validation::proto::Payment &valPaymentMsg,
+    const TPCCLifts &tpcc_lifts);
   virtual ~ValidationSQLPayment();
   virtual transaction_status_t Validate(SyncClient &client);
 };

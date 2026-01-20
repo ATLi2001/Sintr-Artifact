@@ -2140,7 +2140,8 @@ int main(int argc, char **argv) {
             FLAGS_tpcc_delivery_ratio, FLAGS_tpcc_payment_ratio,
             FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
             FLAGS_static_w_id, FLAGS_abort_backoff,
-            FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout);
+            FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
+            FLAGS_sintr_policy_function_name);
         break;
       case BENCH_SMALLBANK_SYNC:
         UW_ASSERT(syncClient != nullptr);
@@ -2230,7 +2231,8 @@ int main(int argc, char **argv) {
                 FLAGS_tpcc_delivery_ratio, FLAGS_tpcc_payment_ratio,
                 FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
                 FLAGS_static_w_id, FLAGS_abort_backoff,
-                FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout);
+                FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
+                FLAGS_sintr_policy_function_name);
           }
           break;
       }

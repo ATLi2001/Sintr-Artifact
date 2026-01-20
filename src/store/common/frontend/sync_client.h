@@ -97,6 +97,8 @@ class SyncClient {
   // Wait for all outstanding Queries/Writes to finish in FIFO order -- but do not consume any results (Use this for async Updates/Deletes that have no future dependents)
   void asyncWait();
 
+  const PolicyCache& GetPolicyCache() const;
+
  private:
   void GetCallback(Promise *promise, int status, const std::string &key, const std::string &value,
       Timestamp ts);

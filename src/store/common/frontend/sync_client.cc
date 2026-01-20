@@ -274,6 +274,10 @@ void SyncClient::asyncWait() {
   }
 }
 
+const PolicyCache& SyncClient::GetPolicyCache() const {
+  return client->GetPolicyCache();
+}
+
 ///////// Callbacks
 
 void SyncClient::GetCallback(Promise *promise, int status,
