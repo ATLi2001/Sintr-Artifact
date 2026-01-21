@@ -3270,8 +3270,12 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second.policy);
   }
 
-  if (!params.sintr_params.includeReadsetForTxnPolicy && !params.sintr_params.checkPolicyLeak) {
-    // no need to consider readset for policy or leak check
+  if (!params.sintr_params.includeReadsetForTxnPolicy && (!params.sintr_params.checkPolicyLeak || txn->lift())) {
+    // no need to consider readset for policy and leak check
+    // if txn says to lift, then also no leak check
+    if (txn->lift()) {
+      Debug("Transaction %s is lifted, skipping policy leak check", BytesToHex(txn->txndigest(), 16).c_str());
+    }
     return true;
   }
 
@@ -3326,7 +3330,8 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
         Debug(
-          "Read policy (%s) does not imply write policy (%s)",
+          "Transaction %s read policy (%s) does not imply write policy (%s)",
+          BytesToHex(txn->txndigest(), 16).c_str(),
           tsPolicy.second.policy->ToString().c_str(),
           policyClient.ToString().c_str()
         );
