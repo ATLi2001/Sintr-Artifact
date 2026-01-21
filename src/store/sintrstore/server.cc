@@ -3192,7 +3192,7 @@ int Server::EndorsementCheck(const std::string &txnDigest, const proto::Transact
 
   PolicyClient policyClient;
   if (!ExtractPolicy(txn, policyClient)) {
-    return false;
+    return -1;
   }
   return ValidateEndorsements(policyClient, &txn->endorsements(), txn->client_id(), txnDigest);
 }
