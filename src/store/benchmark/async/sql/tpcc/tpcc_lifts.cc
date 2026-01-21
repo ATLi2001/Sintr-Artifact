@@ -71,8 +71,14 @@ bool TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_
   // lifting rule is threshold based on weight
   // h_amount is between 100 and 500000
   // assuming weight is small and at least 2
-  uint64_t threshold = static_cast<uint64_t>(std::pow(10, weight_policy->GetWeight() + 1));
-  return h_amount <= threshold;
+  // uint64_t threshold = static_cast<uint64_t>(std::pow(10, weight_policy->GetWeight() + 1));
+  // return h_amount <= threshold;
+  if (weight_policy->GetWeight() == 1) {
+    return false;
+  }
+  else {
+    return true;
+  }
 }
 
 }
