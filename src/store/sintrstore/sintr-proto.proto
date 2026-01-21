@@ -164,8 +164,8 @@ message Transaction {
   required uint64 client_id = 1;
   required uint64 client_seq_num = 2;
   repeated int64 involved_groups = 3;
-  repeated ReadMessage read_set = 4;     //TODO: Ideally re-factor this to be a map from key to value --> that way checks on preparedReads (during CC) don't need to loop through Tx. (Alternatively could store ReadTime in preparedReads, but that's also wasteful)
-  repeated WriteMessage write_set = 5;   //TODO: Ideally re-factor this to be a map from key to value --> that way reads on preparedWrites don't need to loop through Tx. (Alternatively could store value in preparedWrites, but that's also wasteful)
+  repeated ReadMessage read_set = 4; //TODO: Ideally re-factor this to be a map from key to value --> that way checks on preparedReads (during CC) don't need to loop through Tx. (Alternatively could store ReadTime in preparedReads, but that's also wasteful)
+  repeated WriteMessage write_set = 5; //TODO: Ideally re-factor this to be a map from key to value --> that way reads on preparedWrites don't need to loop through Tx. (Alternatively could store value in preparedWrites, but that's also wasteful)
   repeated Dependency deps = 6;
   optional TimestampMessage timestamp = 7;
 
@@ -191,6 +191,7 @@ message Transaction {
   repeated ReadMessage implicit_policy_reads = 15; // NOT PART OF TX. HACK HERE TO STORE read set for implicit policy reads
   optional SignedMessages endorsements = 16;
   optional bytes hashed_timestamp = 17;
+  optional bool lift = 18;
 }
 
 message Phase1 {
@@ -213,7 +214,7 @@ message ConcurrencyControl {
     ABSTAIN = 2;
     WAIT = 3;
     RETRY = 4;
-    IGNORE = 5;  //invalid tx
+    IGNORE = 5; //invalid tx
   }
   required Result ccr = 2;
   optional CommittedProof committed_conflict = 3;
@@ -291,7 +292,7 @@ message Writeback {
   oneof reply_oneof {  //TODO: Re-factor this to either have CommittedProof or AbortedProof
     GroupedSignatures p1_sigs = 4; // fast path commit
     GroupedSignatures p2_sigs = 5; // slow path commit or abort
-    CommittedProof conflict = 6;   // fast path abort
+    CommittedProof conflict = 6; // fast path abort
   }
   optional uint64 p2_view = 7;
 }
@@ -304,7 +305,7 @@ message ForwardWriteback {
   oneof reply_oneof {
     GroupedSignatures p1_sigs = 4; // fast path commit
     GroupedSignatures p2_sigs = 5; // slow path commit or abort
-    CommittedProof conflict = 6;   // fast path abort
+    CommittedProof conflict = 6; // fast path abort
   }
   optional uint64 p2_view = 7;
 }
@@ -327,7 +328,7 @@ message Abort {
 
 message RelayP1 {  //datatype that replicas send clients to inform them that they can start a FB etc.
   required uint64 dependent_id = 1; //this is the ID of the txn that has the p1 as a dependency
-  required Phase1 p1 = 2;  //this is the dependency.
+  required Phase1 p1 = 2; //this is the dependency.
   required uint64 replica_id = 3; //sender -- just for debugging.
   optional bytes dependent_txn = 4; //this is the txnDigest of the txn that has the p1 as a dependency
 }
@@ -352,7 +353,7 @@ message CurrentView{
 message AttachedView{
   oneof current_view_oneof {
     CurrentView current_view = 1;
-    SignedMessage signed_current_view = 2;   //TODO: PACKAGE VIEW INTO WHATEVER THE SIGNED MESSAGE WE ALREADY RETURN SO THERE IS JUST A SINGLE SIGNED MESSAGE TO VERIFY. requires changing the verification logic for those functions but that is ok.
+    SignedMessage signed_current_view = 2; //TODO: PACKAGE VIEW INTO WHATEVER THE SIGNED MESSAGE WE ALREADY RETURN SO THERE IS JUST A SINGLE SIGNED MESSAGE TO VERIFY. requires changing the verification logic for those functions but that is ok.
   }
 }
 

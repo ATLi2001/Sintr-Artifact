@@ -278,6 +278,10 @@ const PolicyCache& SyncClient::GetPolicyCache() const {
   return client->GetPolicyCache();
 }
 
+void SyncClient::LiftTransaction() {
+  client->LiftTransaction();
+}
+
 ///////// Callbacks
 
 void SyncClient::GetCallback(Promise *promise, int status,

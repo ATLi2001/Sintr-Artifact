@@ -109,7 +109,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
   c2client = new Client2Client(
     config, clients_config, params.sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
     pingReplicas, params, keyManager, verifier, part, endorseClient, &sql_interpreter,
-    table_registry, valClientSelector, rand, keys
+    table_registry, valClientSelector, rand, policyCache.get(), keys
   );
 
   Debug("Sintr client [%lu] created! %lu %lu", client_id, nshards,
@@ -875,6 +875,15 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
     //queryBuffer[query_seq_num] = std::move(queryMsg);  //Buffering only after sending, so we can move contents for free.
 
   //});
+}
+
+const PolicyCache& Client::GetPolicyCache() const {
+  UW_ASSERT(policyCache != nullptr);
+  return *policyCache;
+}
+
+void Client::LiftTransaction() {
+  txn.set_lift(true);
 }
 
 

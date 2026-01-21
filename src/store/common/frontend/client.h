@@ -101,6 +101,9 @@ class Client {
   // Get the client policy cache; only supported for sintred protocols
   inline virtual const PolicyCache& GetPolicyCache() const { Panic("This protocol store does not implement support for Policy Cache"); }
 
+  // lift the transaction
+  inline virtual void LiftTransaction() { Panic("This protocol store does not implement support for Transaction Lifting"); }
+
   inline const Stats &GetStats() const { return stats; }
 
  protected:

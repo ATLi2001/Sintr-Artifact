@@ -60,7 +60,7 @@ typedef std::function<void(int, const std::string &)> validation_read_timeout_ca
 class ValidationClient : public ::ValidationClientCommon {
  public:
   ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, Partitioner *part,
-    std::string &table_registry, Parameters params);
+    std::string &table_registry, Parameters params, const PolicyCache *policyCache);
   virtual ~ValidationClient();
 
   // Begin a transaction.
@@ -89,6 +89,10 @@ class ValidationClient : public ::ValidationClientCommon {
 
   // Abort all Get(s) and Put(s) since Begin().
   virtual void Abort(abort_callback acb, abort_timeout_callback atcb, uint32_t timeout) override;
+
+  virtual const PolicyCache& GetPolicyCache() const override;
+
+  virtual void LiftTransaction() override;
   
   // Associate the current validation thread id with an SQL Interpreter
   void SetThreadValSQLInterpreter();
@@ -273,6 +277,8 @@ class ValidationClient : public ::ValidationClientCommon {
   // for computing txn involved groups
   Partitioner *part;
   Parameters params;
+  // we only need a read only view of the policy cache in this class
+  const PolicyCache *policyCache;
 
   std::string table_registry;
 

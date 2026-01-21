@@ -71,7 +71,7 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
   }
   // tpcc can support warehouse based policies with lifting
   // 0 is reserved for item table, which is not associated with any warehouse
-  // each warehouse id maps to policy id = warehouse id + 1
+  // each warehouse id maps to policy id = warehouse id (1-indexed)
   else if (policy_function_name == "tpcc_sql_wh") {
     return [](const std::string &key, const std::string &value) -> std::string {
       Debug("GetPolicyIdFunction: key %s", key.c_str());
@@ -106,7 +106,7 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
         Panic("Unknown table name %s", table_name.c_str());
       }
 
-      return PolicyIdString(w_id + 1);
+      return PolicyIdString(w_id);
     };
   }
   else {

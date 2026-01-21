@@ -220,9 +220,9 @@ transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeou
 
   // determine if we should lift this transaction
   if (tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount)) {
-    Debug("LIFTING PAYMENT TRANSACTION");
-    // client.LiftTransaction(true);
-  }  
+    Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
+    client.LiftTransaction();
+  }
 
   Debug("COMMIT");
   return client.Commit(timeout);

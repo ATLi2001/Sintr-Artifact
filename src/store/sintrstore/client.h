@@ -132,6 +132,10 @@ class Client : public ::Client {
   // Abort all Get(s) and Put(s) since Begin().
   virtual void Abort(abort_callback acb, abort_timeout_callback atcb,
       uint32_t timeout) override;
+  
+  virtual const PolicyCache& GetPolicyCache() const override;
+
+  virtual void LiftTransaction() override;
 
   //inline const Stats &GetStats() const { return stats; }
  private:

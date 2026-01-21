@@ -50,6 +50,7 @@
 #include "store/common/sintring/validation_parse_client.h"
 #include "store/common/sintring/endorsement_client.h"
 #include "store/common/policy/policy.h"
+#include "store/common/policy/policy_cache.h"
 #include "store/common/policy/client_selector.h"
 #include "store/sintrstore/sql_interpreter.h"
 
@@ -71,7 +72,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool pingClients,
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
-      ClientSelector *valClientSelector, std::mt19937 &rand,
+      ClientSelector *valClientSelector, std::mt19937 &rand, const PolicyCache *policyCache,
       const std::vector<std::string> &keys = std::vector<std::string>());
   virtual ~Client2Client();
 

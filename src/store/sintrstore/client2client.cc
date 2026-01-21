@@ -47,19 +47,19 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool pingClients,
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
-      ClientSelector *valClientSelector, std::mt19937 &rand,
+      ClientSelector *valClientSelector, std::mt19937 &rand, const PolicyCache *policyCache,
       const std::vector<std::string> &keys) :
       PingInitiator(this, transport, clients_config->n),
       client_id(client_id), transport(transport), config(config), clients_config(clients_config), 
       nshards(nshards), ngroups(ngroups),
       group(group), part(part), pingClients(pingClients), params(params), sintrFailure(params.sintr_params.sintrFailure),
       keyManager(keyManager), verifier(verifier), endorseClient(endorseClient), sql_interpreter(sql_interpreter),
-      keys(keys), valClientSelector(valClientSelector), rand(rand) {
+      valClientSelector(valClientSelector), rand(rand), keys(keys) {
   
   // separate verifier from main client instance
   clients_verifier = new BasicVerifier(transport);
 
-  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params);
+  valClient = new ValidationClient(transport, client_id, clients_config->n, nshards, ngroups, part, table_registry, params, policyCache);
   valParseClient = new ValidationParseClient(10000, keys, params.sintr_params.policyFunctionName); // TODO: pass arg for timeout length
   Debug("GROUP is %d client id %d", group, client_id);
   transport->Register(this, *clients_config, group, client_id); 

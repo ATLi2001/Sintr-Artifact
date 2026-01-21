@@ -2128,6 +2128,10 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
       blake3_hasher_update(&hasher, (unsigned char *) &endorsements[0], endorsements.length());
     }
 
+    if (txn.has_lift()) {
+      blake3_hasher_update(&hasher, &(const unsigned char &) txn.lift(), sizeof(txn.lift()));     
+    }
+
     blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
 
     return digest;

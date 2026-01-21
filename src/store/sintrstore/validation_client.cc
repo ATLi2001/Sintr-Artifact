@@ -35,9 +35,9 @@
 namespace sintrstore {
 
 ValidationClient::ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, 
-    Partitioner *part, std::string &table_registry, Parameters params) : 
+    Partitioner *part, std::string &table_registry, Parameters params, const PolicyCache *policyCache) : 
     transport(transport), client_id(client_id), nshards(nshards), ngroups(ngroups), part(part), params(params),
-    table_registry(table_registry) {}
+    table_registry(table_registry), policyCache(policyCache) {}
 
 ValidationClient::~ValidationClient() {
   for (auto it = threadValtoSQL.begin(); it != threadValtoSQL.end(); ++it) {
@@ -621,6 +621,25 @@ void ValidationClient::Abort(abort_callback acb, abort_timeout_callback atcb,
   }
   a.release();
   acb();
+}
+
+const PolicyCache& ValidationClient::GetPolicyCache() const {
+  return *policyCache;
+}
+
+void ValidationClient::LiftTransaction() {
+  uint64_t txn_client_id, txn_client_seq_num;
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
+  std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+
+  allValTxnStatesMap::accessor a;
+  if (!allValTxnStates.find(a, txn_id)) {
+    // LiftTransaction should always happen after SetTxnTimestamp, which inserts at txn_id
+    Panic("cannot find transaction %s in allValTxnStates", txn_id.c_str());
+  }
+
+  Debug("Lifting Validation Transaction[%lu:%lu]", txn_client_id, txn_client_seq_num);
+  a->second->txn->set_lift(true);
 }
 
 void ValidationClient::SetThreadValSQLInterpreter() {
