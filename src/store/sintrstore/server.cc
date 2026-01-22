@@ -3329,6 +3329,7 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
         continue;
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
+        stats.Increment("policy_leak_detected", 1);
         Debug(
           "Transaction %s read policy (%s) does not imply write policy (%s)",
           BytesToHex(txn->txndigest(), 16).c_str(),
