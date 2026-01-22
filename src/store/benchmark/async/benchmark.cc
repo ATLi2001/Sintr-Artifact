@@ -480,7 +480,7 @@ DEFINE_bool(sintr_sign_fwd_read_results, true, "sintr sign forward read results"
 DEFINE_bool(sintr_sign_finish_validation, true, "sintr sign finish validation message");
 DEFINE_bool(sintr_debug_endorse_check, true, "sintr do a full debug validation txn endorsement check");
 DEFINE_bool(sintr_client_check_evidence, true, "sintr client check prepared committed evidence on forward read results");
-DEFINE_string(sintr_policy_function_name, "basic_id", "sintr policy function to use");
+DEFINE_string(sintr_policy_function_name, "", "sintr policy function to use");
 DEFINE_string(sintr_policy_config_path, "", "path to sintr policy configuration file");
 DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of including policy in read messages, 0 indicates never");
 DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");

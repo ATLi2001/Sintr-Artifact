@@ -266,9 +266,11 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   client.asyncWait();
 
   // determine if we should lift this transaction
-  if (tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache())) {
-    Debug("LIFTING NEW ORDER TRANSACTION");
-    client.LiftTransaction();
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    if (tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache())) {
+      Debug("LIFTING NEW ORDER TRANSACTION");
+      client.LiftTransaction();
+    }
   }
 
   Debug("COMMIT");
