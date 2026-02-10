@@ -33,8 +33,8 @@
 namespace tpcc_sql {
 
 SyncSQLPayment::SyncSQLPayment(uint32_t timeout, uint32_t w_id, uint32_t c_c_last,
-    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen) : SyncTPCCSQLTransaction(timeout),
-    SQLPayment(w_id, c_c_last, c_c_id, num_warehouses, gen) {
+    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : SyncTPCCSQLTransaction(timeout),
+    SQLPayment(w_id, c_c_last, c_c_id, num_warehouses, gen, tpcc_lifts) {
 }
 
 SyncSQLPayment::~SyncSQLPayment() {

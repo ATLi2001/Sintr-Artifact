@@ -30,12 +30,13 @@
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/new_order.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
 
 class ValidationSQLNewOrder : public ValidationTPCCSQLTransaction, public SQLNewOrder {
  public:
-  ValidationSQLNewOrder(uint32_t timeout, const validation::proto::NewOrder &valNewOrderMsg);
+  ValidationSQLNewOrder(uint32_t timeout, const validation::proto::NewOrder &valNewOrderMsg, const TPCCLifts &tpcc_lifts);
   virtual ~ValidationSQLNewOrder();
   virtual transaction_status_t Validate(SyncClient &client);
 };

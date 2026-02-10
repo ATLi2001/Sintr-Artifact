@@ -42,6 +42,7 @@
 #include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
 #include "store/benchmark/async/rw-sql/validation/rw-sql_val_policy_change.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 #include "store/benchmark/async/sql/tpcc/validation/delivery.h"
 #include "store/benchmark/async/sql/tpcc/validation/new_order.h"
 #include "store/benchmark/async/sql/tpcc/validation/order_status.h"
@@ -121,6 +122,7 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
     return new ::rwsync::RWValTransaction(timeout, keys, valTxnData);
   }
   else if (txn_bench == ::tpcc_sql::BENCHMARK_NAME) {
+    ::tpcc_sql::TPCCLifts tpcc_lifts(policy_function_name);
     ::tpcc_sql::SQLTPCCTransactionType tpcc_txn_type = ::tpcc_sql::GetBenchmarkTxnTypeEnum(txn_type);
     switch (tpcc_txn_type) {
       case ::tpcc_sql::SQL_TXN_DELIVERY: {
@@ -139,7 +141,7 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::tpcc_sql::validation::proto::NewOrder valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         UW_ASSERT(!valTxnData.sequential());
-        return new ::tpcc_sql::ValidationSQLNewOrder(timeout, valTxnData);
+        return new ::tpcc_sql::ValidationSQLNewOrder(timeout, valTxnData, tpcc_lifts);
       }
       case ::tpcc_sql::SQL_TXN_NEW_ORDER_SEQUENTIAL: {
         ::tpcc_sql::validation::proto::NewOrder valTxnData;
@@ -156,7 +158,7 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::tpcc_sql::validation::proto::Payment valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         UW_ASSERT(!valTxnData.sequential());
-        return new ::tpcc_sql::ValidationSQLPayment(timeout, rand, valTxnData);
+        return new ::tpcc_sql::ValidationSQLPayment(timeout, rand, valTxnData, tpcc_lifts);
       }
       case ::tpcc_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
         ::tpcc_sql::validation::proto::Payment valTxnData;

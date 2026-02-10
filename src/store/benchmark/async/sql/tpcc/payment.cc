@@ -37,7 +37,8 @@
 namespace tpcc_sql {
 
 SQLPayment::SQLPayment(uint32_t w_id, uint32_t c_c_last,
-    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen) : w_id(w_id), gen(gen) {
+    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen,
+    const TPCCLifts &tpcc_lifts) : w_id(w_id), gen(gen), tpcc_lifts(tpcc_lifts) {
   d_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen); 
   d_w_id = w_id;
   int x = std::uniform_int_distribution<int>(1, 100)(gen);
@@ -216,7 +217,13 @@ transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeou
   //Writes to history are blind, it technically doesn't matter if they are duplicate. But should ideally make it unique (or no primary key at all)
   if(!results[3]->has_rows_affected()){Warning("History row not unique. Might want to investigate");} 
   //UW_ASSERT(results[3]->has_rows_affected());
-  
+
+  // determine if we should lift this transaction
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
+    std::vector<std::string> lifts = tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount, client.GetReadset());
+    client.LiftTransaction(lifts);
+  }
 
   Debug("COMMIT");
   return client.Commit(timeout);

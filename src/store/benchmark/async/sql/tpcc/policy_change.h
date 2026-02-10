@@ -34,8 +34,7 @@ namespace tpcc_sql {
 
 class PolicyChange : public TPCCSQLTransaction {
  public:
-  PolicyChange(uint32_t w_id);
-  PolicyChange(uint32_t w_id, uint32_t policy_weight);
+  PolicyChange(uint64_t policy_id, uint32_t policy_weight);
   PolicyChange() {};
   virtual ~PolicyChange();
 
@@ -43,7 +42,7 @@ class PolicyChange : public TPCCSQLTransaction {
   virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:
-  uint32_t w_id;
+  uint32_t policy_id;
   uint32_t randWeight;
  private:
   std::mt19937 rand;

@@ -28,6 +28,7 @@
 #define _ENDORSEMENT_CLIENT_H_
 
 #include "store/common/policy/policy_client.h"
+#include "store/common/timestamp.h"
 
 #include <vector>
 #include <set>
@@ -48,9 +49,11 @@ class EndorsementClient {
 
   const std::vector<std::shared_ptr<::google::protobuf::Message>> &GetEndorsements(const int64_t sequence_number = -1) const;
   const std::set<uint64_t> &GetBlacklistedClients() const;
+  const std::unordered_set<uint64_t> &GetUpdatePolicyClients() const;
+  void ClearPolicyClientsSet();
   void SetClientSeqNum(uint64_t client_seq_num);
   void SetEndorsementsUsed(const int64_t sequence_number = -1);
-  void SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number = -1);
+  void SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number = -1, const std::string &policy_digest = "");
   void DebugSetExpectedTxn(std::unique_ptr<::google::protobuf::Message> expectedTxn);
   void DebugCheck(std::unique_ptr<::google::protobuf::Message> txn);
   // update current policy by merging with passed in policy
@@ -70,6 +73,9 @@ class EndorsementClient {
   // check if the policy is satisfied by actual endorsements collected so far
   bool IsSatisfied(const int64_t sequence_number = -1);
   // function passed in by specific store defining its own debug check function
+  bool IsImpliedBy(const Policy* policy, const uint64_t sequence_number);
+
+  bool GetPolicyMismatch(const uint64_t sequence_number) const;
   void SetDebugCheckFunction(std::function<void(const ::google::protobuf::Message *, const ::google::protobuf::Message *)> func);
 
  private:
@@ -127,12 +133,22 @@ class EndorsementClient {
     int numCheckValidations = 0;
     // is client done using the endorsements
     bool endorsementsUsed = false;
+
+    // map of client ids to hashed policy versions to send to client
+    std::map<uint64_t, std::string> policyVersions;
+    std::string expectedPolicyDigest;
+    // whether there is a policy mismatch or not
+    bool policyMismatch = false;
   };
   typedef tbb::concurrent_hash_map<uint64_t, EndorsementCheckState *> endorsementCheckStatesMap;
   endorsementCheckStatesMap endorsementCheckStates;
 
   // blacklist of clients that have sent an incorrect endorsement
   std::set<uint64_t> blacklistedClients;
+  // list of clients that have a policy mismatch
+  std::unordered_set<uint64_t> updateClientPolicyVersions;
+  // mutex for protecting updateclientpolicyversion
+  mutable std::shared_mutex updateClientPolicyMutex;
 };
 
 #endif /* _ENDORSEMENT_CLIENT_H_ */

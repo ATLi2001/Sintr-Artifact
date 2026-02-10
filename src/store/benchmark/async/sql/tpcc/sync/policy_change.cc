@@ -30,10 +30,6 @@
 
 namespace tpcc_sql {
 
-SyncSQLPolicyChange::SyncSQLPolicyChange(uint32_t timeout, uint32_t w_id) : SyncTPCCSQLTransaction(timeout),
-    PolicyChange(w_id) {
-    }
-
 SyncSQLPolicyChange::SyncSQLPolicyChange(uint32_t timeout, uint32_t w_id, uint32_t policy_weight) : SyncTPCCSQLTransaction(timeout),
     PolicyChange(w_id, policy_weight) {
     }

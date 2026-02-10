@@ -50,6 +50,15 @@ const std::set<uint64_t> &EndorsementClient::GetBlacklistedClients() const {
   return blacklistedClients;
 }
 
+const std::unordered_set<uint64_t> &EndorsementClient::GetUpdatePolicyClients() const {
+  return updateClientPolicyVersions;
+}
+
+void EndorsementClient::ClearPolicyClientsSet() {
+  std::unique_lock lock(updateClientPolicyMutex);
+  updateClientPolicyVersions.clear();
+}
+
 void EndorsementClient::SetClientSeqNum(uint64_t client_seq_num) {
   this->client_seq_num = client_seq_num;
   endorsementCheckStatesMap::accessor a;
@@ -75,7 +84,7 @@ void EndorsementClient::SetEndorsementsUsed(const int64_t sequence_number) {
   }
 }
 
-void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number) {
+void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDigest, const int64_t sequence_number, const std::string &policy_digest) {
   uint64_t seq_num = sequence_number != -1 ? sequence_number : client_seq_num;
   endorsementCheckStatesMap::accessor a;
   if (!endorsementCheckStates.find(a, seq_num)) {
@@ -87,6 +96,18 @@ void EndorsementClient::SetExpectedTxnDigest(const std::string &expectedTxnDiges
   a->second->expectedTxnDigest = expectedTxnDigest;
   // add self as an endorsement
   a->second->client_ids_received.insert(client_id);
+  if(policy_digest != "") {
+    a->second->expectedPolicyDigest = policy_digest;
+    for (auto const [val_client_id, val_policy_digest] : a->second->policyVersions) {
+      // check all existing policy digests
+      if(val_policy_digest != policy_digest) {
+        std::shared_lock lock(updateClientPolicyMutex);
+        updateClientPolicyVersions.insert(val_client_id);
+        lock.unlock();
+        a->second->policyMismatch = true;
+      }
+    }
+  }
 
   // now also check pendingEndorsements
   for (auto const &it : a->second->pendingEndorsements) {
@@ -298,6 +319,24 @@ bool EndorsementClient::IsSatisfied(const int64_t sequence_number) {
     a->second->numChecksBeforeDestruct = a->second->client_ids_received.size() - 1;
   }
   return satisfied;
+}
+
+bool EndorsementClient::IsImpliedBy(const Policy* policy, const uint64_t sequence_number) {
+  endorsementCheckStatesMap::accessor a;
+  if (!endorsementCheckStates.find(a, sequence_number)) {
+    // this is called from the client main thread before the txn is sent to the server
+    // so the endorsement check state should always exist
+    Panic("No endorsement check state found for client seq num %lu", sequence_number);
+  }
+  return a->second->policyClient->IsImpliedBy(policy);
+}
+
+bool EndorsementClient::GetPolicyMismatch(const uint64_t sequence_number) const {
+  endorsementCheckStatesMap::const_accessor a;
+  if (!endorsementCheckStates.find(a, sequence_number)) {
+    Panic("No endorsement check state found for client seq num %lu", sequence_number);
+  }
+  return a->second->policyMismatch;
 }
 
 void EndorsementClient::SetDebugCheckFunction(std::function<void(const ::google::protobuf::Message *expectedTxn, const ::google::protobuf::Message *txn)> func) {

@@ -69,55 +69,46 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
       return rwsql::GetPolicyIdForTable(table_name, policy_function_name);
     };
   }
-  // DEPRECATED: tpcc cannot support warehouse based policies
-  // else if (policy_function_name == "tpcc_acl_wh") {
-  //   return [](const std::string &key, const std::string &value) -> std::string {
-  //     std::string table_name;
-  //     std::vector<std::string> primary_key_column_values;
+  // tpcc can support warehouse based policies with lifting
+  // 0 is reserved for item table, which is not associated with any warehouse
+  // each warehouse id maps to policy id = warehouse id (1-indexed)
+  else if (policy_function_name == "tpcc_sql_wh") {
+    return [](const std::string &key, const std::string &value) -> std::string {
+      Debug("GetPolicyIdFunction: key %s", key.c_str());
+      std::string table_name;
+      std::vector<std::string> primary_key_column_values;
+      DecodeTableRow(key, table_name, primary_key_column_values);
 
-  //     // // if not an encoded key, then no need to decode
-  //     // size_t pos = key.find(unique_delimiter);
-  //     // if (pos == std::string::npos) {
-  //     //   return "p#4";
-  //     // }
-  //     // // table col name will only have one delimiter
-  //     // if (key.find(unique_delimiter, pos + unique_delimiter.length()) == std::string::npos) {
-  //     //   return "p#4";
-  //     // }
-  //     Debug("GetPolicyIdFunction: key %s", key.c_str());
-  //     DecodeTableRow(key, table_name, primary_key_column_values);
+      // warehouse based policy id
+      uint32_t w_id = 0;
 
-  //     // warehouse based policy id
-  //     uint32_t w_id = 0;
+      if (
+        table_name == tpcc_sql::WAREHOUSE_TABLE ||
+        table_name == tpcc_sql::DISTRICT_TABLE ||
+        table_name == tpcc_sql::CUSTOMER_TABLE ||
+        table_name == tpcc_sql::NEW_ORDER_TABLE ||
+        table_name == tpcc_sql::ORDER_TABLE ||
+        table_name == tpcc_sql::ORDER_LINE_TABLE ||
+        table_name == tpcc_sql::EARLIEST_NEW_ORDER_TABLE
+      ) {
+        w_id = std::stoi(primary_key_column_values[0]);
+      }
+      else if (table_name == tpcc_sql::STOCK_TABLE) {
+        w_id = std::stoi(primary_key_column_values[1]);
+      }
+      else if (table_name == tpcc_sql::HISTORY_TABLE) {
+        w_id = std::stoi(primary_key_column_values[3]);
+      }
+      else if (table_name == tpcc_sql::ITEM_TABLE) {
+        return PolicyIdString(0);
+      }
+      else {
+        Panic("Unknown table name %s", table_name.c_str());
+      }
 
-  //     if (
-  //       table_name == tpcc_sql::WAREHOUSE_TABLE ||
-  //       table_name == tpcc_sql::DISTRICT_TABLE ||
-  //       table_name == tpcc_sql::CUSTOMER_TABLE ||
-  //       table_name == tpcc_sql::NEW_ORDER_TABLE ||
-  //       table_name == tpcc_sql::ORDER_TABLE ||
-  //       table_name == tpcc_sql::ORDER_LINE_TABLE ||
-  //       table_name == tpcc_sql::EARLIEST_NEW_ORDER_TABLE
-  //     ) {
-  //       w_id = std::stoi(primary_key_column_values[0]);
-  //     }
-  //     else if (table_name == tpcc_sql::STOCK_TABLE) {
-  //       w_id = std::stoi(primary_key_column_values[1]);
-  //     }
-  //     else if (table_name == tpcc_sql::HISTORY_TABLE) {
-  //       w_id = std::stoi(primary_key_column_values[3]);
-  //     }
-  //     else if (table_name == tpcc_sql::ITEM_TABLE) {
-  //       return "p4";
-  //     }
-  //     else {
-  //       Panic("Unknown table name %s", table_name.c_str());
-  //     }
-
-  //     uint32_t target_policy_id = w_id % 4;
-  //     return "p" + std::to_string(target_policy_id);
-  //   };
-  // }
+      return PolicyIdString(w_id);
+    };
+  }
   else {
     Panic("Unknown policy function name %s", policy_function_name.c_str());
   }

@@ -40,7 +40,6 @@ namespace tpcc_sql {
 class ValidationSQLPolicyChange : public ValidationTPCCSQLTransaction, public PolicyChange {
  public:
   // constructor with no randomness (all fields directly initialized)
-  ValidationSQLPolicyChange(uint32_t timeout, uint32_t w_id);
   ValidationSQLPolicyChange(uint32_t timeout, const validation::proto::PolicyChange &valPolicyChangeMsg);
   virtual ~ValidationSQLPolicyChange();
   virtual transaction_status_t Validate(::SyncClient &client);

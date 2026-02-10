@@ -736,7 +736,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
       rcb(REPLY_OK, key, write.value(), Timestamp(), nullptr,
           false, false,
           nullptr, nullptr, nullptr,
-          nullptr);
+          nullptr, Timestamp());
       return true;
     }
   }
@@ -750,7 +750,7 @@ bool ShardClient::BufferGet(const std::string &key, read_callback &rcb) {
       rcb(REPLY_OK, key, readValues[key], read.readtime(), nullptr,
           false, false,
           nullptr, nullptr, nullptr,
-          std::move(std::make_unique<std::string>(read.hashed_readtime())));
+          std::move(std::make_unique<std::string>(read.hashed_readtime())), Timestamp());
       return true;
     }
   }
@@ -1262,7 +1262,7 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
 
       req->gcb(REPLY_OK, req->key, req->maxValue, req->maxTs, std::move(req->dep),req->hasDep && !req->get_from_put, !req->get_from_put,
         std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy),
-        std::move(tsDigest));
+        std::move(tsDigest), req->maxPolicyTs);
     }
     else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
       std::string &prev_read = it->second;
@@ -1284,7 +1284,7 @@ void ShardClient::HandleReadReply(proto::ReadReply &reply) {
       // auto duration = end_time-start_time;
       // shard_client_receive.add(duration);
       req->gcb(REPLY_OK, req->key, prev_read, req->maxTs, std::move(req->dep), false, false, //Don't add to read set.
-        nullptr, nullptr, nullptr, nullptr); 
+        nullptr, nullptr, nullptr, nullptr, Timestamp()); 
     } 
     delete req;
   }
@@ -1992,6 +1992,9 @@ bool ShardClient::GetPolicyShardClient() {
   return get_policy_shard_client;
 }
 
+void ShardClient::SetPolicyShardClient(bool value) {
+  get_policy_shard_client = value;
+}
 
 
 

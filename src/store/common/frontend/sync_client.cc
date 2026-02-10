@@ -274,6 +274,18 @@ void SyncClient::asyncWait() {
   }
 }
 
+const PolicyCache& SyncClient::GetPolicyCache() const {
+  return client->GetPolicyCache();
+}
+
+void SyncClient::LiftTransaction(std::vector<std::string> &lift_keys) {
+  client->LiftTransaction(lift_keys);
+}
+
+const std::map<std::string, std::string> &SyncClient::GetReadset() {
+  return client->GetReadset();
+}
+
 ///////// Callbacks
 
 void SyncClient::GetCallback(Promise *promise, int status,

@@ -3270,9 +3270,25 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     policyClient.AddPolicy(tsPolicy.second.policy);
   }
 
-  if (!params.sintr_params.includeReadsetForTxnPolicy && !params.sintr_params.checkPolicyLeak) {
-    // no need to consider readset for policy or leak check
-    return true;
+  std::unordered_set<std::string> lift_keys_set;
+  if (!params.sintr_params.includeReadsetForTxnPolicy && (!params.sintr_params.checkPolicyLeak || txn->lift_keys_size() > 0)) {
+    // no need to consider readset for policy and leak check
+    // if txn says to lift, then also no leak check
+    if (txn->lift_keys_size() > 0) {
+      stats.Increment("lifted_txn", 1);
+      Debug("Transaction %s is lifted, skipping policy leak check", BytesToHex(txn->txndigest(), 16).c_str());
+      // check that policy versions are matching
+      for (const auto &lift_key : txn->lift_keys()) {
+        lift_keys_set.insert(std::move(lift_key));
+      }
+      for (const auto &policyVersion : txn->policy_versions()) {
+        std::pair<Timestamp, PolicyStoreValue> tsPolicy;
+        GetPolicy(policyVersion.policy_id(), ts, tsPolicy, false);
+        if(Timestamp(policyVersion.timestamp()) != tsPolicy.first) {
+          return false;
+        }
+      }
+    }
   }
 
   // map that stores policyID to latest policy TS
@@ -3286,6 +3302,11 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
     }
 
     if (!IsKeyOwned(read.key())) {
+      continue;
+    }
+
+    if(lift_keys_set.find(read.key()) != lift_keys_set.end()) {
+      // continue if read key is in lifted keys
       continue;
     }
 
@@ -3325,10 +3346,13 @@ bool Server::ExtractPolicy(const proto::Transaction *txn, PolicyClient &policyCl
         continue;
       }
       if (!policyClient.IsImpliedBy(tsPolicy.second.policy)) {
+        stats.Increment("policy_leak_detected", 1);
         Debug(
-          "Read policy (%s) does not imply write policy (%s)",
+          "Transaction %s read policy (%s) does not imply write policy (%s) for key %s",
+          BytesToHex(txn->txndigest(), 16).c_str(),
           tsPolicy.second.policy->ToString().c_str(),
-          policyClient.ToString().c_str()
+          policyClient.ToString().c_str(),
+          BytesToHex(read.key(), 16).c_str()
         );
         return false;
       }
@@ -3415,7 +3439,9 @@ bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, 
     return false;
   }
   // then check that data is all same as well
-  if (txnDigest != endorsement.data()) {
+  proto::ValTxnMsg endorsementMsg;
+  endorsementMsg.ParseFromString(endorsement.data());
+  if (txnDigest != endorsementMsg.validation_txn_digest()) {
     return false;
   }
 

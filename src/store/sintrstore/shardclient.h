@@ -71,7 +71,7 @@ typedef std::function<void(int, const std::string &,
     bool, bool,
     std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
     std::unique_ptr<EndorsementPolicyMessage>,
-    std::unique_ptr<std::string>)> read_callback;
+    std::unique_ptr<std::string>, const Timestamp &)> read_callback;
 typedef std::function<void(int, const std::string &)> read_timeout_callback;
 
 ////////// Queries
@@ -82,7 +82,7 @@ typedef std::function<void(int, int, proto::ReadSet*, std::string &, std::string
 typedef std::function<void(int, const std::string &, const std::string &, const Timestamp &, const std::string &,
   std::unique_ptr<proto::Dependency>, bool, bool,
   std::unique_ptr<proto::CommittedProof>, std::unique_ptr<proto::SignedMessage>,
-  std::unique_ptr<EndorsementPolicyMessage>, std::unique_ptr<std::string>)> point_result_callback;  //TODO: This == Get callback.
+  std::unique_ptr<EndorsementPolicyMessage>, std::unique_ptr<std::string>, const Timestamp &)> point_result_callback;  //TODO: This == Get callback.
 
 typedef std::function<void(int)> result_timeout_callback;
 
@@ -209,6 +209,7 @@ virtual void Phase2Equivocate_Simulate(uint64_t id, const proto::Transaction &tx
    virtual void RetryQuery(uint64_t query_seq_num, proto::Query &queryMsg, bool is_point = false, point_result_callback prcb = nullptr);
    bool isValidQueryDep(const uint64_t &query_seq_num, const std::string &txnDigest, const proto::Transaction* txn = nullptr);
   bool GetPolicyShardClient();
+  void SetPolicyShardClient(bool value);
 
   inline void WarmupDone(){warmup_done = true;}
 

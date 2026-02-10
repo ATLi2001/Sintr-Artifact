@@ -36,7 +36,7 @@
 namespace tpcc_sql {
 
 SQLNewOrder::SQLNewOrder(uint32_t w_id, uint32_t C,
-    uint32_t num_warehouses, std::mt19937 &gen) : w_id(w_id) {
+    uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : w_id(w_id), tpcc_lifts(tpcc_lifts) {
 
   d_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen); 
   c_id = tpcc_sql::NURand(static_cast<uint32_t>(1023), static_cast<uint32_t>(1), static_cast<uint32_t>(3000), C, gen);
@@ -264,6 +264,13 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   }
 
   client.asyncWait();
+
+  // determine if we should lift this transaction
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    Debug("LIFTING NEW ORDER TRANSACTION");
+    std::vector<std::string> lifts = tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache(), all_local, client.GetReadset());
+    client.LiftTransaction(lifts);
+  }
 
   Debug("COMMIT");
   return client.Commit(timeout);

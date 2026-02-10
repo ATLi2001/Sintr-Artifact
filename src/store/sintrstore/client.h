@@ -132,6 +132,12 @@ class Client : public ::Client {
   // Abort all Get(s) and Put(s) since Begin().
   virtual void Abort(abort_callback acb, abort_timeout_callback atcb,
       uint32_t timeout) override;
+  
+  virtual const PolicyCache& GetPolicyCache() const override;
+
+  virtual void LiftTransaction(std::vector<std::string> &lift_keys) override;
+
+  virtual const std::map<std::string, std::string> &GetReadset() override;
 
   //inline const Stats &GetStats() const { return stats; }
  private:
@@ -234,13 +240,15 @@ class Client : public ::Client {
                                                       // If we want to do a Point Update afterwards, then we can use the cache to skip straight to a put.
                                                       // Note: Only works if we did Select * in the first point read. (Can improve this if we make Updates Put deltas instead of full row client side)
   std::map<std::string, std::string> scan_read_cache; //Cache results from scan reads (only for Select *)
+  std::map<std::string, std::string> txn_readset; // map of txn read keys and values
+  std::unordered_set<std::string> txn_lifted_keys; // set of lifted keys for a transaction
 
   void TestReadSet(PendingQuery *pendingQuery);
   void PointQueryResultCallback(PendingQuery *pendingQuery,  
                             int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                             std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadSet,
                             std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite, std::unique_ptr<EndorsementPolicyMessage> policyMsg,
-                            std::unique_ptr<std::string> tsDigest); 
+                            std::unique_ptr<std::string> tsDigest, const Timestamp &policyTs); 
   void QueryResultCallback(PendingQuery *pendingQuery,      //bound parameters
                             int status, int group, proto::ReadSet *query_read_set, std::string &result_hash, std::string &result, bool success,
                             std::vector<proto::SignedMessage *> *query_sigs, // take ownership
@@ -476,7 +484,10 @@ class Client : public ::Client {
 
   std::unordered_map<uint64_t, uint64_t> pendingReqs_starttime;
 
-  std::unordered_set<std::string> perTxnPolicyIds;
+  // stores all policies associated with a transaction
+  std::map<std::string, Timestamp> perTxnPolicyIds;
+  // only stores readset policies
+  std::map<std::string, Timestamp> txnReadsetPolicyIds;
 
   // tracking target group for get triggered from an sql write
   int target_group_for_get;

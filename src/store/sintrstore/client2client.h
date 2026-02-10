@@ -50,6 +50,7 @@
 #include "store/common/sintring/validation_parse_client.h"
 #include "store/common/sintring/endorsement_client.h"
 #include "store/common/policy/policy.h"
+#include "store/common/policy/policy_cache.h"
 #include "store/common/policy/client_selector.h"
 #include "store/sintrstore/sql_interpreter.h"
 
@@ -71,8 +72,8 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
       uint64_t client_id, uint64_t nshards, uint64_t ngroups, int group, bool pingClients,
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
-      ClientSelector *valClientSelector, std::mt19937 &rand,
-      const std::vector<std::string> &keys = std::vector<std::string>());
+      ClientSelector *valClientSelector, std::mt19937 &rand, const PolicyCache *policyCache,
+      const std::vector<std::string> &keys = std::vector<std::string>(), std::function<void*(void)> get_policy_cb = nullptr);
   virtual ~Client2Client();
 
   virtual void ReceiveMessage(const TransportAddress &remote,
@@ -441,6 +442,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   bool replyDone;
 
   std::function<void*(void)> ecb = nullptr; // only need one endorsement callback because client is closed loop
+  std::function<void*(void)> get_policy_cb = nullptr;
 };
 
 } // namespace sintrstore

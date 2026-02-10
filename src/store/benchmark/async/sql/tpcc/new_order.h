@@ -29,13 +29,14 @@
 #define SQL_NEW_ORDER_H
 
 #include "store/benchmark/async/sql/tpcc/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
 
 class SQLNewOrder : public TPCCSQLTransaction {
  public:
   SQLNewOrder(uint32_t w_id, uint32_t C,
-      uint32_t num_warehouses, std::mt19937 &gen);
+      uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
   SQLNewOrder() {};
   virtual ~SQLNewOrder();
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
@@ -54,6 +55,7 @@ class SQLNewOrder : public TPCCSQLTransaction {
   std::vector<uint8_t> o_ol_quantities;
   uint32_t o_entry_d;
   bool all_local;
+  TPCCLifts tpcc_lifts;
 };
 
 //TODO: Create a shared super class...

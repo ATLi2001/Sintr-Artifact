@@ -16,6 +16,7 @@
 #include "store/common/partitioner.h"
 
 #include "store/common/query_result/query_result.h"
+#include "store/common/policy/policy_cache.h"
 
 #include <functional>
 #include <string>
@@ -96,6 +97,14 @@ class Client {
   // Get the result (rows affected) for a given write SQL statement
   inline virtual void Write(std::string &write_statement, write_callback wcb,
       write_timeout_callback wtcb, uint32_t timeout, bool blind_write = false){Panic("This protocol store does not implement support for Write Statements"); };   //TODO: Can probably avoid using Callbacks at all. Just void write-through.
+
+  // Get the client policy cache; only supported for sintred protocols
+  inline virtual const PolicyCache& GetPolicyCache() const { Panic("This protocol store does not implement support for Policy Cache"); }
+
+  // lift the transaction
+  inline virtual void LiftTransaction(std::vector<std::string> &lift_keys) { Panic("This protocol store does not implement support for Transaction Lifting"); }
+  
+  inline virtual const std::map<std::string, std::string> &GetReadset() {Panic("This protocol store does not implement support for Fetching Transaction Readset");};
 
   inline const Stats &GetStats() const { return stats; }
 

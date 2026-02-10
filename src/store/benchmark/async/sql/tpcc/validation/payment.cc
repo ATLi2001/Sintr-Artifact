@@ -30,8 +30,8 @@
 
 namespace tpcc_sql {
 
-ValidationSQLPayment::ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, const validation::proto::Payment &valPaymentMsg) : 
-  ValidationTPCCSQLTransaction(timeout), SQLPayment(gen) {
+ValidationSQLPayment::ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, const validation::proto::Payment &valPaymentMsg,
+    const TPCCLifts &tpcc_lifts) : ValidationTPCCSQLTransaction(timeout), SQLPayment(gen) {
   w_id = valPaymentMsg.w_id();
   d_id = valPaymentMsg.d_id();
   d_w_id = valPaymentMsg.d_w_id();
@@ -43,6 +43,7 @@ ValidationSQLPayment::ValidationSQLPayment(uint32_t timeout, std::mt19937 &gen, 
   c_by_last_name = valPaymentMsg.c_by_last_name();
   c_last = valPaymentMsg.c_last();
   random_row_id = valPaymentMsg.random_row_id();
+  this->tpcc_lifts = tpcc_lifts;
 }
 
 ValidationSQLPayment::~ValidationSQLPayment() {

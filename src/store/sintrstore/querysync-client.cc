@@ -1447,7 +1447,7 @@ bool ShardClient::ProcessRead(const uint64_t &reqId, PendingQuorumGet *req, read
                 removeTsfromTx(req->maxCommittedProof->mutable_txn());
             }
             req->prcb(REPLY_OK, req->key, req->maxValue, req->maxTs, req->table_name, std::move(req->dep),req->hasDep, true,
-                std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy), std::move(tsDigest));
+                std::move(req->maxCommittedProof), std::move(req->maxWrite), std::move(req->maxPolicy), std::move(tsDigest), req->maxPolicyTs);
         }
         // else{ //TODO: Could optimize to do this right at the start of Handle Read to avoid any validation costs... -> Does mean all reads have to lookup twice though.
         //     Notice("Duplicate Point read to key %s", req->key.c_str());

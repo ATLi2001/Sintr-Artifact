@@ -30,8 +30,8 @@
 
 namespace tpcc_sql {
 
-ValidationSQLNewOrder::ValidationSQLNewOrder(uint32_t timeout, const validation::proto::NewOrder &valNewOrderMsg) :
-    ValidationTPCCSQLTransaction(timeout) {
+ValidationSQLNewOrder::ValidationSQLNewOrder(uint32_t timeout, const validation::proto::NewOrder &valNewOrderMsg,
+    const TPCCLifts &tpcc_lifts) : ValidationTPCCSQLTransaction(timeout) {
   w_id = valNewOrderMsg.w_id();
   d_id = valNewOrderMsg.d_id();
   c_id = valNewOrderMsg.c_id();
@@ -47,6 +47,7 @@ ValidationSQLNewOrder::ValidationSQLNewOrder(uint32_t timeout, const validation:
   unique_items = std::set(valNewOrderMsg.unique_items().begin(), valNewOrderMsg.unique_items().end());
   o_entry_d = valNewOrderMsg.o_entry_d();
   all_local = valNewOrderMsg.all_local();
+  this->tpcc_lifts = tpcc_lifts;
 }
 
 ValidationSQLNewOrder::~ValidationSQLNewOrder() {

@@ -32,17 +32,12 @@
 #include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
 #include "store/common/common-proto.pb.h"
 #include "store/common/policy/policy-proto.pb.h"
-
+#include "store/common/policy/policy_id.h"
 
 namespace tpcc_sql {
 
-PolicyChange::PolicyChange(uint32_t w_id) : w_id(w_id) {
-  randWeight = std::uniform_int_distribution<uint32_t>(1, 3)(GetRand());
-  std::cerr << "Changing policy p#0 to weight " << randWeight << " for warehouse " << w_id << std::endl;
-}
-
-PolicyChange::PolicyChange(uint32_t w_id, uint32_t policy_weight) : w_id(w_id), randWeight(policy_weight) {
-  std::cerr << "Changing policy p#0 to weight " << randWeight << " for warehouse " << w_id << std::endl;
+PolicyChange::PolicyChange(uint64_t policy_id, uint32_t policy_weight) : policy_id(policy_id), randWeight(policy_weight) {
+  std::cerr << "Changing policy " <<  policy_id << " to weight " << randWeight << std::endl;
 }
 
 PolicyChange::~PolicyChange() {
@@ -50,7 +45,6 @@ PolicyChange::~PolicyChange() {
 
 transaction_status_t PolicyChange::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
   Debug("POLICY_CHANGE");
-  Debug("Warehouse: %u", w_id);
 
   std::string txnState;
   if (serialize) {
@@ -59,7 +53,6 @@ transaction_status_t PolicyChange::BaseExecute(SyncClient &client, uint32_t time
 
   client.Begin(timeout, txnState);
 
-  // distict table has policy id 1, change it to be policy of weight 1 or 3
   PolicyObject policy;
   policy.set_policy_type(PolicyObject::WEIGHT_POLICY);
   WeightPolicyMessage weight_policy;
@@ -68,7 +61,8 @@ transaction_status_t PolicyChange::BaseExecute(SyncClient &client, uint32_t time
   
   std::string policy_str;
   policy.SerializeToString(&policy_str);
-  client.Put("p#0", policy_str, timeout);
+
+  client.Put(PolicyIdString(policy_id), policy_str, timeout);
 
   return client.Commit(timeout);
 }
@@ -83,7 +77,7 @@ void PolicyChange::SerializeTxnState(std::string &txnState) {
   currTxnState.set_txn_name(txn_name);
 
   validation::proto::PolicyChange curr_txn = validation::proto::PolicyChange();
-  curr_txn.set_w_id(w_id);
+  curr_txn.set_w_id(policy_id);
   curr_txn.set_random_weight(randWeight);
   std::string txn_data;
   curr_txn.SerializeToString(&txn_data);
