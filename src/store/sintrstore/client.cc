@@ -106,10 +106,19 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
 
   // create client for other clients
   // right now group is always 0, maybe configure later
+  auto set_get_policy_cb = [this, transport]() { 
+    transport->Timer(0, [this]() {
+      for (uint64_t i = 0; i < ngroups; i++) {
+        bclient[i]->SetPolicyShardClient(true);
+      }
+    });
+    return (void*) true;
+  };
+
   c2client = new Client2Client(
     config, clients_config, params.sintr_params.separateTransport ? c2cport : transport, client_id, nshards, ngroups, 0,
     pingReplicas, params, keyManager, verifier, part, endorseClient, &sql_interpreter,
-    table_registry, valClientSelector, rand, policyCache.get(), keys
+    table_registry, valClientSelector, rand, policyCache.get(), keys, std::move(set_get_policy_cb)
   );
 
   Debug("Sintr client [%lu] created! %lu %lu", client_id, nshards,
@@ -276,6 +285,9 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb,
     point_read_cache.clear();
     scan_read_cache.clear();
     perTxnPolicyIds.clear();
+    txnReadsetPolicyIds.clear();
+    txn_lifted_keys.clear();
+    txn_readset.clear();
 
     ClearTxnQueries();
     //pendingQueries.clear(); //shouldn't be necessary to call, should be empty anyways
@@ -327,7 +339,7 @@ void Client::Get(const std::string &key, get_callback gcb,
         bool hasDep, bool addReadSet,
         std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite,
         std::unique_ptr<EndorsementPolicyMessage> policyMsg,
-        std::unique_ptr<std::string> tsDigest) {
+        std::unique_ptr<std::string> tsDigest, const Timestamp &policyTs) {
 
       // struct timespec ts_start;
       // clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -352,6 +364,9 @@ void Client::Get(const std::string &key, get_callback gcb,
           read->set_hashed_readtime(*tsDigest);
         }
         ts.serialize(read->mutable_readtime());
+        if(params.sintr_params.liftingEnabled) {
+          txn_readset[key] = val;
+        }
       }
       // new policy can only come from server, which must correspond to addReadSet
       if (policyMsg != nullptr && policyMsg->IsInitialized()) {
@@ -359,16 +374,24 @@ void Client::Get(const std::string &key, get_callback gcb,
           "PULL[%lu:%lu] POLICY FOR key %s in GET for policy ID %s",
           client_id, client_seq_num, key.c_str(), policyMsg->policy_id().c_str()
         );
-        policyCache->Put(policyMsg->policy_id(), policyParseClient.Parse(policyMsg->policy()));
+        policyCache->Put(policyMsg->policy_id(), policyParseClient.Parse(policyMsg->policy()), policyTs);
       }
       if (hasDep && dep != nullptr) {
         *txn.add_deps() = *dep;
       }
-
+      
+      std::string policyId = policyIdFunction(key, "");
+      Timestamp pTS = policyCache->GetTimestamp(policyId);
+      if(params.sintr_params.liftingEnabled) {
+        if(txnReadsetPolicyIds.find(policyId) == txnReadsetPolicyIds.end() && pTS <= ts) {
+          // if the policy in the policy cache was committed before the key itself
+          // then it could be the policy under which the key was committed
+          txnReadsetPolicyIds[policyId] = pTS;
+        }
+      }
       if (params.sintr_params.includeReadsetForTxnPolicy) {
-        std::string policyId = policyIdFunction(key, "");
         if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-          perTxnPolicyIds.insert(policyId);
+          perTxnPolicyIds[policyId] = pTS;
           const Policy *policy = policyCache->Get(policyId);
           UW_ASSERT(policy != nullptr);
           Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
@@ -454,8 +477,11 @@ void Client::Put(const std::string &key, const std::string &value,
         // if not found, that means we are trying to write to a policy that doesn't exist
         Panic("Attempting to write to policy ID %lu when policy ID doesn't exist", key);
       }
-      Debug("Sending policy update for put using c2client in policy transaction");
-      c2client->HandlePolicyUpdate(policy);
+      if(perTxnPolicyIds.find(key) == perTxnPolicyIds.end()) {
+        Debug("Sending policy update for put using c2client in policy transaction");
+        perTxnPolicyIds[key] = policyCache->GetTimestamp(key);
+        c2client->HandlePolicyUpdate(policy);
+      }
       // contact all shards to update policy
       Debug("Contacting all shards for policy update");
       for (int i = 0; i < bclient.size(); i++) {
@@ -490,7 +516,7 @@ void Client::Put(const std::string &key, const std::string &value,
         UW_ASSERT(policy != nullptr);
         if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
           Debug("Sending policy update for put using c2client in regular transaction");
-          perTxnPolicyIds.insert(policyId);
+          perTxnPolicyIds[policyId] = policyCache->GetTimestamp(policyId);
           c2client->HandlePolicyUpdate(policy);
         }
       }
@@ -593,7 +619,7 @@ void Client::Write(std::string &write_statement, write_callback wcb,
             std::string policyId = policyIdFunction(key, "");
             //Debug("execution keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), client_id, client_seq_num);
             if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-              perTxnPolicyIds.insert(policyId);
+              perTxnPolicyIds[policyId] = policyCache->GetTimestamp(policyId);
               const Policy *policy = policyCache->Get(policyId);
               UW_ASSERT(policy != nullptr);
               Debug("handle policy update for policy id %s (policy %s) in write", policyId.c_str(), policy->ToString().c_str());
@@ -845,7 +871,7 @@ void Client::QueryInternal(const std::string &query, const query_callback &qcb,
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
                      std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
-                     std::placeholders::_12);
+                     std::placeholders::_12, std::placeholders::_13);
       stats.Increment("PointQueryAttempts", 1);
     }
     else{
@@ -882,8 +908,21 @@ const PolicyCache& Client::GetPolicyCache() const {
   return *policyCache;
 }
 
-void Client::LiftTransaction() {
-  txn.set_lift(true);
+void Client::LiftTransaction(std::vector<std::string> &lift_keys) {
+  if(!params.sintr_params.liftingEnabled || lift_keys.size() == 0) {
+    return;
+  }
+  transport->Timer(0, [this, lift_keys]() {
+    txn.mutable_lift_keys()->Reserve(lift_keys.size());
+    for (auto& s : lift_keys) {
+      *txn.add_lift_keys() = std::move(s);
+    }
+  });
+
+}
+
+const std::map<std::string, std::string> &Client::GetReadset() {
+  return txn_readset;
 }
 
 
@@ -891,7 +930,7 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
                                   int status, const std::string &key, const std::string &result, const Timestamp &read_time, const std::string &table_name,
                                   std::unique_ptr<proto::Dependency> dep, bool hasDep, bool addReadSet,
                                   std::unique_ptr<proto::CommittedProof> proof, std::unique_ptr<proto::SignedMessage> signedWrite, std::unique_ptr<EndorsementPolicyMessage> policyMsg,
-                                  std::unique_ptr<std::string> tsDigest) 
+                                  std::unique_ptr<std::string> tsDigest, const Timestamp &policyTs) 
 { 
   
    if(PROFILING_LAT){
@@ -921,17 +960,24 @@ void Client::PointQueryResultCallback(PendingQuery *pendingQuery,
     // new policy can only come from server, which must correspond to addReadSet
     if (policyMsg != nullptr && policyMsg->IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR key %s in GET",client_id, client_seq_num, BytesToHex(key, 16).c_str());
-      policyCache->Put(policyMsg->policy_id(), policyParseClient.Parse(policyMsg->policy()));
+      policyCache->Put(policyMsg->policy_id(), policyParseClient.Parse(policyMsg->policy()), policyTs);
     }
   }
   if (hasDep && dep != nullptr) {
     *txn.add_deps() = *dep;
   }
+  std::string policyId = policyIdFunction(key, "");
+  Timestamp pTS = policyCache->GetTimestamp(policyId);
+  if(params.sintr_params.liftingEnabled) {
+    if(txnReadsetPolicyIds.find(policyId) == txnReadsetPolicyIds.end() && pTS <= read_time) {
+      txnReadsetPolicyIds[policyId] = pTS;
+    }
+    txn_readset[key] = result;
+  }
 
   if (params.sintr_params.includeReadsetForTxnPolicy) {
-    std::string policyId = policyIdFunction(key, "");
     if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-      perTxnPolicyIds.insert(policyId);
+      perTxnPolicyIds[policyId] = pTS;
       const Policy *policy = policyCache->Get(policyId);
       UW_ASSERT(policy != nullptr);
       Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
@@ -1103,10 +1149,19 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
 
           //Option 1): Merge all active read sets into main_read set. When sorting, catch errors and abort early.
         for(auto &read : *query_read_set->mutable_read_set()){
+          std::string policyId = policyIdFunction(read.key(), "");
+          Timestamp policyTs = policyCache->GetTimestamp(policyId);
+          if(params.sintr_params.liftingEnabled) {
+            if(txnReadsetPolicyIds.find(policyId) == txnReadsetPolicyIds.end() && policyTs <= read.readtime()) {
+              txnReadsetPolicyIds[policyId] = policyTs;
+            }
+            txn_readset[read.key()] = pendingQuery->result;
+            // query MD doesn't include value...
+            // could just return query result?
+          }
           if (params.sintr_params.includeReadsetForTxnPolicy) {
-            std::string policyId = policyIdFunction(read.key(), "");
             if(perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
-              perTxnPolicyIds.insert(policyId);
+              perTxnPolicyIds[policyId] = policyTs;
               const Policy *policy = policyCache->Get(policyId);
               UW_ASSERT(policy != nullptr);
               Debug("handle policy update for policy id %s (policy %s) in get", policyId.c_str(), policy->ToString().c_str());
@@ -1153,7 +1208,7 @@ void Client::QueryResultCallback(PendingQuery *pendingQuery,
     UW_ASSERT(id == policyMsg.policy_id());
     if (policyMsg.IsInitialized()) {
       Debug("PULL[%lu:%lu] POLICY FOR policy ID %s in QUERY",client_id, client_seq_num, id.c_str());
-      policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()));
+      policyCache->Put(policyMsg.policy_id(), policyParseClient.Parse(policyMsg.policy()), policyEntry.second.second);
     }
   }
 
@@ -1355,7 +1410,7 @@ void Client::RetryQuery(PendingQuery *pendingQuery){
                      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, 
                      std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7,
                      std::placeholders::_8, std::placeholders::_9, std::placeholders::_10, std::placeholders::_11,
-                     std::placeholders::_12));
+                     std::placeholders::_12, std::placeholders::_13));
     } 
     else{
       bclient[g]->RetryQuery(pendingQuery->queryMsg->query_seq_num(), *pendingQuery->queryMsg); //--> Retry Query, shard clients already have the rcb.
@@ -1425,6 +1480,39 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     
     uint64_t ns = Latency_End(&executeLatency);
     Latency_Start(&commitLatency);
+    // loop thru readset, check all related policies, return aborted_user if there is a leak
+    for(const auto &read : txn.read_set()) {
+      if(txn_lifted_keys.find(read.key()) == txn_lifted_keys.end()) {
+        const Policy* readPolicy = policyCache->Get(policyIdFunction(read.key(), ""));
+        if(!endorseClient->IsImpliedBy(std::move(readPolicy), client_seq_num)) {
+          Warning("Preemptive Abort: Trying to commit a transaction with a policy leak, where keys are not being lifted");
+          stats.Increment("policy_leak_detected", 1);
+          Debug("ABORT[%lu:%lu]", client_id, client_seq_num);
+          //TODO: Is it necessary to also update the policy cache on the next transaction?
+          for (auto group : txn.involved_groups()) {
+            bclient[group]->Abort(client_seq_num, txn.timestamp(), txn);
+            bclient[group]->SetPolicyShardClient(true);
+          }
+          ccb(ABORTED_USER); // return aborted user so txn is not retried
+          return;
+        }
+      }
+    }
+    if(params.sintr_params.liftingEnabled && txn.lift_keys_size() > 0) {
+      // add policy versions to txn
+      // perTxnPolicyIds should store readset and writeset policies
+      // need to merge read and write policies
+      perTxnPolicyIds.insert(txnReadsetPolicyIds.begin(), txnReadsetPolicyIds.end());
+      for (const auto& [policyId, policyTs] : perTxnPolicyIds) {
+        proto::PolicyVersion policyVersion = proto::PolicyVersion();
+        policyVersion.set_policy_id(policyId);
+        Timestamp policyTimestamp = policyCache->GetTimestamp(policyId);
+        policyVersion.mutable_timestamp()->set_id(policyTimestamp.getID());
+        policyVersion.mutable_timestamp()->set_timestamp(policyTimestamp.getTimestamp());
+        *txn.add_policy_versions() = policyVersion;
+      }
+    }
+
 
     if(!txn.query_set().empty() && !params.query_params.cacheReadSet && params.query_params.mergeActiveAtClient){
       //If has queries, and query deps are meant to be reported by client:
@@ -1533,7 +1621,8 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     // if(!params.sintr_params.ignorePolicyUpdate) {
     //   endorseClient->SetExpectedTxnDigest(digest);
     // }
-    endorseClient->SetExpectedTxnDigest(digest, client_seq_num);
+    std::string policyDigest = ComputePolicyDigest(txn);
+    endorseClient->SetExpectedTxnDigest(PolicyVersionDigest(txn, digest, policyDigest), client_seq_num, policyDigest);
 
     PendingRequest *req = new PendingRequest(client_seq_num, this);
     pendingReqs[client_seq_num] = req;
@@ -1550,7 +1639,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       if (!req->waitingForEndorsements) {
         return;
       }
-
+      Warning("number of endorsements is %lu", endorseClient->GetEndorsements(client_seq_num).size());
       Panic("Waiting for endorsements timed out for client %d seq num %d", client_id, client_seq_num);
     });
 
@@ -1598,6 +1687,27 @@ void Client::Phase1(PendingRequest *req) {
     transport->Timer(0, [this, req]() {
       Phase1(req);
     });
+    return;
+  }
+  if(params.sintr_params.liftingEnabled && endorseClient->GetPolicyMismatch(client_seq_num)) {
+    // just abort transaction
+
+    Warning("Preemptive Abort: Policy version for transaction does not match");
+    stats.Increment("policy_mismatch_detected", 1);
+    
+    Debug("ABORT[%lu:%lu]", client_id, client_seq_num);
+    // we can retry the transaction, we should retrieve latest policy versions just to be safe
+    for (auto group : txn.involved_groups()) {
+      bclient[group]->Abort(client_seq_num, txn.timestamp(), txn);
+      bclient[group]->SetPolicyShardClient(true);
+    }
+    
+    req->ccb(ABORTED_SYSTEM);
+    if(req != nullptr) {
+      delete req;
+      req = nullptr;
+    }
+    //TODO: possible that validation client has oudated policies, we dont have to retrieve latest policies all the time when this triggers
     return;
   }
   req->waitingForEndorsements = false;

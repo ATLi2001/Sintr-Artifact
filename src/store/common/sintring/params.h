@@ -68,6 +68,7 @@ typedef struct SintrParameters {
   const bool useEndorsementCB; // use callback function instead of busy waiting for endorsements
   const SintrFailure sintrFailure; // sintr failure injection configuration
   const bool includeReadsetForTxnPolicy; // include readset for determining transaction policy
+  const bool liftingEnabled; // bool to enable lifting
 
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
@@ -77,7 +78,7 @@ typedef struct SintrParameters {
     bool blindWriteMessage, bool sortWriteset, bool hideTimestamps, uint32_t maxClientSigCheckThreads,
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
-    bool useEndorsementCB, const SintrFailure &sintrFailure, bool includeReadsetForTxnPolicy) :
+    bool useEndorsementCB, const SintrFailure &sintrFailure, bool includeReadsetForTxnPolicy, bool liftingEnabled) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -110,7 +111,8 @@ typedef struct SintrParameters {
     maxClientsConnect(maxClientsConnect),
     useEndorsementCB(useEndorsementCB),
     sintrFailure(sintrFailure),
-    includeReadsetForTxnPolicy(includeReadsetForTxnPolicy)
+    includeReadsetForTxnPolicy(includeReadsetForTxnPolicy),
+    liftingEnabled(liftingEnabled)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering

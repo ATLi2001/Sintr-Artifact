@@ -38,7 +38,15 @@ const Policy *PolicyCache::Get(const std::string &policyId) const {
   if (it == policyCache.end()) {
     return nullptr;
   }
-  return it->second.get();
+  return it->second.second.get();
+}
+
+const Timestamp PolicyCache::GetTimestamp(const std::string &policyId) const {
+  auto it = policyCache.find(policyId);
+  if (it == policyCache.end()) {
+    return Timestamp(); // default return 0.0
+  }
+  return it->second.first;
 }
 
 std::unique_ptr<Policy> PolicyCache::Take(const std::string &policyId) {
@@ -46,15 +54,15 @@ std::unique_ptr<Policy> PolicyCache::Take(const std::string &policyId) {
   if (it == policyCache.end()) {
     return nullptr;
   }
-  std::unique_ptr<Policy> policy = std::move(it->second);
+  std::unique_ptr<Policy> policy = std::move(it->second.second);
   policyCache.erase(it);
   return policy;
 }
 
-void PolicyCache::Put(const std::string &policyId, std::unique_ptr<Policy> policy) {
+void PolicyCache::Put(const std::string &policyId, std::unique_ptr<Policy> policy, Timestamp timestamp) {
   UW_ASSERT(policy != nullptr);
   // unique_ptr automatically handles cleanup of existing policy
-  policyCache[policyId] = std::move(policy);
+  policyCache[policyId] = std::make_pair(timestamp, std::move(policy));
 }
 
 std::vector<std::string> PolicyCache::GetAllKeys() const {

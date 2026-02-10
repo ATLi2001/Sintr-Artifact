@@ -220,10 +220,9 @@ transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeou
 
   // determine if we should lift this transaction
   if (tpcc_lifts.IsLiftedPolicyFunction()) {
-    if (tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount)) {
-      Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
-      client.LiftTransaction();
-    }
+    Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
+    std::vector<std::string> lifts = tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount, client.GetReadset());
+    client.LiftTransaction(lifts);
   }
 
   Debug("COMMIT");

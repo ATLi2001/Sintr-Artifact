@@ -59,7 +59,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
       uint32_t stock_level_ratio, bool static_w_id,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts,
       uint32_t timeout, const std::string &policy_function_name,
-      const std::string &latencyFilename = "");
+      const std::string &latencyFilename = "", const std::string &govTxnConfigPath = "");
 
   virtual ~TPCCSQLClient();
 
@@ -89,6 +89,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
   int count;
   uint64_t id;
   TPCCLifts tpcc_lifts;
+  size_t policyChangeCount = 0;
 };
 
 } //namespace tpcc_sql

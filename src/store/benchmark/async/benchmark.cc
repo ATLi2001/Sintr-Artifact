@@ -558,7 +558,7 @@ DEFINE_string(sintr_failure_type, sintr_fail_args[0], "sintr specific type of fa
 DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
 DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
 DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
-
+DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
 
 ///////////////////////////////////////////////////////////
 
@@ -1763,7 +1763,8 @@ int main(int argc, char **argv) {
       FLAGS_sintr_max_clients_connect,
       FLAGS_sintr_use_endorsement_cb,
       sintrFailure,
-      FLAGS_sintr_include_readset_for_txn_policy
+      FLAGS_sintr_include_readset_for_txn_policy,
+      FLAGS_sintr_enable_lifting
     );
 
     switch (mode) {
@@ -2141,7 +2142,7 @@ int main(int argc, char **argv) {
             FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
             FLAGS_static_w_id, FLAGS_abort_backoff,
             FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
-            FLAGS_sintr_policy_function_name);
+            FLAGS_sintr_policy_function_name, "", FLAGS_gov_txn_config_path);
         break;
       case BENCH_SMALLBANK_SYNC:
         UW_ASSERT(syncClient != nullptr);
@@ -2232,7 +2233,7 @@ int main(int argc, char **argv) {
                 FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
                 FLAGS_static_w_id, FLAGS_abort_backoff,
                 FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
-                FLAGS_sintr_policy_function_name);
+                FLAGS_sintr_policy_function_name, "", FLAGS_gov_txn_config_path);
           }
           break;
       }

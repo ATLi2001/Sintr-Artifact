@@ -99,8 +99,9 @@ class SyncClient {
 
   const PolicyCache& GetPolicyCache() const;
 
-  void LiftTransaction();
-
+  void LiftTransaction(std::vector<std::string> &lift_keys);
+  const std::map<std::string, std::string> &GetReadset();
+  
  private:
   void GetCallback(Promise *promise, int status, const std::string &key, const std::string &value,
       Timestamp ts);

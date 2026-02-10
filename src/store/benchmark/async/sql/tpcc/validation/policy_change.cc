@@ -30,14 +30,9 @@
 
 namespace tpcc_sql {
 
-ValidationSQLPolicyChange::ValidationSQLPolicyChange(uint32_t timeout, uint32_t w_id) :
-  ValidationTPCCSQLTransaction(timeout) {
-  this->w_id = w_id;
-}
-
 ValidationSQLPolicyChange::ValidationSQLPolicyChange(uint32_t timeout, const validation::proto::PolicyChange &valPolicyChangeMsg) : 
   ValidationTPCCSQLTransaction(timeout) {
-  w_id = valPolicyChangeMsg.w_id();
+  policy_id = valPolicyChangeMsg.w_id();
   randWeight = valPolicyChangeMsg.random_weight();
 }
 

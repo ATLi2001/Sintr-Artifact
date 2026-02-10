@@ -41,8 +41,9 @@ class TPCCLifts {
   bool IsLiftedPolicyFunction() const;
 
   // lift functions return true if the transaction should be lifted
-  bool NewOrderLiftFunction(const PolicyCache &policy_cache) const;
-  bool PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount) const;
+  std::vector<std::string> NewOrderLiftFunction(const PolicyCache &policy_cache, bool local, const std::map<std::string, std::string> &readset) const;
+  std::vector<std::string> PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount,
+    const std::map<std::string, std::string> &readset) const;
   
  private:
   std::string policy_function_name;

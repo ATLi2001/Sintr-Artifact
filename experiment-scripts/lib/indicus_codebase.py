@@ -223,6 +223,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_byz_client_total %d' % config['sintr_protocol_settings']['sintr_byz_client_total']
             if 'sintr_include_readset_for_txn_policy' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_include_readset_for_txn_policy=%s' % str(config['sintr_protocol_settings']['sintr_include_readset_for_txn_policy']).lower()
+            if 'sintr_enable_lifting' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_enable_lifting=%s' % str(config['sintr_protocol_settings']['sintr_enable_lifting']).lower()
 
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
@@ -646,6 +648,8 @@ class IndicusCodebase(ExperimentCodebase):
                 replica_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
             if 'sintr_include_readset_for_txn_policy' in config['sintr_protocol_settings']:
                 replica_command += ' --sintr_include_readset_for_txn_policy=%s' % str(config['sintr_protocol_settings']['sintr_include_readset_for_txn_policy']).lower()
+            if 'sintr_enable_lifting' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_enable_lifting=%s' % str(config['sintr_protocol_settings']['sintr_enable_lifting']).lower()
 
 
         #if 'rw_or_retwis' in config:

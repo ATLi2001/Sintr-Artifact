@@ -267,10 +267,9 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
 
   // determine if we should lift this transaction
   if (tpcc_lifts.IsLiftedPolicyFunction()) {
-    if (tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache())) {
-      Debug("LIFTING NEW ORDER TRANSACTION");
-      client.LiftTransaction();
-    }
+    Debug("LIFTING NEW ORDER TRANSACTION");
+    std::vector<std::string> lifts = tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache(), all_local, client.GetReadset());
+    client.LiftTransaction(lifts);
   }
 
   Debug("COMMIT");

@@ -37,23 +37,30 @@ bool TPCCLifts::IsLiftedPolicyFunction() const {
   return policy_function_name == "tpcc_sql_wh";
 }
 
-bool TPCCLifts::NewOrderLiftFunction(const PolicyCache &policy_cache) const {
-  if (!IsLiftedPolicyFunction()) {
-    return false;
+std::vector<std::string> TPCCLifts::NewOrderLiftFunction(const PolicyCache &policy_cache, bool local, const std::map<std::string, std::string> &readset) const {
+  std::vector<std::string> lifted_keys;
+  // if the transaction is only touching local keys, then return empty list.
+  if (!IsLiftedPolicyFunction() || local) {
+    return lifted_keys;
+  }
+  // otherwise lift entire readset
+  for (auto const& [key, val] : readset) {
+    lifted_keys.push_back(key);
   }
 
-  // for now always lift
-  return true;
+  return lifted_keys;
 }
 
-bool TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount) const {
+std::vector<std::string> TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount,
+  const std::map<std::string, std::string> &readset) const {
+  std::vector<std::string> lifted_keys;
   if (!IsLiftedPolicyFunction()) {
-    return false;
+    return lifted_keys;
   }
 
   // only lift if customer is paying not their home warehouse
   if (w_id == c_w_id) {
-    return false;
+    return lifted_keys;
   }
 
   const Policy *policy = policy_cache.Get(PolicyIdString(c_w_id));
@@ -61,7 +68,7 @@ bool TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_
 
   // for now only lift if weight policy
   if (policy->Type() != PolicyType::POLICY_TYPE_WEIGHT) {
-    return false;
+    return lifted_keys;
   }
 
   // cast to weight policy
@@ -74,10 +81,13 @@ bool TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_
   // uint64_t threshold = static_cast<uint64_t>(std::pow(10, weight_policy->GetWeight() + 1));
   // return h_amount <= threshold;
   if (weight_policy->GetWeight() == 1) {
-    return false;
+    return lifted_keys;
   }
   else {
-    return true;
+    for (auto const& [key, val] : readset) {
+      lifted_keys.push_back(key);
+    }
+    return lifted_keys;
   }
 }
 

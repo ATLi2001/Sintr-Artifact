@@ -28,6 +28,7 @@
 #define _POLICY_CACHE_H_
 
 #include "store/common/policy/policy.h"
+#include "store/common/timestamp.h"
 #include <map>
 #include <string>
 #include <memory>
@@ -41,15 +42,17 @@ class PolicyCache {
   bool IsEmpty() const;
   // return const pointer to policy, nullptr if not found
   const Policy *Get(const std::string &policyId) const;
+  // return timestamp (version) of policy ID
+  const Timestamp GetTimestamp(const std::string &policyId) const;
   // take ownership and remove from underlying map
   std::unique_ptr<Policy> Take(const std::string &policyId);
   // update the mapping from policy id to policy; takes ownership of policy (policy should be allocated on heap)
-  void Put(const std::string &policyId, std::unique_ptr<Policy> policy);
+  void Put(const std::string &policyId, std::unique_ptr<Policy> policy, Timestamp timestamp = Timestamp());
   // return all keys
   std::vector<std::string> GetAllKeys() const;
 
  private:
-  std::map<std::string, std::unique_ptr<Policy>> policyCache;
+  std::map<std::string, std::pair<Timestamp, std::unique_ptr<Policy>>> policyCache;
 };
 
 #endif /* _POLICY_CACHE_H_ */

@@ -278,8 +278,12 @@ const PolicyCache& SyncClient::GetPolicyCache() const {
   return client->GetPolicyCache();
 }
 
-void SyncClient::LiftTransaction() {
-  client->LiftTransaction();
+void SyncClient::LiftTransaction(std::vector<std::string> &lift_keys) {
+  client->LiftTransaction(lift_keys);
+}
+
+const std::map<std::string, std::string> &SyncClient::GetReadset() {
+  return client->GetReadset();
 }
 
 ///////// Callbacks

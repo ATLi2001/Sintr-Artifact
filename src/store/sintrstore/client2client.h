@@ -73,7 +73,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
       ClientSelector *valClientSelector, std::mt19937 &rand, const PolicyCache *policyCache,
-      const std::vector<std::string> &keys = std::vector<std::string>());
+      const std::vector<std::string> &keys = std::vector<std::string>(), std::function<void*(void)> get_policy_cb = nullptr);
   virtual ~Client2Client();
 
   virtual void ReceiveMessage(const TransportAddress &remote,
@@ -442,6 +442,7 @@ class Client2Client : public TransportReceiver, public PingInitiator, public Pin
   bool replyDone;
 
   std::function<void*(void)> ecb = nullptr; // only need one endorsement callback because client is closed loop
+  std::function<void*(void)> get_policy_cb = nullptr;
 };
 
 } // namespace sintrstore

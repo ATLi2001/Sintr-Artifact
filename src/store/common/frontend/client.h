@@ -102,7 +102,9 @@ class Client {
   inline virtual const PolicyCache& GetPolicyCache() const { Panic("This protocol store does not implement support for Policy Cache"); }
 
   // lift the transaction
-  inline virtual void LiftTransaction() { Panic("This protocol store does not implement support for Transaction Lifting"); }
+  inline virtual void LiftTransaction(std::vector<std::string> &lift_keys) { Panic("This protocol store does not implement support for Transaction Lifting"); }
+  
+  inline virtual const std::map<std::string, std::string> &GetReadset() {Panic("This protocol store does not implement support for Fetching Transaction Readset");};
 
   inline const Stats &GetStats() const { return stats; }
 

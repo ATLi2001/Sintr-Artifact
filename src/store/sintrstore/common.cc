@@ -1967,6 +1967,43 @@ std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timesta
   return digest;
 }
 
+std::string PolicyVersionDigest(const proto::Transaction &txn, const std::string &txnDigest, const std::string &policyDigest) {
+  if(txn.policy_versions_size() == 0) {
+    return txnDigest;
+  }
+  blake3_hasher hasher;
+  blake3_hasher_init(&hasher);
+
+  std::string digest(BLAKE3_OUT_LEN, 0);
+  blake3_hasher_update(&hasher, (unsigned char *) &txnDigest[0], txnDigest.length());
+  std::string tempPolicyDigest = policyDigest;
+  if(tempPolicyDigest == "") {
+    tempPolicyDigest = ComputePolicyDigest(txn);
+  }
+  blake3_hasher_update(&hasher, (unsigned char *) &tempPolicyDigest[0], tempPolicyDigest.length());
+  blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
+  return digest;
+}
+
+std::string ComputePolicyDigest(const proto::Transaction &txn) {
+  if(txn.policy_versions_size() == 0) {
+    return "";
+  }
+  blake3_hasher hasher;
+  blake3_hasher_init(&hasher);
+
+  std::string digest(BLAKE3_OUT_LEN, 0);
+  for(const auto &policyVersions : txn.policy_versions()) {
+    blake3_hasher_update(&hasher, (unsigned char *) &policyVersions.policy_id()[0], policyVersions.policy_id().length());
+    uint64_t timestampId = policyVersions.timestamp().id();
+    uint64_t timestampTs = policyVersions.timestamp().timestamp();
+    blake3_hasher_update(&hasher, (unsigned char *) &timestampId, sizeof(timestampId));
+    blake3_hasher_update(&hasher, (unsigned char *) &timestampTs, sizeof(timestampTs));
+  }
+  blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);
+  return digest;
+}
+
 //should hashing be parallelized?
 //ignores txnDigest field --> this is not part of protocol contents, just a hack for storage.
 std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bool hashedTS, bool hashEndorsements) {
@@ -2128,8 +2165,10 @@ std::string TransactionDigest(const proto::Transaction &txn, bool hashDigest, bo
       blake3_hasher_update(&hasher, (unsigned char *) &endorsements[0], endorsements.length());
     }
 
-    if (txn.has_lift()) {
-      blake3_hasher_update(&hasher, &(const unsigned char &) txn.lift(), sizeof(txn.lift()));     
+    if (txn.lift_keys_size() > 0) {
+      for (auto const &lift_key : txn.lift_keys()) {
+        blake3_hasher_update(&hasher, (unsigned char *) &lift_key[0], lift_key.length());     
+      }
     }
 
     blake3_hasher_finalize(&hasher, (unsigned char *) &digest[0], BLAKE3_OUT_LEN);

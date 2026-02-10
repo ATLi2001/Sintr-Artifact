@@ -417,6 +417,10 @@ std::string TimestampDigest(const TimestampMessage &ts);
 
 std::string TimestampDigest(const uint64_t &timestampID, const uint64_t &timestampTS);
 
+std::string PolicyVersionDigest(const proto::Transaction &txn, const std::string &txnDigest, const std::string &policyDigest = "");
+
+std::string ComputePolicyDigest(const proto::Transaction &txn);
+
 void removeTsfromTx(proto::Transaction *txn);
 
 // general query id

@@ -19,7 +19,7 @@
     ]
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
-  "analysis_name": "sintr-lift",
+  "analysis_name": "sintr-policy2",
   "replication_protocol": ["sintr"],
   "client_protocol_mode": ["sintr"],
   "num_shards": [1],
@@ -127,8 +127,8 @@
     "sintr_sign_finish_validation": true,
     "sintr_debug_endorse_check": false,
     "sintr_client_check_evidence": true,
-    "sintr_policy_function_name": "tpcc_sql_wh",
-    "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-tpcc-wh.config",
+    "sintr_policy_function_name": "basic_id",
+    "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
     "sintr_read_include_policy": 0,
     "sintr_client_validation_heuristic": 0,
     "sintr_check_policy_leak": true,
@@ -151,15 +151,15 @@
     "sintr_optimistic_receive_endorsement": true,
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false,
-    "sintr_enable_lifting": true
+    "sintr_enable_lifting": false
   },
   "experiment_name": "sintr-rw",
   "codebase_name": "indicus",
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
-  "client_total": [[28,32,36]],
-  "client_processes_per_client_node": [[2,2,2]],
-  "client_threads_per_process": [[1,1,1]],
+  "client_total": [[28, 32, 36]],
+  "client_processes_per_client_node": [[2, 2, 2]],
+  "client_threads_per_process": [[1, 1, 1]],
   "client_nodes_per_server": 3,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
   "pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
@@ -430,5 +430,5 @@
   "server_gc_debug_trace": false,
   "_server_wrap_command": "valgrind --tool=none %s",
   "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s",
-  "_client_wrap_command": "gdb -ex r -ex bt --args %s"
+  "___server_wrap_command": "gdb -ex r -ex bt --args %s"
 }

@@ -36,6 +36,7 @@
 #include "store/sintrstore/common.h"
 
 #include "store/sintrstore/sql_interpreter.h"
+#include "store/common/policy/policy_function.h"
 
 #include <string>
 #include <vector>
@@ -92,7 +93,9 @@ class ValidationClient : public ::ValidationClientCommon {
 
   virtual const PolicyCache& GetPolicyCache() const override;
 
-  virtual void LiftTransaction() override;
+  virtual void LiftTransaction(std::vector<std::string> &lift_keys) override;
+  
+  virtual const std::map<std::string, std::string> &GetReadset() override;
   
   // Associate the current validation thread id with an SQL Interpreter
   void SetThreadValSQLInterpreter();
@@ -209,7 +212,7 @@ class ValidationClient : public ::ValidationClientCommon {
     // this tracks the readset/writeset etc. of the transaction
     proto::Transaction *txn;
     // this tracks the locally buffered key-value pairs
-    std::unordered_map<std::string, std::string> readValues;
+    std::map<std::string, std::string> readValues;
     // this tracks the pending validation gets
     std::vector<PendingValidationGet *> pendingGets;
     std::vector<PendingValidationQuery *> pendingQueries;
@@ -241,6 +244,9 @@ class ValidationClient : public ::ValidationClientCommon {
 
     // check if these ignored reads are in readset/writeset of txn
     std::unordered_map<std::string, std::vector<std::string>> ignore_readset_kv;
+
+    // set of policyIds used in validation transaction
+    std::set<std::string> policyIDs;
 
     uint64_t numProcessedForwardQuery = 0;
     uint64_t numPendingReads = 0;
@@ -279,6 +285,9 @@ class ValidationClient : public ::ValidationClientCommon {
   Parameters params;
   // we only need a read only view of the policy cache in this class
   const PolicyCache *policyCache;
+  
+  // we need policy ID function to map keys to policies
+  policy_id_function policyIdFunction;
 
   std::string table_registry;
 

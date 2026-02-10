@@ -991,7 +991,8 @@ void* Server::TryPrepare(uint64_t reqId, const TransportAddress &remote, proto::
     if (oldTxnDigest.empty()) {
       oldTxnDigest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
     }
-
+    // hash with policy versions
+    oldTxnDigest = PolicyVersionDigest(*txn, oldTxnDigest);
     if(!params.parallel_CCC || !params.mainThreadDispatching){
       if (!params.sintr_params.parallelEndorsementCheck || params.sintr_params.serverSkipEndorsementCheck) {
         int endorseStatus = 0;

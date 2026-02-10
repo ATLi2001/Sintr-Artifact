@@ -44,6 +44,10 @@ message GroupedSignatures {
   map<uint64, Signatures> grouped_sigs = 1;
 }
 
+message PolicyVersion {
+  optional string policy_id = 1;
+  optional TimestampMessage timestamp = 2;
+}
 
 message CommittedProof {
   required Transaction txn = 1;
@@ -191,7 +195,8 @@ message Transaction {
   repeated ReadMessage implicit_policy_reads = 15; // NOT PART OF TX. HACK HERE TO STORE read set for implicit policy reads
   optional SignedMessages endorsements = 16;
   optional bytes hashed_timestamp = 17;
-  optional bool lift = 18;
+  repeated string lift_keys = 18;
+  repeated PolicyVersion policy_versions = 19;
 }
 
 message Phase1 {
@@ -484,6 +489,7 @@ message BeginValidateTxn {
     TimestampMessage timestamp = 4;
     bytes hashed_ts = 5;
   }
+  repeated uint64 update_policy_cache_clients = 6; 
 }
 
 message BeginValidateTxnMessage {
@@ -571,9 +577,20 @@ message FinishValidateTxnMessage {
   // validation_txn_seq_num is the sequence number of the txn that was validated
   required uint64 validation_txn_seq_num = 2;
   oneof validation_one_of {
-    bytes validation_txn_digest = 3;
-    SignedMessage signed_validation_txn_digest = 4;
+    ValTxnMsg validation_txn_msg = 3;
+    SignedMessage signed_validation_txn_msg = 4;
   }
   // optionally can compare entire transaction directly
   optional Transaction val_txn = 5;
+}
+
+message ValTxnMsg {
+  // client_id is the client that is sending this message
+  required uint64 client_id = 1;
+  // validation_txn_seq_num is the sequence number of the txn that was validated
+  required uint64 validation_txn_seq_num = 2;
+  // val txn digest
+  required bytes validation_txn_digest = 3;
+  // optional policy digest
+  optional bytes policy_digest = 4;
 }

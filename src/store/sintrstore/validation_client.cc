@@ -37,7 +37,10 @@ namespace sintrstore {
 ValidationClient::ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, 
     Partitioner *part, std::string &table_registry, Parameters params, const PolicyCache *policyCache) : 
     transport(transport), client_id(client_id), nshards(nshards), ngroups(ngroups), part(part), params(params),
-    table_registry(table_registry), policyCache(policyCache) {}
+    table_registry(table_registry), policyCache(policyCache) {
+      // init policy id function
+      policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
+    }
 
 ValidationClient::~ValidationClient() {
   for (auto it = threadValtoSQL.begin(); it != threadValtoSQL.end(); ++it) {
@@ -194,6 +197,14 @@ void ValidationClient::Put(const std::string &key, const std::string &value,
   write->set_key(key);
   write->set_value(value);
   a->second->write_values[key].push_back(value);
+  if(params.sintr_params.liftingEnabled) {
+    if(txn->policy_type() == proto::Transaction::POLICY_ID_POLICY) {
+      // only write to policy keys
+      a->second->policyIDs.insert(key);
+    } else {
+      a->second->policyIDs.insert(policyIdFunction(key, ""));
+    }
+  }
 
   if(txn->policy_type() == proto::Transaction::POLICY_ID_POLICY) {
     // add all shards as involved groups (since we are contacting all shards on a put to update policy)
@@ -258,6 +269,7 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
   a->second->pendingWriteStatements.push_back(write_statement);
 
   std::function<void(void)> *delayed_blind_write_cb = nullptr;
+  std::vector<std::string> *keys_written = new std::vector<std::string>();
   try{
     // tmp_ptr = nullptr means we don't need to wait
     auto tmp_ptr = &delayed_blind_write_cb;
@@ -272,7 +284,7 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
       }
     }
     sql_interpreter->TransformWriteStatement(a->second->pendingWriteStatements.back(), read_statement, write_continuation, wcb, point_target_group, skip_query_interpretation, blind_write,
-      nullptr, tmp_ptr);
+      keys_written, tmp_ptr);
   }
   catch(...){
     Panic("bug in transformer: %s -> %s", write_statement.c_str(), read_statement.c_str());
@@ -285,19 +297,35 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
   //  for(auto read: txn.read_set()){
   //     Debug("Read set already contains: %s", read.key().c_str());
   //   }
- /*
-  auto write_cont = [this, write_continuation, keys_written, write_statement, txn_client_id, txn_client_seq_num](int status, query_result::QueryResult *result){
-    Debug("validation write cont for client %lu with seq num %lu with write statement %s", txn_client_id, txn_client_seq_num, write_statement.c_str());
-    write_continuation(status, result);
 
-    // update policy for current transaction
-    for (const auto &key : *keys_written) {
-      Debug("validation keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), txn_client_id, txn_client_seq_num);
+  AllValidationTxnState *txn_ptr = a->second;
+
+  auto write_cont = [this, write_continuation, keys_written, txn_ptr](int status, query_result::QueryResult *result){
+    // Debug("validation write cont for client %lu with seq num %lu with write statement %s", txn_client_id, txn_client_seq_num, write_statement.c_str());
+    write_continuation(status, result);
+    // allValTxnStatesMap::accessor a;
+    // Debug("After write cont");
+    // if (!allValTxnStates.find(a, txn_id)) {
+    //   // Write should always happen after SetTxnTimestamp, which inserts at txn_id
+    //   Panic("cannot find transaction %s in allValTxnStates", txn_id.c_str());
+    // }
+
+    // // update policy for current transaction
+    if(params.sintr_params.liftingEnabled) {
+      Debug("Before iterating through keys_written");
+      if(keys_written == nullptr) {
+        // no keys written?
+        Warning("No keys written?");
+        return;
+      }
+      for (const auto &key : *keys_written) {
+        txn_ptr->policyIDs.insert(policyIdFunction(key, ""));
+        // Debug("validation keys_written key %s for write statement %s from client %lu for seq num %lu", key.c_str(), write_statement.c_str(), txn_client_id, txn_client_seq_num);
+      }
     }
 
     delete keys_written;
   };
-  */
 
   if(read_statement.empty()){ //Must be point operation (Insert/Delete)
     Debug("No read statement, immediately writing in validation client");  
@@ -320,14 +348,12 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
       a->second->pendingBlindWrites.push_back(delayed_blind_write_cb);
     }
 
-    a.release();
-
-    write_continuation(REPLY_OK, write_result);
+    write_cont(REPLY_OK, write_result);
   }
   else{
     Debug("Issuing re-con Query validation");
     a.release();
-    Query(read_statement, std::move(write_continuation), wtcb, timeout, false, skip_query_interpretation); //cache_result = false
+    Query(read_statement, std::move(write_cont), wtcb, timeout, false, skip_query_interpretation); //cache_result = false
   }
   return;
 }
@@ -563,6 +589,19 @@ void ValidationClient::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     }
   }
 
+  // add policies to validation transaction if lift is true
+  if(params.sintr_params.liftingEnabled && txn->lift_keys_size() > 0) {
+    for (const auto& policyId : a->second->policyIDs) {
+      proto::PolicyVersion policyVersion = proto::PolicyVersion();
+      Debug("Setting policy ID %s for validation", policyId.c_str());
+      policyVersion.set_policy_id(policyId);
+      Timestamp policyTimestamp = policyCache->GetTimestamp(policyId);
+      policyVersion.mutable_timestamp()->set_id(policyTimestamp.getID());
+      policyVersion.mutable_timestamp()->set_timestamp(policyTimestamp.getTimestamp());
+      *txn->add_policy_versions() = policyVersion;
+    }
+  }
+
   if (params.sintr_params.parallelQuerySigsCheck && ((a->second->numValidForwardQuery < a->second->numProcessedForwardQuery) || (a->second->numValidReads < a->second->numPendingReads))) {
     // still need to wait for all forward queries to be validated
     // call commit callback later
@@ -627,7 +666,10 @@ const PolicyCache& ValidationClient::GetPolicyCache() const {
   return *policyCache;
 }
 
-void ValidationClient::LiftTransaction() {
+void ValidationClient::LiftTransaction(std::vector<std::string> &lift_keys) {
+  if(!params.sintr_params.liftingEnabled || lift_keys.size() == 0) {
+    return;
+  }
   uint64_t txn_client_id, txn_client_seq_num;
   GetThreadValTxnId(txn_client_id, txn_client_seq_num);
   std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
@@ -639,7 +681,11 @@ void ValidationClient::LiftTransaction() {
   }
 
   Debug("Lifting Validation Transaction[%lu:%lu]", txn_client_id, txn_client_seq_num);
-  a->second->txn->set_lift(true);
+  // auto* txn_lift_keys = a->second->txn->mutable_lift_keys();
+  a->second->txn->mutable_lift_keys()->Reserve(lift_keys.size());
+  for (auto& s : lift_keys) {
+    *a->second->txn->add_lift_keys() = std::move(s);
+  }
 }
 
 void ValidationClient::SetThreadValSQLInterpreter() {
@@ -712,6 +758,10 @@ void ValidationClient::ProcessForwardReadResult(uint64_t txn_client_id, uint64_t
       Debug("ADDING TO NUMPENDING READS HERE %s FOR client seq num %lu", curr_key.c_str(), allValTxnState->txn_client_seq_num);
       ++allValTxnState->numPendingReads;
       AddReadset(allValTxnState, curr_key, curr_value, curr_ts, true, false, hashed_ts);
+      std::string policyId = IsPolicyId(curr_key) ? curr_key : policyIdFunction(curr_key, "");
+      if(params.sintr_params.liftingEnabled && policyCache->GetTimestamp(policyId) <= curr_ts) {
+        allValTxnState->policyIDs.insert(policyId);
+      }
     } else {
       Debug("ADDING TO CACHED READS HERE %s FOR client seq num %lu", curr_key.c_str(), allValTxnState->txn_client_seq_num);
       auto it = allValTxnState->readValues.find(curr_key);
@@ -821,6 +871,11 @@ void ValidationClient::ProcessForwardPointQueryResult(uint64_t txn_client_id, ui
       // bool cache_point = !curr_value.empty() && query_cmd.find("SELECT *") != std::string::npos;
       ++allValTxnState->numPendingReads;
       AddReadset(allValTxnState, curr_key, curr_value, curr_ts, false, false, hashed_ts);
+      std::string policyId = policyIdFunction(curr_key, "");
+      if(params.sintr_params.liftingEnabled && allValTxnState->policyIDs.find(policyId) == allValTxnState->policyIDs.end()
+         && policyCache->GetTimestamp(policyId) <= curr_ts) {
+        allValTxnState->policyIDs.insert(policyId);
+      }
     } else {
       // check keys already added to txn
       auto it = allValTxnState->readValues.find(curr_key);
@@ -1168,6 +1223,15 @@ void ValidationClient::AddQueryReadset(AllValidationTxnState *allValTxnState,
           //   UW_ASSERT(!read.has_readtime());
           // }
           *txn->add_read_set() = read;
+          // insert read policy ID
+          std::string policyId = policyIdFunction(read.key(), "");
+          if(params.sintr_params.liftingEnabled && allValTxnState->policyIDs.find(policyId) == allValTxnState->policyIDs.end()
+            && policyCache->GetTimestamp(policyId) <= read.readtime()) {
+            allValTxnState->policyIDs.insert(policyId);
+          }
+          allValTxnState->readValues[read.key()] = fwdQueryResult.query_result(); 
+          // value isn't given in query MD
+          // just return query result string, can parse in tpcc_client?
         }
         for (const auto &dep : queryMeta.query_read_set().deps()){
           *txn->add_deps() = dep;
@@ -1200,5 +1264,21 @@ bool ValidationClient::IsTxnParticipant(proto::Transaction *txn, int g) {
   }
   return false;
 }
+
+const std::map<std::string, std::string> &ValidationClient::GetReadset() {
+  uint64_t txn_client_id, txn_client_seq_num;
+  GetThreadValTxnId(txn_client_id, txn_client_seq_num);
+  std::string txn_id = ToTxnId(txn_client_id, txn_client_seq_num);
+
+  allValTxnStatesMap::accessor a;
+  if (!allValTxnStates.find(a, txn_id)) {
+    // LiftTransaction should always happen after SetTxnTimestamp, which inserts at txn_id
+    Panic("cannot find transaction %s in allValTxnStates", txn_id.c_str());
+  }
+
+  Debug("Returning readset of txn[%lu:%lu]", txn_client_id, txn_client_seq_num);
+  return a->second->readValues;
+}
+
 
 } // namespace sintrstore

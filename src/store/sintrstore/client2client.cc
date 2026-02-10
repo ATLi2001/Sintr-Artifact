@@ -48,13 +48,13 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       Parameters params, KeyManager *keyManager, Verifier *verifier,
       Partitioner *part, EndorsementClient *endorseClient, SQLTransformer *sql_interpreter, std::string &table_registry,
       ClientSelector *valClientSelector, std::mt19937 &rand, const PolicyCache *policyCache,
-      const std::vector<std::string> &keys) :
+      const std::vector<std::string> &keys, std::function<void*(void)> get_policy_cb) :
       PingInitiator(this, transport, clients_config->n),
       client_id(client_id), transport(transport), config(config), clients_config(clients_config), 
       nshards(nshards), ngroups(ngroups),
       group(group), part(part), pingClients(pingClients), params(params), sintrFailure(params.sintr_params.sintrFailure),
       keyManager(keyManager), verifier(verifier), endorseClient(endorseClient), sql_interpreter(sql_interpreter),
-      valClientSelector(valClientSelector), rand(rand), keys(keys) {
+      valClientSelector(valClientSelector), rand(rand), keys(keys), get_policy_cb(get_policy_cb) {
   
   // separate verifier from main client instance
   clients_verifier = new BasicVerifier(transport);
@@ -479,6 +479,10 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     beginValTxn.mutable_timestamp()->set_timestamp(txnStartTime);
     beginValTxn.mutable_timestamp()->set_id(client_id);
   }
+  for(const auto &client : endorseClient->GetUpdatePolicyClients()) {
+    beginValTxn.add_update_policy_cache_clients(client);
+  }
+  endorseClient->ClearPolicyClientsSet();
 
   if (params.sintr_params.signFwdReadResults) {
     CreateHMACedMessage(
@@ -1265,8 +1269,7 @@ void Client2Client::ManageDispatchBlindWriteMessage(const TransportAddress &remo
 void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddress &remote, const std::string &data) {
   if (!params.sintr_params.c2cReceiveThread && !params.sintr_params.parallelEndorsementCheck) {
     finishValTxnMsg.ParseFromString(data);
-    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg.release_signed_validation_txn_digest());
-
+    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg.release_signed_validation_txn_msg());
     if (params.sintr_params.optimisticReceiveEndorsement) {
       HandleFinishValidateTxnMessageOptimistic(finishValTxnMsg, signedMsg);
     }
@@ -1276,7 +1279,7 @@ void Client2Client::ManageDispatchFinishValidateTxnMessage(const TransportAddres
   else {
     proto::FinishValidateTxnMessage *finishValTxnMsg = new proto::FinishValidateTxnMessage();
     finishValTxnMsg->ParseFromString(data);
-    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg->release_signed_validation_txn_digest());
+    std::shared_ptr<proto::SignedMessage> signedMsg(finishValTxnMsg->release_signed_validation_txn_msg());
 
     auto f = [this, finishValTxnMsg, signedMsg](){
       this->HandleFinishValidateTxnMessage(*finishValTxnMsg, signedMsg);
@@ -1352,6 +1355,13 @@ void Client2Client::HandleBeginValidateTxnMessage(const TransportAddress &remote
   ValidationInfo *valInfo = new ValidationInfo(curr_client_id, curr_client_seq_num, ts, std::move(valTxn), std::move(remoteCopy), hashed_ts);
   valInfo->isPolicyTransaction = (txnState.txn_name().find("policy") != std::string::npos);
   validationQueue.push(valInfo);
+  // if client is told to update its policy from original client update it on next transaction 
+  for(const uint64_t &val_client_id : beginValTxn.update_policy_cache_clients()) {
+    if(val_client_id == client_id) {
+      get_policy_cb();
+      break; 
+    }
+  }
 
   // ping.set_salt(curr_client_id);
   // MySendPing(curr_client_id, ping, false);
@@ -1642,7 +1652,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
 
 
-  std::string valTxnDigest;
+  proto::ValTxnMsg valTxnMsg;
   if (params.sintr_params.signFinishValidation) {
     // verify signature
     if (signedMsg == nullptr) {
@@ -1665,20 +1675,21 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
     // duration = end - start;
     // verify_endorse_us.add(duration);
 
-    valTxnDigest = signedMsg->data();
+    valTxnMsg.ParseFromString(signedMsg->data());
   }
   else {
     // dummy signed message
     UW_ASSERT(signedMsg == nullptr);
     signedMsg = std::make_shared<proto::SignedMessage>();
     signedMsg->set_process_id(peer_client_id);
-    signedMsg->set_data(finishValTxnMsg.validation_txn_digest());
+    UW_ASSERT(finishValTxnMsg.validation_txn_msg().SerializeToString(signedMsg->mutable_data()));
     signedMsg->set_signature("");
-    valTxnDigest = finishValTxnMsg.validation_txn_digest();
+    valTxnMsg = finishValTxnMsg.validation_txn_msg();
   }
+  UW_ASSERT(peer_client_id == valTxnMsg.client_id() && val_txn_seq_num == valTxnMsg.validation_txn_seq_num());
 
   Debug("HandleFinishValidateTxnMessage: txn digest %s for client %lu from client %lu with seq number %lu",
-    BytesToHex(valTxnDigest, 16).c_str(), client_id, peer_client_id,val_txn_seq_num);
+    BytesToHex(valTxnMsg.validation_txn_digest(), 16).c_str(), client_id, peer_client_id,val_txn_seq_num);
 
   if (params.sintr_params.debugEndorseCheck) {
     std::unique_ptr<proto::Transaction> debug_txn = std::make_unique<proto::Transaction>(finishValTxnMsg.val_txn());
@@ -1686,7 +1697,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
 
   if (!params.sintr_params.optimisticReceiveEndorsement) {
-    endorseClient->AddValidation(peer_client_id, valTxnDigest, signedMsg, client_seq_num);
+    endorseClient->AddValidation(peer_client_id, valTxnMsg.validation_txn_digest(), signedMsg, client_seq_num);
     // may have to acquire lock here
     if(params.sintr_params.useEndorsementCB && ecb != nullptr && endorseClient->IsSatisfied(client_seq_num)) {
       ecb();
@@ -1695,7 +1706,7 @@ void Client2Client::HandleFinishValidateTxnMessage(const proto::FinishValidateTx
   }
   // in optimistic case, endorsement is added outside so just check
   else {
-    endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnDigest);
+    endorseClient->CheckValidation(peer_client_id, val_txn_seq_num, valTxnMsg.validation_txn_digest());
   }
 }
 
@@ -1706,7 +1717,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
   // stale finish validation message
   std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
-    Debug(
+    Warning(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
       peer_client_id, 
       val_txn_seq_num,
@@ -1724,7 +1735,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
     UW_ASSERT(signedMsg == nullptr);
     signedMsg = std::make_shared<proto::SignedMessage>();
     signedMsg->set_process_id(peer_client_id);
-    signedMsg->set_data(finishValTxnMsg.validation_txn_digest());
+    UW_ASSERT(finishValTxnMsg.validation_txn_msg().SerializeToString(signedMsg->mutable_data()));
     signedMsg->set_signature("");
     endorseClient->AddValidationOptimistic(
       peer_client_id,
@@ -2371,22 +2382,31 @@ void Client2Client::ValidationThreadFunction() {
       proto::FinishValidateTxnMessage finishValTxnMsg;
       finishValTxnMsg.set_client_id(client_id);
       finishValTxnMsg.set_validation_txn_seq_num(curr_client_seq_num);
+      proto::ValTxnMsg finishValTxn;
+      finishValTxn.set_client_id(client_id);
+      finishValTxn.set_validation_txn_seq_num(curr_client_seq_num);
 
       // only send over digest, not actual contents
       // if hide timestamps is true, then hash timestamps
       std::string digest = TransactionDigest(*txn, params.hashDigest, params.sintr_params.hideTimestamps);
-      Debug("Validation Digest is : %s", BytesToHex(digest, 16).c_str());
+      // hash with policy versions
+      std::string policyDigest = ComputePolicyDigest(*txn);
+      digest = PolicyVersionDigest(*txn, digest, policyDigest);
+      finishValTxn.set_policy_digest(policyDigest);
+      finishValTxn.set_validation_txn_digest(digest);
+      Debug("Validation Digest is : %s for client %lu seq num %lu", BytesToHex(digest, 16).c_str(), curr_client_id, curr_client_seq_num);
+      Debug("Policy Digest is : %s for client %lu seq num %lu", BytesToHex(policyDigest, 16).c_str(), curr_client_id, curr_client_seq_num);
       if (params.sintr_params.signFinishValidation) {
         // sign the digest
-        SignBytes(
-          digest, 
+        SignMessage(
+          &finishValTxn, 
           keyManager->GetPrivateKey(keyManager->GetClientKeyId(client_id)), 
           client_id, 
-          finishValTxnMsg.mutable_signed_validation_txn_digest()
+          finishValTxnMsg.mutable_signed_validation_txn_msg()
         );
       }
       else {
-        finishValTxnMsg.set_validation_txn_digest(digest);
+        *finishValTxnMsg.mutable_validation_txn_msg() = std::move(finishValTxn);
       }
 
       if (params.sintr_params.debugEndorseCheck) {
