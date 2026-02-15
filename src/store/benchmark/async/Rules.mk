@@ -15,7 +15,7 @@ LIB-bench-client := $(o)benchmark.o $(o)bench_client.o \
 OBJS-all-bench-clients := $(LIB-retwis) $(LIB-tpcc) $(LIB-sync-tpcc) $(LIB-async-tpcc) $(LIB-validation-tpcc) $(LIB-validation-sql-tpcc) \
 	$(LIB-sync-sql-tpcc) $(LIB-sql-tpcc) $(LIB-smallbank) $(LIB-rw) $(LIB-toy) $(LIB-rw-sql) $(LIB-sql-seats) $(LIB-sql-tpcch) $(LIB-auctionmark) \
 	$(LIB-rw-base) $(LIB-rw-sync) $(LIB-rw-val) $(LIB-rw-sql-val) $(LIB-rw-sql-base) $(LIB-sync-smallbank) $(LIB-validation-smallbank) \
-	$(LIB-validation-sql-seats) $(LIB-sync-sql-seats)
+	$(LIB-validation-sql-seats) $(LIB-sync-sql-seats) $(LIB-sql-tpcc-lifting) $(LIB-sync-sql-tpcc-lifting) $(LIB-validation-sql-tpcc-lifting)
 
 $(d)benchmark: $(LIB-key-selector) $(LIB-bench-client) $(LIB-latency) $(LIB-tcptransport) $(LIB-udptransport) $(OBJS-all-store-clients) $(OBJS-all-bench-clients) $(LIB-bench-client) $(LIB-store-common)
 
