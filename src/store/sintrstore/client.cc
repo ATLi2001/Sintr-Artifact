@@ -915,6 +915,7 @@ void Client::LiftTransaction(std::vector<std::string> &lift_keys) {
   transport->Timer(0, [this, lift_keys]() {
     txn.mutable_lift_keys()->Reserve(lift_keys.size());
     for (auto& s : lift_keys) {
+      txn_lifted_keys.insert(s);
       *txn.add_lift_keys() = std::move(s);
     }
   });
@@ -1485,7 +1486,7 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
       if(txn_lifted_keys.find(read.key()) == txn_lifted_keys.end()) {
         const Policy* readPolicy = policyCache->Get(policyIdFunction(read.key(), ""));
         if(!endorseClient->IsImpliedBy(std::move(readPolicy), client_seq_num)) {
-          Warning("Preemptive Abort: Trying to commit a transaction with a policy leak, where keys are not being lifted");
+          Debug("Preemptive Abort: Trying to commit a transaction with a policy leak, where keys are not being lifted");
           stats.Increment("policy_leak_detected", 1);
           Debug("ABORT[%lu:%lu]", client_id, client_seq_num);
           //TODO: Is it necessary to also update the policy cache on the next transaction?
