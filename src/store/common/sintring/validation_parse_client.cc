@@ -67,6 +67,15 @@
 #include "store/benchmark/async/sql/seats/validation/update_reservation.h"
 #include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include "store/benchmark/async/sql/seats/seats_profile.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_lifts.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/delivery.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/new_order.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/order_status.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/payment.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/stock_level.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/policy_change.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc-lift-sql-validation-proto.pb.h"
 
 ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
   std::string txn_name(txnState.txn_name());
@@ -262,6 +271,65 @@ ValidationTransaction *ValidationParseClient::Parse(const TxnState& txnState) {
         ::seats_sql::validation::proto::UpdateReservation valTxnData;
         UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
         return new ::seats_sql::ValidationSQLUpdateReservation(timeout, rand, profile, valTxnData);
+      }
+      default:
+        Panic("Received unexpected txn type: %s", txn_type.c_str());
+    }
+  }
+  else if (txn_bench == ::tpcc_lift_sql::BENCHMARK_NAME) {
+    ::tpcc_lift_sql::TPCCLifts tpcc_lifts(policy_function_name);
+    ::tpcc_lift_sql::SQLTPCCTransactionType tpcc_txn_type = ::tpcc_lift_sql::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (tpcc_txn_type) {
+      case ::tpcc_lift_sql::SQL_TXN_DELIVERY: {
+        ::tpcc_lift_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(!valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLDelivery(timeout, valTxnData, tpcc_lifts);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_DELIVERY_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLDeliverySequential(timeout, valTxnData);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_NEW_ORDER: {
+        ::tpcc_lift_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(!valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLNewOrder(timeout, valTxnData, tpcc_lifts);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_NEW_ORDER_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLNewOrderSequential(timeout, valTxnData);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_ORDER_STATUS: {
+        ::tpcc_lift_sql::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::tpcc_lift_sql::ValidationSQLOrderStatus(timeout, valTxnData);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_PAYMENT: {
+        ::tpcc_lift_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(!valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLPayment(timeout, rand, valTxnData, tpcc_lifts);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        UW_ASSERT(valTxnData.sequential());
+        return new ::tpcc_lift_sql::ValidationSQLPaymentSequential(timeout, rand, valTxnData);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_STOCK_LEVEL: {
+        ::tpcc_lift_sql::validation::proto::StockLevel valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::tpcc_lift_sql::ValidationSQLStockLevel(timeout, valTxnData);
+      }
+      case ::tpcc_lift_sql::SQL_TXN_POLICY_CHANGE: {
+        ::tpcc_lift_sql::validation::proto::PolicyChange valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(txnState.txn_data()));
+        return new ::tpcc_lift_sql::ValidationSQLPolicyChange(timeout, valTxnData);
       }
       default:
         Panic("Received unexpected txn type: %s", txn_type.c_str());
