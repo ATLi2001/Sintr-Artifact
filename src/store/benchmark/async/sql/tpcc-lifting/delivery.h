@@ -29,6 +29,7 @@
 #define SQL_LIFT_DELIVERY_H
 
 #include "store/benchmark/async/sql/tpcc-lifting/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_lifts.h"
 
 namespace tpcc_lift_sql {
 
@@ -37,7 +38,7 @@ static bool use_earliest_new_order_table = true; //Use this if backend executor 
 class SQLDelivery : public TPCCSQLTransaction {
  public:
   SQLDelivery(uint32_t w_id, uint32_t d_id,
-      std::mt19937 &gen);
+      std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
   SQLDelivery() {};
   virtual ~SQLDelivery();
   transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
@@ -49,6 +50,7 @@ protected:
   uint32_t d_id;
   uint32_t o_carrier_id;
   uint32_t ol_delivery_d;
+  TPCCLifts tpcc_lifts;
 };
 
 class SQLDeliverySequential : public TPCCSQLTransaction {

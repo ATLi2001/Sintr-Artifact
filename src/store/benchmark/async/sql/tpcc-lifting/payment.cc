@@ -218,13 +218,6 @@ transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeou
   if(!results[3]->has_rows_affected()){Warning("History row not unique. Might want to investigate");} 
   //UW_ASSERT(results[3]->has_rows_affected());
 
-  // determine if we should lift this transaction
-  if (tpcc_lifts.IsLiftedPolicyFunction()) {
-    Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
-    std::vector<std::string> lifts = tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount, client.GetReadset());
-    client.LiftTransaction(lifts);
-  }
-
   Debug("COMMIT");
   return client.Commit(timeout);
 }

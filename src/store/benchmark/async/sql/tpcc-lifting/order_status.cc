@@ -114,7 +114,11 @@ transaction_status_t SQLOrderStatus::BaseExecute(SyncClient &client, uint32_t ti
   // Debug(query.c_str());
   client.Query(query, queryResult, timeout);
   OrderRow o_row;
-  if(queryResult->empty()) Panic("empty result for Order Row");
+  if(queryResult->empty()) {
+    // should just commit with no order-line query
+    Warning("no orders found from order table with customer %d %d %d", c_w_id, c_d_id, c_id);
+    return client.Commit(timeout);
+  }
 
   deserialize(o_row, queryResult);
   Debug("  Order Lines: %u", o_row.get_ol_cnt());

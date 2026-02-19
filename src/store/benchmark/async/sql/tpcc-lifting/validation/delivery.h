@@ -35,7 +35,8 @@ namespace tpcc_lift_sql {
 
 class ValidationSQLDelivery : public ValidationTPCCSQLTransaction, public SQLDelivery {
   public:
-    ValidationSQLDelivery(uint32_t timeout, const validation::proto::Delivery &valDeliveryMsg);
+    ValidationSQLDelivery(uint32_t timeout, const validation::proto::Delivery &valDeliveryMsg,
+      const TPCCLifts &tpcc_lifts);
     virtual ~ValidationSQLDelivery();
     virtual transaction_status_t Validate(SyncClient &client);
 };

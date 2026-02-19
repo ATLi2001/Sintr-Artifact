@@ -417,7 +417,7 @@ void GenerateOrderTableForWarehouseDistrict(uint32_t w_id, uint32_t d_id,
       if (o_id < 2101) {
         values.push_back(std::to_string(0));
       } else {
-        values.push_back(std::to_string(std::uniform_int_distribution<uint32_t>(1, 999999)(gen)));
+        values.push_back(std::to_string(std::uniform_int_distribution<uint32_t>(100, 100000)(gen)));
       }
       values.push_back(RandomAString(24, 24, gen));
       writer.add_row(table_name, values);
@@ -528,6 +528,26 @@ void GenerateEarliestNewOrderTable(uint32_t num_warehouses, TableWriter &writer)
   }
 }
 
+void GenerateLatestOrderTable(uint32_t num_warehouses, TableWriter &writer){
+  std::string table_name = LATEST_ORDER_TABLE;
+  std::vector<std::pair<std::string, std::string>> column_names_and_types;
+  column_names_and_types.push_back(std::make_pair("lo_w_id", "INTEGER"));
+  column_names_and_types.push_back(std::make_pair("lo_d_id", "INTEGER"));
+  column_names_and_types.push_back(std::make_pair("lo_o_id", "INTEGER"));
+  const std::vector<uint32_t> primary_key_col_idx {0, 1};
+  writer.add_table(table_name, column_names_and_types, primary_key_col_idx);
+
+  for (uint32_t w_id = 1; w_id <= num_warehouses; ++w_id) {
+     for (uint32_t d_id = 1; d_id <= 10; ++d_id) {
+      std::vector<std::string> values;
+      values.push_back(std::to_string(w_id));
+      values.push_back(std::to_string(d_id));
+      values.push_back(std::to_string(2101));
+      writer.add_row(table_name, values);
+    }
+  }
+}
+
 
 
 
@@ -542,7 +562,7 @@ DEFINE_int32(num_warehouses, 1, "number of warehouses");
 int main(int argc, char *argv[]) {
   gflags::SetUsageMessage("generates a json file containing sql tables for TPC-C data.\n");
 	gflags::ParseCommandLineFlags(&argc, &argv, true);
-  std::string file_name = "sql-tpcc";
+  std::string file_name = "sql-tpcc-lifting";
   TableWriter writer = TableWriter(file_name);
   uint32_t time = std::time(0);
   std::cerr << "Generating " << FLAGS_num_warehouses << " warehouses." << std::endl;
@@ -557,6 +577,8 @@ int main(int argc, char *argv[]) {
 
   //Optional table to read Earliest New Order from (instead of looking for Min + Delete in Delivery)
   GenerateEarliestNewOrderTable(FLAGS_num_warehouses, writer);
+  // Table to get latest order instead of using max in new order.
+  GenerateLatestOrderTable(FLAGS_num_warehouses, writer);
 
   writer.flush();
   std::cerr << "Wrote tables." << std::endl;

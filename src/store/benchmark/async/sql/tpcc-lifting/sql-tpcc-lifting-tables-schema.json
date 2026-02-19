@@ -18,8 +18,30 @@
       0,
       1
     ],
-    "row_data_path": "sql-tpcc-data/EarliestNewOrder.csv",
+    "row_data_path": "sql-tpcc-lifting-data/EarliestNewOrder.csv",
     "table_name": "EarliestNewOrder"
+  },
+  "LatestOrder": {
+    "column_names_and_types": [
+      [
+        "lo_w_id",
+        "INTEGER"
+      ],
+      [
+        "lo_d_id",
+        "INTEGER"
+      ],
+      [
+        "lo_o_id",
+        "INTEGER"
+      ]
+    ],
+    "primary_key_col_idx": [
+      0,
+      1
+    ],
+    "row_data_path": "sql-tpcc-lifting-data/LatestOrder.csv",
+    "table_name": "LatestOrder"
   },
   "customer": {
     "column_names_and_types": [
@@ -120,7 +142,7 @@
       1,
       2
     ],
-    "row_data_path": "sql-tpcc-data/customer.csv",
+    "row_data_path": "sql-tpcc-lifting-data/customer.csv",
     "table_name": "customer"
   },
   "district": {
@@ -174,7 +196,7 @@
       0,
       1
     ],
-    "row_data_path": "sql-tpcc-data/district.csv",
+    "row_data_path": "sql-tpcc-lifting-data/district.csv",
     "table_name": "district"
   },
   "history": {
@@ -222,7 +244,7 @@
       2,
       3
     ],
-    "row_data_path": "sql-tpcc-data/history.csv",
+    "row_data_path": "sql-tpcc-lifting-data/history.csv",
     "table_name": "history"
   },
   "item": {
@@ -251,7 +273,7 @@
     "primary_key_col_idx": [
       0
     ],
-    "row_data_path": "sql-tpcc-data/item.csv",
+    "row_data_path": "sql-tpcc-lifting-data/item.csv",
     "table_name": "item"
   },
   "new_order": {
@@ -274,7 +296,7 @@
       1,
       2
     ],
-    "row_data_path": "sql-tpcc-data/new_order.csv",
+    "row_data_path": "sql-tpcc-lifting-data/new_order.csv",
     "table_name": "new_order"
   },
   "oorder": {
@@ -324,7 +346,7 @@
       1,
       2
     ],
-    "row_data_path": "sql-tpcc-data/oorder.csv",
+    "row_data_path": "sql-tpcc-lifting-data/oorder.csv",
     "table_name": "oorder"
   },
   "order_line": {
@@ -376,7 +398,7 @@
       2,
       3
     ],
-    "row_data_path": "sql-tpcc-data/order_line.csv",
+    "row_data_path": "sql-tpcc-lifting-data/order_line.csv",
     "table_name": "order_line"
   },
   "stock": {
@@ -454,7 +476,7 @@
       0,
       1
     ],
-    "row_data_path": "sql-tpcc-data/stock.csv",
+    "row_data_path": "sql-tpcc-lifting-data/stock.csv",
     "table_name": "stock"
   },
   "warehouse": {
@@ -499,7 +521,7 @@
     "primary_key_col_idx": [
       0
     ],
-    "row_data_path": "sql-tpcc-data/warehouse.csv",
+    "row_data_path": "sql-tpcc-lifting-data/warehouse.csv",
     "table_name": "warehouse"
   }
 }

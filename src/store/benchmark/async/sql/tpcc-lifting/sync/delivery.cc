@@ -34,7 +34,8 @@
 namespace tpcc_lift_sql {
 
 SyncSQLDelivery::SyncSQLDelivery(uint32_t timeout, uint32_t w_id, uint32_t d_id,
-    std::mt19937 &gen) : SyncTPCCSQLTransaction(timeout), SQLDelivery(w_id, d_id, gen) {
+    std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : SyncTPCCSQLTransaction(timeout),
+    SQLDelivery(w_id, d_id, gen, tpcc_lifts) {
 } 
   
 SyncSQLDelivery::~SyncSQLDelivery() {

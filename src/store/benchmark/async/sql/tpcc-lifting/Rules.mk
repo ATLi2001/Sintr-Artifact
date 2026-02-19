@@ -11,9 +11,9 @@ LIB-sql-tpcc-lifting := $(OBJ-sql-tpcc-lifting-client) $(OBJ-sql-tpcc-lifting-tr
 	$(o)payment_sequential.o $(o)order_status.o $(o)stock_level.o $(o)delivery.o $(o)delivery_sequential.o $(o)tpcc_utils.o \
 	$(o)tpcc-lift-sql-validation-proto.o $(o)policy_change.o
 
-$(d)sql_tpcc_generator: $(LIB-io-utils) $(o)tpcc_generator.o $(o)tpcc_utils.o
+$(d)sql_tpcc-lifting_generator: $(LIB-io-utils) $(o)tpcc_generator.o $(o)tpcc_utils.o
 
-BINS += $(d)sql_tpcc_generator
+BINS += $(d)sql_tpcc-lifting_generator
 
 PROTOS += $(addprefix $(d), tpcc-lift-sql-validation-proto.proto)
 

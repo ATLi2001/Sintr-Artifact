@@ -1,4 +1,4 @@
-sql-tpcc-data
-sql-tpcc-data/*
-sql_tpcc_generator
-sql-tpcc-data-*/
+sql-tpcc-lifting-data/*
+sql-tpcc-lifting-data
+sql_tpcc-lifting_generator
+sql-tpcc-lifting-data-*/

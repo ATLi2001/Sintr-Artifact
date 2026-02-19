@@ -34,14 +34,22 @@
 namespace tpcc_lift_sql {
 
 bool TPCCLifts::IsLiftedPolicyFunction() const {
-  return policy_function_name == "tpcc_sql_wh";
+  return policy_function_name == "tpcc_lift_payment_stock";
 }
 
-std::vector<std::string> TPCCLifts::NewOrderLiftFunction(const PolicyCache &policy_cache, bool local, const std::map<std::string, std::string> &readset) const {
+std::vector<std::string> TPCCLifts::DeliveryLiftFunction(const PolicyCache &policy_cache, const std::map<std::string, std::string> &readset,
+  const std::vector<int32_t> &total_amts, const std::vector<int32_t> &customer_amts) const {
   std::vector<std::string> lifted_keys;
-  // if the transaction is only touching local keys, then return empty list.
-  if (!IsLiftedPolicyFunction() || local) {
+  // just lift transaction as long as we are using tpcc_lift_payment_stock policy function
+  if (!IsLiftedPolicyFunction()) {
     return lifted_keys;
+  }
+  UW_ASSERT(customer_amts.size() == total_amts.size());
+  for(int i = 0; i < customer_amts.size(); i++) {
+    if(customer_amts[i] < total_amts[i]) {
+      // don't lift if total amount more is less than customer can afford
+      return lifted_keys;
+    }
   }
   // otherwise lift entire readset
   for (auto const& [key, val] : readset) {
@@ -50,45 +58,4 @@ std::vector<std::string> TPCCLifts::NewOrderLiftFunction(const PolicyCache &poli
 
   return lifted_keys;
 }
-
-std::vector<std::string> TPCCLifts::PaymentLiftFunction(const PolicyCache &policy_cache, uint32_t w_id, uint32_t c_w_id, uint32_t h_amount,
-  const std::map<std::string, std::string> &readset) const {
-  std::vector<std::string> lifted_keys;
-  if (!IsLiftedPolicyFunction()) {
-    return lifted_keys;
-  }
-
-  // only lift if customer is paying not their home warehouse
-  if (w_id == c_w_id) {
-    return lifted_keys;
-  }
-
-  const Policy *policy = policy_cache.Get(PolicyIdString(c_w_id));
-  UW_ASSERT(policy != nullptr);
-
-  // for now only lift if weight policy
-  if (policy->Type() != PolicyType::POLICY_TYPE_WEIGHT) {
-    return lifted_keys;
-  }
-
-  // cast to weight policy
-  const WeightPolicy *weight_policy = dynamic_cast<const WeightPolicy *>(policy);
-  UW_ASSERT(weight_policy != nullptr);
-
-  // lifting rule is threshold based on weight
-  // h_amount is between 100 and 500000
-  // assuming weight is small and at least 2
-  // uint64_t threshold = static_cast<uint64_t>(std::pow(10, weight_policy->GetWeight() + 1));
-  // return h_amount <= threshold;
-  if (weight_policy->GetWeight() == 1) {
-    return lifted_keys;
-  }
-  else {
-    for (auto const& [key, val] : readset) {
-      lifted_keys.push_back(key);
-    }
-    return lifted_keys;
-  }
-}
-
 }

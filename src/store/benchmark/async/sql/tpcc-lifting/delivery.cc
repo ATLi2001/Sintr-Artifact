@@ -36,7 +36,8 @@
 namespace tpcc_lift_sql {
 
 SQLDelivery::SQLDelivery(uint32_t w_id, uint32_t d_id,
-    std::mt19937 &gen) : w_id(w_id), d_id(d_id) {
+    std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : w_id(w_id), d_id(d_id),
+    tpcc_lifts(tpcc_lifts) {
   o_carrier_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen);
   ol_delivery_d = std::time(0);
 
@@ -63,7 +64,11 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
     SQLDelivery::SerializeTxnState(txnState);
   }
 
+  std::vector<int32_t> customer_amts;
+  std::vector<int32_t> total_amts;
+
   client.Begin(timeout, txnState);
+  for(int i = 0; i < 10; i++){
   
   // (1) Retrieve the row from NEW-ORDER with the lowest order id
   //     If none is found, skip delivery of an order for this district. 
@@ -77,7 +82,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
     if (queryResult->empty()) {
       // Note: technically we're supposed to check each district in this warehouse  ==>> We instead are doing a TX for each district sequentially (see tpcc_client.cc)
-      return client.Commit(timeout);
+      continue;
     }
 
     deserialize(no_o_id, queryResult, 0, 2); //get third col of first row (there is only 1 row, this is a point read).
@@ -93,7 +98,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
     if (queryResult->empty()) {
       // Note: technically we're supposed to check each district in this warehouse  ==>> We instead are doing a TX for each district sequentially (see tpcc_client.cc)
-      return client.Commit(timeout);
+      continue;
     }
 
     // (2) Delete the found NEW-ORDER row
@@ -118,8 +123,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
   if (queryResult->empty()) {
     // already delivered all orders for this warehouse
     Debug("Already delivered all orders for this warehouse district");
-    client.Wait(results); //wait for the async write.
-    return client.Commit(timeout);
+    continue;
   }
   // int c_id;
   // deserialize(c_id, queryResult);
@@ -161,12 +165,33 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   // (5) Update the balance and delivery count of the respective customer (that issued the order)
   Debug("Customer: %u", c_id);
+  // could just select customer balance
+  statement = fmt::format("SELECT * FROM {} WHERE c_id = {} AND c_d_id = {} AND c_w_id = {};", CUSTOMER_TABLE, c_id, d_id, w_id);
+  client.Query(statement, queryResult, timeout, true); // cache result so update reads from cache
+  if(queryResult->empty()) {
+    Panic("Customer %u does not exist", c_id);
+  }
+  CustomerRow c_row;
+  deserialize(c_row, queryResult);
+  // if doing the delivery would put customer in debt, abort delivery
+  //TODO: Maybe do this check in lifted function, and don't lift if this is the case?
   statement = fmt::format("UPDATE {} SET c_balance = c_balance + {}, c_delivery_cnt = c_delivery_cnt + 1 WHERE c_id = {} AND c_d_id = {} AND c_w_id = {};", 
                           CUSTOMER_TABLE, total_amount, c_id, d_id, w_id);
   Debug("OP: %s", statement.c_str());
   client.Write(statement, timeout);
+  total_amts.push_back(total_amount);
+  customer_amts.push_back((-c_row.get_balance()) + c_row.get_credit_lim());
+  d_id++;
+  }
 
   client.Wait(results);
+  // determine if we should lift this transaction
+  bool abort = false;
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    std::vector<std::string> lifts = tpcc_lifts.DeliveryLiftFunction(client.GetPolicyCache(), client.GetReadset(),
+      total_amts, customer_amts);
+    client.LiftTransaction(lifts);
+  }
 
   Debug("COMMIT");
   return client.Commit(timeout);

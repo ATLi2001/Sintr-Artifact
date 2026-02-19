@@ -67,10 +67,10 @@ transaction_status_t SQLStockLevel::BaseExecute(SyncClient &client, uint32_t tim
   client.Begin(timeout, txnState);
 
   // (1) Select the specified row from District and extract the Next Order Id
-  query = fmt::format("SELECT d_next_o_id FROM {} WHERE d_id = {} AND d_w_id = {}", DISTRICT_TABLE, d_id, w_id);
+  query = fmt::format("SELECT lo_o_id FROM {} WHERE lo_d_id = {} AND lo_w_id = {}", LATEST_ORDER_TABLE, d_id, w_id);
   client.Query(query, queryResult, timeout);
   uint32_t next_o_id;
-  deserialize(next_o_id, queryResult);
+  deserialize(next_o_id, queryResult, 0, 0); // point read
   Debug("Orders: %u-%u", next_o_id - 20, next_o_id - 1);
 
 
@@ -147,7 +147,7 @@ void SQLStockLevel::SerializeTxnState(std::string &txnState) {
 }
 
 std::vector<TPCC_Table> SQLStockLevel::HeuristicFunction() {
-  return {DISTRICT, ORDER_LINE, STOCK};
+  return {LATEST_ORDER, ORDER_LINE, STOCK};
 }
 
 } // namespace tpcc_lift_sql

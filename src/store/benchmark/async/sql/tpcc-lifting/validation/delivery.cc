@@ -30,12 +30,14 @@
 
 namespace tpcc_lift_sql {
 
-ValidationSQLDelivery::ValidationSQLDelivery(uint32_t timeout, const validation::proto::Delivery &valDeliveryMsg) :
+ValidationSQLDelivery::ValidationSQLDelivery(uint32_t timeout, const validation::proto::Delivery &valDeliveryMsg,
+  const TPCCLifts &tpcc_lifts) :
     ValidationTPCCSQLTransaction(timeout) {
   w_id = valDeliveryMsg.w_id();
   d_id = valDeliveryMsg.d_id();
   o_carrier_id = valDeliveryMsg.o_carrier_id();
   ol_delivery_d = valDeliveryMsg.ol_delivery_d();
+  this->tpcc_lifts = tpcc_lifts;
 }
   
 ValidationSQLDelivery::~ValidationSQLDelivery() {

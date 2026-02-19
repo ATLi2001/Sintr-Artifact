@@ -43,6 +43,8 @@ const std::string ORDER_LINE_TABLE = "order_line";
 const std::string NEW_ORDER_TABLE = "new_order";
 
 const std::string EARLIEST_NEW_ORDER_TABLE = "EarliestNewOrder";
+const std::string LATEST_ORDER_TABLE = "LatestOrder";
+// use new order row to load latest order
 
 enum TPCC_Table {
     WAREHOUSE, 
@@ -54,7 +56,8 @@ enum TPCC_Table {
     NEW_ORDER,
     ORDER,
     ORDER_LINE,
-    EARLIEST_NEW_ORDER
+    EARLIEST_NEW_ORDER,
+    LATEST_ORDER
   };
 
 //Row Types

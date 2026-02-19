@@ -56,6 +56,9 @@ TPCCSQLClient::TPCCSQLClient(bool run_sequential, SyncClient &client, Transport 
       delivery_ratio(delivery_ratio), payment_ratio(payment_ratio),
       order_status_ratio(order_status_ratio), stock_level_ratio(stock_level_ratio),
       static_w_id(static_w_id), delivery(false), count(0), id(seed), tpcc_lifts(policy_function_name) {
+  if (run_sequential) {
+    Panic("Do not run this workload sequentially");
+  }
   stockLevelDId = std::uniform_int_distribution<uint32_t>(1, 10)(GetRand());
 }
 
@@ -80,16 +83,16 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
   }
   uint32_t wid, did;
   std::mt19937 &gen = GetRand();
-  if (delivery && deliveryDId < 10) {
-    deliveryDId++;
-    wid = deliveryWId;
-    did = deliveryDId;
-    lastOp = "delivery";
-    if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, GetRand());
-    return new SyncSQLDelivery(GetTimeout(), wid, did, GetRand());
-  } else {
-    delivery = false;
-  }
+  // if (delivery && deliveryDId < 10) {
+  //   deliveryDId++;
+  //   wid = deliveryWId;
+  //   did = deliveryDId;
+  //   lastOp = "delivery";
+  //   if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, GetRand());
+  //   return new SyncSQLDelivery(GetTimeout(), wid, did, GetRand(), tpcc_lifts);
+  // } else {
+  //   delivery = false;
+  // }
 
   //USE even dist when testing...
   // new_order_ratio = 0;
@@ -131,10 +134,10 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
     deliveryDId = 1;
     deliveryWId = wid;
     did = deliveryDId;
-    delivery = true;
+    // delivery = true;
     lastOp = "delivery";
     if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, gen);
-    return new SyncSQLDelivery(GetTimeout(), wid, did, gen);
+    return new SyncSQLDelivery(GetTimeout(), wid, did, gen, tpcc_lifts);
   }
 }
 

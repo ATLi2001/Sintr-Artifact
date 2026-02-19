@@ -65,17 +65,19 @@ SQLNewOrder::SQLNewOrder(uint32_t w_id, uint32_t C,
       // }
       // o_ol_i_ids.push_back(i_id);
     }
-    uint8_t x = std::uniform_int_distribution<uint8_t>(1, 100)(gen);
-    if (x == 1 && num_warehouses > 1) { //For 1% of the TXs supply from remote warehouse
-      uint32_t remote_w_id = std::uniform_int_distribution<uint32_t>(1, num_warehouses - 1)(gen);
-      if (remote_w_id == w_id) {
-        remote_w_id = num_warehouses; // simple swap to ensure uniform distribution
-      }
-      o_ol_supply_w_ids.push_back(remote_w_id);
-      all_local = false;
-    } else {
-      o_ol_supply_w_ids.push_back(w_id);
-    }
+    // uint8_t x = std::uniform_int_distribution<uint8_t>(1, 100)(gen);
+    // if (x == 1 && num_warehouses > 1) { //For 1% of the TXs supply from remote warehouse
+    //   uint32_t remote_w_id = std::uniform_int_distribution<uint32_t>(1, num_warehouses - 1)(gen);
+    //   if (remote_w_id == w_id) {
+    //     remote_w_id = num_warehouses; // simple swap to ensure uniform distribution
+    //   }
+    //   o_ol_supply_w_ids.push_back(remote_w_id);
+    //   all_local = false;
+    // } else {
+    //   o_ol_supply_w_ids.push_back(w_id);
+    // }
+    // no longer reads from remote warehouse
+    o_ol_supply_w_ids.push_back(w_id);
     o_ol_quantities.push_back(std::uniform_int_distribution<uint8_t>(1, 10)(gen));
   }
   o_entry_d = std::time(0);
@@ -122,6 +124,10 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   statement = fmt::format("SELECT * FROM {} WHERE c_id = {} AND c_d_id = {} AND c_w_id = {}", CUSTOMER_TABLE, c_id, d_id, w_id);
   client.Query(statement, timeout);
 
+  // select the latest order from latest order table
+  statement = fmt::format("SELECT lo_o_id FROM {} WHERE lo_d_id = {} AND lo_w_id = {};", LATEST_ORDER_TABLE, d_id, w_id);
+  client.Query(statement, timeout);
+
   client.Wait(results);
 
   WarehouseRow w_row;
@@ -131,7 +137,15 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   DistrictRow d_row;
   deserialize(d_row, results[1]);
   Debug("  Tax Rate: %u", d_row.get_tax());
-  uint32_t o_id = d_row.get_next_o_id();
+  
+  // get latest o_id from latest order table
+  uint32_t o_id;
+  if (results[3] && !results[3]->empty()) {
+    // get third col from first row (point read so only 1 row)
+    deserialize(o_id, results[3], 0, 0);
+  } else {
+    Panic("Query result for latest order table is empty");
+  }
   Debug("  Order Number: %u", o_id);
   UW_ASSERT(o_id > 2100);
 
@@ -144,9 +158,10 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   results.clear();
 
   // (2.5) Increment next available order number for District
-  d_row.set_next_o_id(d_row.get_next_o_id() + 1);
-  statement = fmt::format("UPDATE {} SET d_next_o_id = {} WHERE d_id = {} AND d_w_id = {}", DISTRICT_TABLE, d_row.get_next_o_id(), d_id, w_id);
+  uint32_t next_o_id = o_id + 1;
+  statement = fmt::format("UPDATE {} SET lo_o_id = {} WHERE lo_d_id = {} AND lo_w_id = {}", LATEST_ORDER_TABLE, next_o_id, d_id, w_id);
   client.Write(statement, timeout, true); //async
+  // we no longer increment next available order number bc it writes to district
 
   // (4) Insert new row into NewOrder and Order to reflect the creation of the order. 
   //statement = fmt::format("INSERT INTO {} (no_o_id, no_d_id, no_w_id) VALUES ({}, {}, {})", NEW_ORDER_TABLE, o_id, d_id, w_id);
@@ -265,13 +280,6 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
 
   client.asyncWait();
 
-  // determine if we should lift this transaction
-  if (tpcc_lifts.IsLiftedPolicyFunction()) {
-    Debug("LIFTING NEW ORDER TRANSACTION");
-    std::vector<std::string> lifts = tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache(), all_local, client.GetReadset());
-    client.LiftTransaction(lifts);
-  }
-
   Debug("COMMIT");
   return client.Commit(timeout);
 }
@@ -310,7 +318,7 @@ void SQLNewOrder::SerializeTxnState(std::string &txnState) {
 }
 
 std::vector<TPCC_Table> SQLNewOrder::HeuristicFunction() {
-  return {DISTRICT, NEW_ORDER, ORDER, STOCK, ORDER_LINE};
+  return {LATEST_ORDER, NEW_ORDER, ORDER, STOCK, ORDER_LINE};
 }
  
 } // namespace tpcc_lift_sql

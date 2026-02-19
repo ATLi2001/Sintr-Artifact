@@ -37,7 +37,7 @@ namespace tpcc_lift_sql {
 class SyncSQLDelivery : public SyncTPCCSQLTransaction, public SQLDelivery {
  public:
   SyncSQLDelivery(uint32_t timeout, uint32_t w_id, uint32_t d_id,
-      std::mt19937 &gen);
+      std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
   virtual ~SyncSQLDelivery();
   virtual transaction_status_t Execute(SyncClient &client);
 };
