@@ -10,10 +10,12 @@
 
 ## declare an array variable
 declare -a arr_servers=("us-east-1-0" "us-east-1-1" "us-east-1-2" "eu-west-1-0" "eu-west-1-1" "eu-west-1-2")
+#declare -a arr_servers=("us-east-1-0" "us-east-1-1" "us-east-1-2" "eu-west-1-0")
 #declare -a arr_servers=("us-east-1-0")
 
 #declare -a arr_clients=("client-0-0" "client-0-1" "client-0-2" "client-0-3" "client-0-4" "client-0-5") ##Use this for postgres
 declare -a arr_clients=("client-0-0" "client-1-0" "client-2-0" "client-3-0" "client-4-0" "client-5-0") ##Use this otherwise
+#declare -a arr_clients=("client-0-0" "client-1-0" "client-2-0" "client-3-0")
 #declare -a arr_clients=("client-0-0")
 
 FIRST_TIME_CONNECTION=0
@@ -106,7 +108,7 @@ parallel "rsync -v -r -e ssh ./store/benchmark/async/sql/${BENCHMARK_NAME}/sql-$
 parallel "rsync -v -r -e ssh ./store/benchmark/async/sql/${BENCHMARK_NAME}/sql-${BENCHMARK_NAME}-data ${USER}@{}.${EXP_NAME}.${PROJECT_NAME}-pg0.${CLUSTER_NAME}.cloudlab.us:/users/${USER}/benchmark_data/" ::: ${arr_servers[@]} 
 
 
-if [ "$BENCHMARK_NAME" = "tpcc" ]; then
+if [[ "$BENCHMARK_NAME" = "tpcc" || "$BENCHMARK_NAME" = "tpcc-lifting" ]]; then
 	#no profile info.
 	echo ""
 fi
