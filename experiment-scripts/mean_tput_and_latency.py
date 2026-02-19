@@ -15,12 +15,18 @@ def main():
     # Create the directory
     os.makedirs(exp_path, exist_ok=True)
 
-    if len(sys.argv) != 2 and len(sys.argv) != 3:
-        print(f"Usage: python {os.path.basename(__file__)} <csv_file> [specific_client_num]")
+    if len(sys.argv) < 2 or len(sys.argv) > 4:
+        print(f"Usage: python {os.path.basename(__file__)} <csv_file> [specific_client_num] [--normalize]")
         sys.exit(1)
     specific_client_num = -1
-    if len(sys.argv) == 3:
-        specific_client_num = int(sys.argv[2])
+    normalize = False
+    
+    # Parse arguments
+    for arg in sys.argv[2:]:
+        if arg == "--normalize":
+            normalize = True
+        else:
+            specific_client_num = int(arg)
 
     csv_path = sys.argv[1]
 
@@ -56,37 +62,56 @@ def main():
         if specific_client_num != -1 and specific_client_num != client_count:
             continue
         
-        # If specific client number provided, preserve original order
-        # Otherwise sort by throughput to find base
-        if specific_client_num != -1:
-            # Keep original order
-            sorted_group = group.reset_index(drop=True)
-            # Find base experiment (highest tput) without changing order
+        # Keep original order
+        sorted_group = group.reset_index(drop=True)
+        
+        # Determine baseline for this client group
+        if normalize:
+            # For normalization, always use first experiment as baseline
+            base_experiment = sorted_group.iloc[0]
+        elif specific_client_num != -1:
+            # If specific client number provided, use first experiment as baseline
+            base_experiment = sorted_group.iloc[0]
+        else:
+            # Otherwise use highest throughput experiment as base
             base_idx = group["avg_tput"].idxmax()
             base_experiment = group.loc[base_idx]
-        else:
-            sorted_group = group.sort_values("avg_tput").reset_index(drop=True)
-            base_experiment = sorted_group.iloc[-1]
             
         base_tput = base_experiment["avg_tput"]
         base_latency = base_experiment["avg_latency"]
         base_name = base_experiment["experiment_name"]
 
-        print(f"Base for {client_count} clients: '{base_name}'")
+        if normalize:
+            print(f"Baseline for {client_count} clients: '{base_name}' (tput={base_tput:.2f}, latency={base_latency:.2f})")
+        else:
+            print(f"Base for {client_count} clients: '{base_name}'")
 
         for _, row in sorted_group.iterrows():
-            tput_overhead = (base_tput - row["avg_tput"]) / base_tput * 100
-            latency_overhead = (row["avg_latency"] - base_latency) / base_latency * 100
-
-            overhead_records.append({
-                "experiment_name": row["experiment_name"],
-                "num_clients": row["num_clients"],
-                "avg_tput": row["avg_tput"],
-                "avg_latency": row["avg_latency"],
-                "base_experiment": base_name,
-                "tput_overhead_%": tput_overhead,
-                "latency_overhead_%": latency_overhead
-            })
+            if normalize:
+                # For normalization, compute normalized values
+                record = {
+                    "experiment_name": row["experiment_name"],
+                    "num_clients": row["num_clients"],
+                    "avg_tput": row["avg_tput"],
+                    "avg_latency": row["avg_latency"],
+                    "normalized_tput": row["avg_tput"] / base_tput,
+                    "normalized_latency": row["avg_latency"] / base_latency,
+                    "baseline_experiment": base_name
+                }
+            else:
+                # For overhead calculation
+                tput_overhead = (base_tput - row["avg_tput"]) / base_tput * 100
+                latency_overhead = (row["avg_latency"] - base_latency) / base_latency * 100
+                record = {
+                    "experiment_name": row["experiment_name"],
+                    "num_clients": row["num_clients"],
+                    "avg_tput": row["avg_tput"],
+                    "avg_latency": row["avg_latency"],
+                    "base_experiment": base_name,
+                    "tput_overhead_%": tput_overhead,
+                    "latency_overhead_%": latency_overhead
+                }
+            overhead_records.append(record)
 
     # Convert to DataFrame
     overhead_df = pd.DataFrame(overhead_records)
@@ -110,27 +135,57 @@ def main():
         overhead_df = overhead_df.sort_values(by=["num_clients", "experiment_name"])
     # else: keep the order as it was added (which matches the CSV order)
 
-    # Plot avg_tput
-    plt.figure(figsize=(12, 6))
-    plt.bar(overhead_df["label"], overhead_df["avg_tput"], color='skyblue')
-    plt.title("Average Throughput per Experiment and Client Count")
-    plt.ylabel("Throughput")
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    tput_plot_path = os.path.join(exp_path, "avg_tput_barplot.png")
-    plt.savefig(tput_plot_path)
-    print(f"Throughput bar plot saved as '{tput_plot_path}'")
+    # Plot based on normalize flag
+    if normalize:
+        # Plot normalized_tput
+        plt.figure(figsize=(12, 6))
+        plt.bar(overhead_df["label"], overhead_df["normalized_tput"], color='skyblue')
+        plt.axhline(y=1.0, color='red', linestyle='--', linewidth=1, label='Baseline')
+        plt.title("Normalized Throughput per Experiment and Client Count")
+        plt.ylabel("Normalized Throughput (relative to first experiment)")
+        plt.ylim(bottom=1.0)
+        plt.xticks(rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        tput_plot_path = os.path.join(exp_path, "normalized_tput_barplot.png")
+        plt.savefig(tput_plot_path)
+        print(f"Normalized throughput bar plot saved as '{tput_plot_path}'")
 
-    # Plot avg_latency
-    plt.figure(figsize=(12, 6))
-    plt.bar(overhead_df["label"], overhead_df["avg_latency"], color='salmon')
-    plt.title("Average Latency per Experiment and Client Count")
-    plt.ylabel("Latency")
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    lat_plot_path = os.path.join(exp_path, "avg_latency_barplot.png")
-    plt.savefig(lat_plot_path)
-    print(f"Latency bar plot saved as '{lat_plot_path}'")
+        # Plot normalized_latency
+        plt.figure(figsize=(12, 6))
+        plt.bar(overhead_df["label"], overhead_df["normalized_latency"], color='salmon')
+        plt.axhline(y=1.0, color='red', linestyle='--', linewidth=1, label='Baseline')
+        plt.title("Normalized Latency per Experiment and Client Count")
+        plt.ylabel("Normalized Latency (relative to first experiment)")
+        plt.ylim(top=1.0)
+        plt.xticks(rotation=45, ha='right')
+        plt.legend()
+        plt.tight_layout()
+        lat_plot_path = os.path.join(exp_path, "normalized_latency_barplot.png")
+        plt.savefig(lat_plot_path)
+        print(f"Normalized latency bar plot saved as '{lat_plot_path}'")
+    else:
+        # Plot avg_tput
+        plt.figure(figsize=(12, 6))
+        plt.bar(overhead_df["label"], overhead_df["avg_tput"], color='skyblue')
+        plt.title("Average Throughput per Experiment and Client Count")
+        plt.ylabel("Throughput")
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        tput_plot_path = os.path.join(exp_path, "avg_tput_barplot.png")
+        plt.savefig(tput_plot_path)
+        print(f"Throughput bar plot saved as '{tput_plot_path}'")
+
+        # Plot avg_latency
+        plt.figure(figsize=(12, 6))
+        plt.bar(overhead_df["label"], overhead_df["avg_latency"], color='salmon')
+        plt.title("Average Latency per Experiment and Client Count")
+        plt.ylabel("Latency")
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        lat_plot_path = os.path.join(exp_path, "avg_latency_barplot.png")
+        plt.savefig(lat_plot_path)
+        print(f"Latency bar plot saved as '{lat_plot_path}'")
 
 if __name__ == "__main__":
     main()
