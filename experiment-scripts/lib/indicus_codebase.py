@@ -384,7 +384,7 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --scan_as_point_parallel=%s' % (str(config['scan_as_point_parallel']).lower())
                 client_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
 
-        elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql':
+        elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql' or config['benchmark_name'] == 'tpcc-lift-sql':
             client_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
             client_command += ' --tpcc_w_id %d' % (client_id % config['tpcc_num_warehouses'] + 1)
             client_command += ' --tpcc_C_c_id %d' % config['tpcc_c_c_id']
@@ -767,7 +767,7 @@ class IndicusCodebase(ExperimentCodebase):
             replica_command += ' --value_size %d' % config['value_size']
             replica_command += ' --value_categories %d' % config['value_categories']  
             replica_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
-        elif config['benchmark_name'] == 'tpcc-sql':
+        elif config['benchmark_name'] == 'tpcc-sql' or config['benchmark_name'] == 'tpcc-lift-sql':
              replica_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
         
         if 'partitioner' in config:

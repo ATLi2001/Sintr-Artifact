@@ -31,6 +31,7 @@
 #include "store/common/policy/policy_id.h"
 #include "store/benchmark/async/tpcc/tpcc-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_schema.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_schema.h"
 #include "store/benchmark/async/rw-sql/rw-sql_common.h"
 #include "store/common/table_kv_encoder.h"
 #include "lib/message.h"
@@ -107,6 +108,36 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
       }
 
       return PolicyIdString(w_id);
+    };
+  } else if(policy_function_name == "tpcc_lift_payment_stock") {
+        return [](const std::string &key, const std::string &value) -> std::string {
+      Debug("GetPolicyIdFunction: key %s", key.c_str());
+      std::string table_name;
+      std::vector<std::string> primary_key_column_values;
+      DecodeTableRow(key, table_name, primary_key_column_values);
+      if (
+        table_name == tpcc_lift_sql::WAREHOUSE_TABLE ||
+        table_name == tpcc_lift_sql::DISTRICT_TABLE ||
+        table_name == tpcc_lift_sql::CUSTOMER_TABLE ||
+        table_name == tpcc_lift_sql::HISTORY_TABLE
+      ) {
+        return PolicyIdString(0);
+      }
+      else if (
+        table_name == tpcc_lift_sql::STOCK_TABLE || 
+        table_name == tpcc_lift_sql::NEW_ORDER_TABLE ||
+        table_name == tpcc_lift_sql::ORDER_TABLE ||
+        table_name == tpcc_lift_sql::ORDER_LINE_TABLE ||
+        table_name == tpcc_lift_sql::EARLIEST_NEW_ORDER_TABLE ||
+        table_name == tpcc_lift_sql::ITEM_TABLE ||
+        table_name == tpcc_lift_sql::LATEST_ORDER_TABLE) {
+        return PolicyIdString(1);
+      }
+      else {
+        Panic("Unknown table name %s", table_name.c_str());
+      }
+      // should never trigger
+      return "";
     };
   }
   else {
