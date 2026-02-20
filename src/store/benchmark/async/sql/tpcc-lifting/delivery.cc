@@ -69,6 +69,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   client.Begin(timeout, txnState);
   for(int i = 0; i < 10; i++){
+  d_id = i+1; // district ID should go from 1 to 10
   
   // (1) Retrieve the row from NEW-ORDER with the lowest order id
   //     If none is found, skip delivery of an order for this district. 
@@ -181,7 +182,6 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
   client.Write(statement, timeout);
   total_amts.push_back(total_amount);
   customer_amts.push_back((-c_row.get_balance()) + c_row.get_credit_lim());
-  d_id++;
   }
 
   client.Wait(results);
