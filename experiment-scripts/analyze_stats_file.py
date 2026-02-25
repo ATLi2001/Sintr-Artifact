@@ -298,9 +298,14 @@ def create_lat_tput_plots(df, output_dir, now_string):
     ax.grid(True)
 
     # order = [
-    #     "Sintr-policy1", "Sintr-policy2", "Pesto",
-    #     "Peloton-HS-policy1", "Peloton-HS-policy2", "Peloton-HS",
-    #     "Peloton-Smart-policy1", "Peloton-Smart-policy2", "Peloton-Smart",
+    #     "Sintr-Policy1", "Sintr-Policy2", "Pesto",
+    #     "Peloton-HS-Sintr-Policy1", "Peloton-HS-Sintr-Policy2", "Peloton-HS",
+    #     "Peloton-Smart-Sintr-Policy1", "Peloton-Smart-Sintr-Policy2", "Peloton-Smart",
+    # ]
+    # order = [
+    #     "Sintr-Policy1", "Sintr-Policy2", "Basil",
+    #     "Tx-HS-Sintr-Policy1", "Tx-HS-Sintr-Policy2", "Tx-HS",
+    #     "Tx-Smart-Sintr-Policy1", "Tx-Smart-Sintr-Policy2", "Tx-Smart",
     # ]
     # df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
     # color_order = [
@@ -323,6 +328,9 @@ def create_lat_tput_plots(df, output_dir, now_string):
     # seats
     # ax.set_ylim(bottom=0, top=50)
     # ax.set_yticks(np.arange(0, 51, 10))
+    # smallbank
+    # ax.set_ylim(bottom=0, top=35)
+    # ax.set_yticks(np.arange(0, 36, 5))
 
     # ax.set_xlim(left=0)
 
