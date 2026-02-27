@@ -39,12 +39,14 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       bool validateProofs, bool signClientProposals, KeyManager *keyManager, const std::string &bftsmart_config_path,
       SintrParameters sintr_params, transport::Configuration *clients_config, ClientSelector *valClientSelector,
       bool order_commit, bool validate_abort,
-      TrueTime timeserver, const std::vector<std::string> &keys) : config(config), nshards(nShards),
+      TrueTime timeserver, const std::vector<std::string> &keys,
+      bool execTxnServerSide) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
     signMessages(signMessages), sintr_params(sintr_params), clients_config(clients_config),valClientSelector(valClientSelector),
     validateProofs(validateProofs), signClientProposals(signClientProposals), keyManager(keyManager),
     order_commit(order_commit), validate_abort(validate_abort),
-    timeServer(timeserver), bftsmart_config_path(bftsmart_config_path), keys(keys) {
+    timeServer(timeserver), bftsmart_config_path(bftsmart_config_path), keys(keys),
+    execTxnServerSide(execTxnServerSide) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -101,6 +103,21 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
 
     client_seq_num++;
     currentTxn = proto::Transaction();
+
+    // Server-side execution mode: if a txnState was provided, send a
+    // TxnExecRequest now and skip all Get/Put/normal-Commit processing.
+    if (execTxnServerSide && !txnState.empty()) {
+      uint64_t seq = static_cast<uint64_t>(client_seq_num);
+      // Use shard 0 to carry the ordered request (single-shard broadcast).
+      bclient[0]->SendTxnExecRequest(
+          txnState, client_id, seq,
+          std::bind(&Client::HandleTxnExecReply, this, seq, std::placeholders::_1),
+          timeout);
+      // Unblock SyncClient::Begin immediately.
+      bcb(client_seq_num);
+      return;
+    }
+
     TxnState protoTxnState;
     PolicyClient *policyClient = nullptr;
     if (sintr_params.clientEstimatePolicy) {
@@ -123,6 +140,12 @@ void Client::Get(const std::string &key, get_callback gcb,
     get_timeout_callback gtcb, uint32_t timeout) {
   transport->Timer(0, [this, key, gcb, gtcb, timeout]() {
     Debug("GET [%s]", key.c_str());
+
+    // In server-side exec mode the server handles all reads; just fire callback.
+    if (execTxnServerSide) {
+      gcb(REPLY_OK, key, "", Timestamp());
+      return;
+    }
 
     // Contact the appropriate shard to get the value.
     std::vector<int> txnGroups;
@@ -163,6 +186,11 @@ void Client::Get(const std::string &key, get_callback gcb,
 void Client::Put(const std::string &key, const std::string &value,
     put_callback pcb, put_timeout_callback ptcb, uint32_t timeout) {
   transport->Timer(0, [this, key, value, pcb, ptcb, timeout]() {
+    // In server-side exec mode the server handles all writes; just fire callback.
+    if (execTxnServerSide) {
+      pcb(REPLY_OK, key, value);
+      return;
+    }
     // Contact the appropriate shard to set the value.
     std::vector<int> txnGroups;
     int i = (*part)(key, nshards, -1, txnGroups) % ngroups;
@@ -186,6 +214,23 @@ void Client::Put(const std::string &key, const std::string &value,
 void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     uint32_t timeout) {
   transport->Timer(0, [this, ccb, ctcb, timeout]() {
+    // In server-side exec mode: the TxnExecRequest was already sent during
+    // Begin().  Store the commit callback keyed by seq_num so that multiple
+    // open-loop transactions in flight do not stomp on each other.
+    if (execTxnServerSide) {
+      uint64_t seq = static_cast<uint64_t>(client_seq_num);
+      auto it = pending_exec_results.find(seq);
+      if (it != pending_exec_results.end()) {
+        // Reply already arrived before Commit() was called.
+        transaction_status_t s = it->second;
+        pending_exec_results.erase(it);
+        ccb(s);
+      } else {
+        // Reply not yet here — save the callback; HandleTxnExecReply fires it.
+        pending_exec_ccbs[seq] = ccb;
+      }
+      return;
+    }
     std::string digest = TransactionDigest(currentTxn);
     auto current_seq_num = client_seq_num;
     if(!sintr_params.ignorePolicyUpdate) {
@@ -560,6 +605,22 @@ void Client::handlePolicyUpdateOnKey(const std::string &key) {
       Debug("handle policy update for policy id %s in write", policyId.c_str());
       c2client->HandlePolicyUpdate(policy);
     }
+  }
+}
+
+void Client::HandleTxnExecReply(uint64_t seq_num, transaction_status_t status) {
+  Debug("Client::HandleTxnExecReply seq_num=%lu status=%d",
+        seq_num, static_cast<int>(status));
+  auto ccb_it = pending_exec_ccbs.find(seq_num);
+  if (ccb_it != pending_exec_ccbs.end()) {
+    // Commit() already registered its callback — fire it now.
+    UW_ASSERT(ccb_it->second != nullptr);
+    commit_callback ccb = std::move(ccb_it->second);
+    pending_exec_ccbs.erase(ccb_it);
+    ccb(status);
+  } else {
+    // Commit() hasn't been called yet — stash the result for it to pick up.
+    pending_exec_results[seq_num] = status;
   }
 }
 

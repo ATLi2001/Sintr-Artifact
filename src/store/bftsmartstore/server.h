@@ -52,6 +52,11 @@
 #include "store/common/partitioner.h"
 #include "store/common/truetime.h"
 #include "lib/transport.h"
+#include "store/common/frontend/client.h"
+
+// Forward-declared to avoid circular includes (serverclient.h includes server.h)
+namespace bftsmartstore { class ServerClient; }
+class SyncClient;
 
 namespace bftsmartstore {
 
@@ -60,6 +65,7 @@ public:
   Server(const transport::Configuration& config, KeyManager *keyManager, int groupIdx, int idx, int numShards,
     int numGroups, bool signMessages, bool validateProofs, SintrParameters sintr_params, uint64_t timeDelta,
     Partitioner *part, Transport* tp, bool order_commit = false, bool validate_abort = false,
+    bool execTxnServerSide = false,
     TrueTime timeServer = TrueTime(0, 0));
   ~Server();
 
@@ -73,6 +79,20 @@ public:
 
   Stats* mutableStats();
 
+  // Public wrappers for ServerClient to call directly (bypasses network)
+  // Read a key at the given timestamp; invokes gcb with the result synchronously
+  void DirectRead(const std::string &key, const Timestamp &ts, uint64_t req_id,
+      std::function<void(int, const std::string&, const std::string&, const Timestamp&)> gcb);
+
+  // Execute a transaction directly; returns COMMITTED or ABORTED_SYSTEM
+  transaction_status_t DirectCommit(const proto::Transaction &txn);
+
+  // Execute a TxnExecRequest by running the embedded transaction server-side
+  // via ServerClient + SyncClient + ValidationParseClient.  Returns a
+  // heap-allocated TxnExecReply (caller takes ownership).
+  std::vector<::google::protobuf::Message*> ExecuteTxnServerSide(
+      const proto::TxnExecRequest &req);
+
 private:
   Transport* tp;
   Stats stats;
@@ -85,6 +105,7 @@ private:
   int numGroups;
   bool signMessages;
   bool validateProofs;
+  bool execTxnServerSide;
   uint64_t timeDelta;
   Partitioner *part;
   TrueTime timeServer;
@@ -163,6 +184,13 @@ private:
   void ExtractPolicy(const proto::Transaction &txn, PolicyClient &policyClient);
   bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, uint64_t client_id, const std::string &txnDigest);
   bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
+
+  // Server-side transaction execution via ServerClient + SyncClient.
+  // Lazily allocated on first TxnExecRequest.
+  ServerClient *serverClientForExec{nullptr};
+  SyncClient   *syncClientForExec{nullptr};
+  // next client_id for server-side executions (monotonically increasing)
+  uint64_t serverExecClientIdCounter{0};
 };
 
 }
