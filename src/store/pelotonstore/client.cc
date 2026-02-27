@@ -42,11 +42,13 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       bool validateProofs, bool signClientProposals, KeyManager *keyManager, SintrParameters sintr_params,
       TrueTime timeserver,transport::Configuration *clients_config, ClientSelector *valClientSelector,
       bool fake_SMR, uint64_t SMR_mode, const std::string &PG_BFTSMART_config_path,
-      const std::vector<std::string> &keys) : config(config), nshards(nShards),
+      const std::vector<std::string> &keys,
+      bool execTxnServerSide) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
     signMessages(signMessages), validateProofs(validateProofs), signClientProposals(signClientProposals), keyManager(keyManager), timeServer(timeserver),
     sintr_params(sintr_params), fake_SMR(fake_SMR), SMR_mode(SMR_mode), PG_BFTSMART_config_path(PG_BFTSMART_config_path), txn_msg(nullptr),
-    clients_config(clients_config), valClientSelector(valClientSelector), rand(id), keys(keys) {
+    clients_config(clients_config), valClientSelector(valClientSelector), rand(id), keys(keys),
+    execTxnServerSide(execTxnServerSide) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -111,6 +113,19 @@ void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t tim
       delete txn_msg;
     }
     txn_msg = new TransactionMessage();
+
+    // Server-side execution mode: if a txnState was provided, send a
+    // TxnExecRequest now and skip all Query/Write/normal-Commit processing.
+    if (execTxnServerSide && !txnState.empty()) {
+      uint64_t seq = static_cast<uint64_t>(client_seq_num);
+      bclient[0]->SendTxnExecRequest(
+          txnState, client_id, seq,
+          std::bind(&Client::HandleTxnExecReply, this, seq, std::placeholders::_1),
+          timeout);
+      bcb(client_seq_num);
+      return;
+    }
+
     TxnState protoTxnState;
     PolicyClient *policyClient = nullptr;
     if (sintr_params.clientEstimatePolicy) {
@@ -143,6 +158,24 @@ void Client::Put(const std::string &key, const std::string &value, put_callback 
 void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t timeout) {
 
   transport->Timer(0, [this, ccb, ctcb, timeout]() {
+    // In server-side exec mode: the TxnExecRequest was already sent during
+    // Begin().  Store the commit callback keyed by seq_num so that multiple
+    // open-loop transactions in flight do not stomp on each other.
+    if (execTxnServerSide) {
+      uint64_t seq = static_cast<uint64_t>(client_seq_num);
+      auto it = pending_exec_results.find(seq);
+      if (it != pending_exec_results.end()) {
+        // Reply already arrived before Commit() was called.
+        transaction_status_t s = it->second;
+        pending_exec_results.erase(it);
+        ccb(s);
+      } else {
+        // Reply not yet here — save the callback; HandleTxnExecReply fires it.
+        pending_exec_ccbs[seq] = ccb;
+      }
+      return;
+    }
+
     try_commit_callback tccb = [ccb, this](int status) {
   
       if(status == REPLY_OK) {
@@ -264,12 +297,24 @@ void Client::SQLRequest(std::string &statement, sql_callback scb, sql_timeout_ca
 
 void Client::Query(const std::string &query, query_callback qcb, query_timeout_callback qtcb, uint32_t timeout,bool cache_result, bool skip_query_interpretation) {
     Debug("Processing Query Statement: %s", query.c_str());
+    // In server-side exec mode the server handles all queries; just fire callback.
+    if (execTxnServerSide) {
+      query_result::QueryResult* query_res = new sql::QueryResultProtoWrapper();
+      qcb(REPLY_OK, query_res);
+      return;
+    }
     this->SQLRequest(const_cast<std::string &>(query), qcb, qtcb, timeout);
 }
 
 
 void Client::Write(std::string &write_statement, write_callback wcb, write_timeout_callback wtcb, uint32_t timeout, bool blind_write){
     Debug("Processing Write Statement: %s", write_statement.c_str());
+    // In server-side exec mode the server handles all writes; just fire callback.
+    if (execTxnServerSide) {
+      query_result::QueryResult* query_res = new sql::QueryResultProtoWrapper();
+      wcb(REPLY_OK, query_res);
+      return;
+    }
     this->SQLRequest(write_statement, wcb, wtcb, timeout);
 }
 
@@ -309,6 +354,22 @@ void Client::handlePolicyUpdateOnKey(const std::string &key) {
       Debug("handle policy update for policy id %s in write", policyId.c_str());
       c2client->HandlePolicyUpdate(policy);
     }
+  }
+}
+
+void Client::HandleTxnExecReply(uint64_t seq_num, transaction_status_t status) {
+  Debug("Client::HandleTxnExecReply seq_num=%lu status=%d",
+        seq_num, static_cast<int>(status));
+  auto ccb_it = pending_exec_ccbs.find(seq_num);
+  if (ccb_it != pending_exec_ccbs.end()) {
+    // Commit() already registered its callback — fire it now.
+    UW_ASSERT(ccb_it->second != nullptr);
+    commit_callback ccb = std::move(ccb_it->second);
+    pending_exec_ccbs.erase(ccb_it);
+    ccb(status);
+  } else {
+    // Commit() hasn't been called yet — stash the result for it to pick up.
+    pending_exec_results[seq_num] = status;
   }
 }
 

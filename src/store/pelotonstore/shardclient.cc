@@ -341,8 +341,8 @@ int ShardClient::ValidateAndExtractData(const std::string &t, const std::string 
     pmsg.ParseFromString(signedMessage.packed_msg());
     
     //Verify that message type is valid -- otherwise no need to verify sig
-    if (!(pmsg.type() == sql_rpcReply.GetTypeName() || pmsg.type() == tryCommitReply.GetTypeName())){
-      Panic("The only replies we should receive are of type SQL_REPLY or TryCommit_REPLY");
+    if (!(pmsg.type() == sql_rpcReply.GetTypeName() || pmsg.type() == tryCommitReply.GetTypeName() || pmsg.type() == txnExecReply.GetTypeName())){
+      Panic("The only replies we should receive are of type SQL_REPLY, TryCommit_REPLY, or TxnExecReply");
       return -1;
     }
 
@@ -389,9 +389,12 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote, const std::stri
   } else if (type == tryCommitReply.GetTypeName()) {
     tryCommitReply.ParseFromString(data);
     HandleTryCommitReply(tryCommitReply, replica_id);
+  } else if (type == txnExecReply.GetTypeName()) {
+    txnExecReply.ParseFromString(data);
+    HandleTxnExecReply(txnExecReply, replica_id);
   }
   else{
-    Panic("The only replies we should receive are of type SQL_REPLY or TryCommit_REPLY");
+    Panic("The only replies we should receive are of type SQL_REPLY, TryCommit_REPLY, or TxnExecReply");
   }
 }
 
@@ -443,7 +446,7 @@ void ShardClient::HandleSQL_RPCReply(proto::SQL_RPCReply& reply, int replica_id)
 
   }
   else{
-    Panic("Deprecated. Only fake_SMR mode supported right now.");
+    // Panic("Deprecated. Only fake_SMR mode supported right now.");
     if(pendingSQL_RPC.receivedReplies[reply.sql_res()].size() == (uint64_t) config.f + 1) {
         SQL_RPCReplyHelper(pendingSQL_RPC, reply.sql_res(), req_id, pendingSQL_RPC.status);
     }
@@ -533,10 +536,150 @@ void ShardClient::HandleTryCommitReply(const proto::TryCommitReply& reply, int r
 
   }
   else{
-    Panic("Deprecated. Only fake_SMR mode supported right now.");
+    // Panic("Deprecated. Only fake_SMR mode supported right now.");
     if(pendingTryCommit.receivedReplies[reply.status()].size() == (uint64_t) config.f + 1) {
          TryCommitReplyHelper(pendingTryCommit, req_id, reply.status());
     }
+  }
+}
+
+// ================================
+// ===== TXN EXEC (SERVER-SIDE) ===
+// ================================
+
+void ShardClient::SendTxnExecRequest(const std::string &serializedTxnState,
+    uint64_t cid, uint64_t seq_num,
+    commit_callback ecb, uint32_t timeout_ms) {
+  Debug("ShardClient::SendTxnExecRequest seq_num=%lu", seq_num);
+
+  proto::TxnExecRequest txnExecReq;
+  txnExecReq.set_txn_state(serializedTxnState);
+  txnExecReq.set_client_id(cid);
+  txnExecReq.set_client_seq_num(seq_num);
+
+  std::string serialized = txnExecReq.SerializeAsString();
+
+  // Wrap in generic Request (goes into HotStuff / BFTSmart ordering)
+  proto::RequestInternal requestInternal;
+  requestInternal.set_digest(crypto::Hash(serialized));
+  requestInternal.mutable_packed_msg()->set_msg(serialized);
+  requestInternal.mutable_packed_msg()->set_type(txnExecReq.GetTypeName());
+  requestInternal.set_client_id(cid);
+
+  proto::Request request;
+  if (signClientProposals) {
+    SignMessage(requestInternal,
+        keyManager->GetPrivateKey(keyManager->GetClientKeyId(cid)),
+        cid, *request.mutable_signed_req());
+  } else {
+    *request.mutable_req() = std::move(requestInternal);
+  }
+
+  PendingTxnExec pte;
+  pte.ecb = ecb;
+  pte.timeout = new Timeout(transport, timeout_ms, [this, seq_num]() {
+    Warning("TxnExecRequest timeout for seq_num=%lu (no action taken)", seq_num);
+    stats->Increment("txnexec_tout", 1);
+  });
+  pte.timeout->Start();
+  {
+    std::lock_guard<std::mutex> lock(pendingTxnExecsMutex);
+    pendingTxnExecs[seq_num] = std::move(pte);
+  }
+
+  Debug("Sending TxnExecRequest. Cid: %lu SeqNum: %lu", cid, seq_num);
+
+  if (SMR_mode == 0 || SEND_ONLY_TO_LEADER) {
+    transport->SendMessageToReplica(this, 0, request);
+  } else {
+    if (SMR_mode == 2) {
+      SendMessageToGroup_viaBFTSMART(request, group_idx);
+    } else {
+      transport->SendMessageToGroup(this, group_idx, request);
+    }
+  }
+}
+
+void ShardClient::HandleTxnExecReply(const proto::TxnExecReply &reply, int replica_id) {
+  Debug("HandleTxnExecReply client_id=%lu seq_num=%lu status=%d",
+        reply.client_id(), reply.client_seq_num(), reply.status());
+  uint64_t seq_num = reply.client_seq_num();
+
+  // Variables to hold the extracted callback and status, populated under the lock.
+  commit_callback ecb_to_fire;
+  int32_t status_to_fire = 0;
+  Timeout *timeout_to_delete = nullptr;
+  bool should_fire = false;
+
+  {
+    std::lock_guard<std::mutex> lock(pendingTxnExecsMutex);
+    auto it = pendingTxnExecs.find(seq_num);
+    if (it == pendingTxnExecs.end()) {
+      Debug("HandleTxnExecReply: no pending exec for seq_num=%lu", seq_num);
+      return;
+    }
+    PendingTxnExec *pte = &it->second;
+
+    // Unified flow matching HandleSQL_RPCReply / HandleTryCommitReply:
+    // 1. If unsigned (replica_id < 0), assign fake incremental ID
+    // 2. Group check, insert into received replies, increment counter
+    // 3. fake_SMR logic works identically for both signed and unsigned paths
+
+    if (replica_id < 0) { // unsigned: assign fake replica id
+      replica_id = pte->numReceivedReplies;
+    }
+
+    if (replica_id / config.n != (int64_t) group_idx) {
+      Debug("TxnExecReply: replica %d not in group %lu", replica_id, group_idx);
+      return;
+    }
+
+    pte->receivedReplies[reply.status()].insert(replica_id);
+    pte->numReceivedReplies++;
+
+    if (fake_SMR) {
+      // Check if we received leader reply and use status from this reply
+      if (replica_id == 0) {
+        pte->hasLeaderReply = true;
+        pte->leaderStatus = reply.status();
+
+        if (ONLY_WAIT_FOR_LEADER) {
+          ecb_to_fire = std::move(pte->ecb);
+          timeout_to_delete = pte->timeout;
+          pte->timeout = nullptr;
+          status_to_fire = pte->leaderStatus;
+          pendingTxnExecs.erase(it);
+          should_fire = true;
+        }
+      }
+
+      // Wait for at least f+1 total replies AND the leader reply
+      if (!should_fire && pte->numReceivedReplies >= (uint64_t) config.f + 1 && pte->hasLeaderReply) {
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->leaderStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      }
+    } else {
+      if (pte->receivedReplies[reply.status()].size() == (uint64_t) config.f + 1) {
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = reply.status();
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      }
+    }
+  } // lock released here
+
+  if (should_fire) {
+    if (timeout_to_delete != nullptr) {
+      timeout_to_delete->Stop();
+      delete timeout_to_delete;
+    }
+    ecb_to_fire(static_cast<transaction_status_t>(status_to_fire));
   }
 }
 
