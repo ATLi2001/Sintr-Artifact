@@ -368,6 +368,8 @@ class IndicusCodebase(ExperimentCodebase):
             if config['benchmark_name'] == 'rw-sql':
                 client_command += ' --rw_read_only_rate %d' % config['rw_read_only_rate']
                 client_command += ' --rw_secondary_condition=%s' % (str(config['rw_secondary_condition']).lower())
+                if 'rw_sql_sim_delay' in config:
+                    client_command += " --rw_sql_sim_delay %d" % config['rw_sql_sim_delay']
 
                 client_command += ' --num_tables %d' % config['num_tables']
                 client_command += ' --num_keys_per_table %d' % config['num_keys_per_table']
@@ -410,6 +412,9 @@ class IndicusCodebase(ExperimentCodebase):
         elif config['benchmark_name'] == 'seats-sql' or config['benchmark_name'] == 'auctionmark-sql':
             client_command += ' --benchbase_scale_factor %d ' % config['scale_factor']
 
+        if "bftsmart_exec_txn_server_side" in config:
+            #TODO: Only works for txbftsmart and pelotonsmart for now
+            client_command += ' --bftsmart_exec_txn_server_side=%s' % (str(config['bftsmart_exec_txn_server_side']).lower())
     
 
         if 'client_wrap_command' in config and len(config['client_wrap_command']) > 0:
@@ -767,12 +772,16 @@ class IndicusCodebase(ExperimentCodebase):
             replica_command += ' --value_size %d' % config['value_size']
             replica_command += ' --value_categories %d' % config['value_categories']  
             replica_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
+            if 'rw_sql_sim_delay' in config:
+                replica_command += " --rw_sql_sim_delay %d" % config['rw_sql_sim_delay']
         elif config['benchmark_name'] == 'tpcc-sql' or config['benchmark_name'] == 'tpcc-lift-sql':
              replica_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
         
         if 'partitioner' in config:
             replica_command += ' --partitioner %s' % config['partitioner']
 
+        if 'bftsmart_exec_txn_server_side' in config:
+            replica_command += ' --bftsmart_exec_txn_server_side=%s' % (str(config['bftsmart_exec_txn_server_side']).lower())
 
 
         if 'server_wrap_command' in config and len(config['server_wrap_command']) > 0:
