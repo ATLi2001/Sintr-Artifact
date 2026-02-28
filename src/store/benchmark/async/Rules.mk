@@ -19,4 +19,8 @@ OBJS-all-bench-clients := $(LIB-retwis) $(LIB-tpcc) $(LIB-sync-tpcc) $(LIB-async
 
 $(d)benchmark: $(LIB-key-selector) $(LIB-bench-client) $(LIB-latency) $(LIB-tcptransport) $(LIB-udptransport) $(OBJS-all-store-clients) $(OBJS-all-bench-clients) $(LIB-bench-client) $(LIB-store-common)
 
+# Add validation libs + sintring to store/server from here, where all sub-Rules.mk
+# are already loaded so OBJS-all-bench-clients and LIB-common-sintring are fully defined.
+store/server: $(OBJS-all-bench-clients) $(o)bench_client.o $(o)async_transaction_bench_client.o $(o)sync_transaction_bench_client.o $(LIB-common-sintring) $(LIB-store-frontend)
+
 BINS += $(d)benchmark

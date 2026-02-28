@@ -47,6 +47,10 @@ typedef std::function<void()> commit_timeout_callback;
 typedef std::function<void()> abort_callback;
 typedef std::function<void()> abort_timeout_callback;
 
+// Callback / timeout for server-side transaction execution (BFTSmart only).
+typedef std::function<void(transaction_status_t)> txn_exec_callback;
+typedef std::function<void()> txn_exec_timeout_callback;
+
 typedef std::function<void(int, query_result::QueryResult*)> sql_callback; 
 typedef std::function<void(int)> sql_timeout_callback;
 

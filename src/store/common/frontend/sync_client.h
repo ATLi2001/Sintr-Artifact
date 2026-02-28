@@ -101,6 +101,10 @@ class SyncClient {
 
   void LiftTransaction(std::vector<std::string> &lift_keys);
   const std::map<std::string, std::string> &GetReadset();
+
+  // Expose the underlying raw Client* for callers that need to issue async
+  // (callback-based) Begin/Commit calls directly (e.g. open-loop bench client).
+  Client *GetRawClient() const { return client; }
   
  private:
   void GetCallback(Promise *promise, int status, const std::string &key, const std::string &value,

@@ -35,6 +35,7 @@ class ValidationTransaction {
   virtual ~ValidationTransaction() { }
 
   virtual transaction_status_t Validate(::SyncClient &client) = 0;
+  inline virtual transaction_status_t Validate(::SyncClient &client, uint32_t simDelay) {Panic("Not implemented yet for non rw-sql workloads");};
 
  protected:
   const uint32_t timeout;
