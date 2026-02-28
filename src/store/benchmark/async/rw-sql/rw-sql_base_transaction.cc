@@ -29,6 +29,7 @@
 #include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
 
 #include <fmt/core.h>
+#include <thread>
 
 namespace rwsql {
 
@@ -118,7 +119,7 @@ RWSQLBaseTransaction::~RWSQLBaseTransaction() {
 }
 
 //WARNING: CURRENTLY DO NOT SUPPORT READ YOUR OWN WRITES
-transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys) {
+transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide, uint32_t simulatedComputationDelay) {
   //Note: Semantic CC cannot help this Transaction avoid aborts. Since it does value++, all TXs that touch value must be totally ordered.
 
   Debug("Start next Transaction");
@@ -129,6 +130,9 @@ transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint3
   }
 
   client.Begin(timeout, txnState);
+  if(execTxnServerSide) {
+    return client.Commit(timeout);
+  }
 
   //Execute #liveOps queries
   for(int i=0; i < liveOps; ++i){
@@ -146,10 +150,10 @@ transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint3
     auto &secondary_val = secondary_values[i];
 
     if(scanAsPoint){
-      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val);
+      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val, simulatedComputationDelay);
     }
     else{
-      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val);
+      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val, simulatedComputationDelay);
     }
     //TODO: Re-factor into Submit/Get logic so its naturally parallelizable between queries?
 
@@ -260,7 +264,7 @@ std::pair<uint64_t, std::string> RWSQLBaseTransaction::GenerateSecondaryConditio
 
 void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t timeout,
   const std::string &table_name, int &left_bound, int &right_bound,
-  const std::pair<uint64_t, std::string> &cond_pair){
+  const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay){
 
   std::string statement;
 
@@ -288,7 +292,26 @@ void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t tim
   }
 
   std::unique_ptr<const query_result::QueryResult> queryResult;
-  client.Query(statement, queryResult, timeout);
+  std::vector<std::unique_ptr<const query_result::QueryResult>> results;
+
+  // assume if point parallel is true we scan in parallel as well
+  if(execPointScanParallel) {
+    client.Query(statement, timeout);
+    // do some "fake" computation here (async)
+    if(simulatedComputationDelay > 0) {
+      Debug("Waiting for %lu ms", simulatedComputationDelay);
+      std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+    }
+    client.Wait(results);
+    UW_ASSERT(results.size() == 1 && results[0]);
+    queryResult = std::move(results[0]);
+  } else {
+    client.Query(statement, queryResult, timeout);
+    if(simulatedComputationDelay > 0) {
+      Debug("Waiting for %lu ms", simulatedComputationDelay);
+      std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+    }
+  }
 
   Debug("Query: %s found %d rows", statement.c_str(), queryResult->size());
 
@@ -306,7 +329,7 @@ void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t tim
 //////////////////////////////// Point handling
 void RWSQLBaseTransaction::ExecutePointStatements(SyncClient &client, uint32_t timeout, 
   const std::string &table_name, int &left_bound, int &right_bound,
-  const std::pair<uint64_t, std::string> &cond_pair){
+  const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay){
 
   // auto cond_pair = GenerateSecondaryCondition();
 
@@ -326,9 +349,17 @@ void RWSQLBaseTransaction::ExecutePointStatements(SyncClient &client, uint32_t t
 
     if(execPointScanParallel){
       client.Query(statement, timeout);
+      if(simulatedComputationDelay > 0) {
+        Debug("Waiting for %lu ms", simulatedComputationDelay);
+        std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+      }
     }
     else{
       client.Query(statement, queryResult, timeout);
+      if(simulatedComputationDelay > 0) {
+        Debug("Waiting for %lu ms", simulatedComputationDelay);
+        std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+      }
       Debug("Finished Query: %s. Result size? %d", statement.c_str(), queryResult->size());
       ProcessPointResult(client, timeout, table_name, idx, queryResult, cond_pair);
     }

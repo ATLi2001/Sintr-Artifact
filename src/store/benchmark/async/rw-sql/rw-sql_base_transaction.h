@@ -58,7 +58,7 @@ class RWSQLBaseTransaction {
     return keyIdxs;
   }
  protected:
-  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys);
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide = false, uint32_t simulatedComputationDelay = 0);
   void SerializeTxnState(std::string &txnState);
 
   std::string GenerateStatement(const std::string &table_name, int &left_bound, int &right_bound);
@@ -69,9 +69,9 @@ class RWSQLBaseTransaction {
 
   std::pair<uint64_t, std::string> GenerateSecondaryCondition();
   void ExecuteScanStatement(SyncClient &client, uint32_t timeout, const std::string &table_name, int &left_bound, int &right_bound,
-    const std::pair<uint64_t, std::string> &cond_pair);
+    const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay = 0);
   void ExecutePointStatements(SyncClient &client, uint32_t timeout, const std::string &table_name, int &left_bound, int &right_bound,
-    const std::pair<uint64_t, std::string> &cond_pair);
+    const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay = 0);
   void ProcessPointResult(SyncClient &client, uint32_t timeout, const std::string &table_name, const int &key, std::unique_ptr<const query_result::QueryResult> &queryResult, const std::pair<uint64_t, std::string> &cond_pair);
   void Update(SyncClient &client, uint32_t timeout, const std::string &table_name, const int &key, std::unique_ptr<const query_result::QueryResult> &queryResult, uint64_t row);
   

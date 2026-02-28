@@ -41,7 +41,8 @@ namespace rwsql {
 class RWSQLTransaction : public SyncTransaction, public RWSQLBaseTransaction { //AsyncTransaction
  public:
   RWSQLTransaction(QuerySelector *querySelector, uint64_t &numOps, std::mt19937 &rand, bool readSecondaryCondition, bool fixedRange, 
-                   int32_t value_size, uint64_t value_categories, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false);
+                   int32_t value_size, uint64_t value_categories, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false,
+                  bool execTxnServerSide = false, uint32_t simulatedComputationDelay = 0);
   virtual ~RWSQLTransaction();
 
   transaction_status_t Execute(SyncClient &client);
@@ -50,6 +51,8 @@ class RWSQLTransaction : public SyncTransaction, public RWSQLBaseTransaction { /
   
  private:
   size_t liveOps;
+  bool execTxnServerSide = false;
+  uint32_t simulatedComputationDelay = 0;
   
   std::vector<std::string> statements; //keep statements in scope to allow for parallel Writes
 

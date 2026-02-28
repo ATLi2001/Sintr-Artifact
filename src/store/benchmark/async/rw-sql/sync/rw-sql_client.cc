@@ -48,7 +48,7 @@ RWSQLClient::RWSQLClient(uint64_t numOps, QuerySelector *querySelector, bool rea
       int warmupSec, int cooldownSec, int tputInterval, 
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, 
       const uint32_t timeout,
-      const std::string &govTxnConfigPath,
+      const std::string &govTxnConfigPath, bool execTxnServerSide, uint32_t simulatedComputationDelay,
       const std::string &latencyFilename)
      : SyncTransactionBenchClient(client, transport, id, numRequests,
                                  expDuration, delay, warmupSec, cooldownSec,
@@ -56,7 +56,7 @@ RWSQLClient::RWSQLClient(uint64_t numOps, QuerySelector *querySelector, bool rea
                                  latencyFilename, govTxnConfigPath),
         readOnly(readOnly), readOnlyRate(readOnlyRate), querySelector(querySelector), numOps(numOps),
         readSecondaryCondition(readSecondaryCondition), fixedRange(fixedRange), value_size(value_size), value_categories(value_categories), 
-        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel) {
+        scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel), execTxnServerSide(execTxnServerSide), simulatedComputationDelay(simulatedComputationDelay) {
 
     if(readOnly) readOnlyRate = 100;
 }
@@ -81,7 +81,8 @@ SyncTransaction *RWSQLClient::GetNextTransaction() {
   // Switch depending on read only percentage.
   int ttype = GetRand()() % 100;
   RWSQLTransaction *rw_tx = new RWSQLTransaction(querySelector, numOps, GetRand(), readSecondaryCondition, fixedRange,
-                                                 value_size, value_categories, ttype < readOnlyRate, scanAsPoint, execPointScanParallel);
+                                                 value_size, value_categories, ttype < readOnlyRate, scanAsPoint, execPointScanParallel, execTxnServerSide, 
+                                                 simulatedComputationDelay);
  
   return rw_tx;
 }
