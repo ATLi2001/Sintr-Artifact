@@ -42,7 +42,7 @@ Amalgamate::Amalgamate(const std::string &cust1, const std::string &cust2,
 
 Amalgamate::~Amalgamate() {}
 
-transaction_status_t Amalgamate::BaseExecute(SyncClient &client, bool serialize) {
+transaction_status_t Amalgamate::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
   proto::AccountRow accountRow1;
   proto::AccountRow accountRow2;
 
@@ -57,6 +57,9 @@ transaction_status_t Amalgamate::BaseExecute(SyncClient &client, bool serialize)
 
   client.Begin(timeout, txnState);
   Debug("Amalgamate for names %s %s", cust1.c_str(), cust2.c_str());
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
   if (!ReadAccountRow(client, cust1, accountRow1, timeout) ||
       !ReadAccountRow(client, cust2, accountRow2, timeout)) {
     client.Abort(timeout);

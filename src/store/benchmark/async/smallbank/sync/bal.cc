@@ -29,13 +29,13 @@
 
 namespace smallbank {
 
-SyncBal::SyncBal(const std::string &cust, const uint32_t timeout)
-    : SyncSmallbankTransaction(timeout), Bal(cust, timeout) {}
+SyncBal::SyncBal(const std::string &cust, const uint32_t timeout, bool bftsmart_exec_txn_server_side)
+    : SyncSmallbankTransaction(timeout, bftsmart_exec_txn_server_side), Bal(cust, timeout) {}
 
 SyncBal::~SyncBal() {}
 
 transaction_status_t SyncBal::Execute(SyncClient &client) {
-  return Bal::BaseExecute(client, true);
+  return Bal::BaseExecute(client, true, bftsmart_exec_txn_server_side);
 }
 
 }  // namespace smallbank

@@ -36,7 +36,7 @@ class TransactSaving : public SmallbankTransaction {
   TransactSaving(const std::string &cust, int32_t value, const uint32_t timeout);
   virtual ~TransactSaving();
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side = false);
 
   virtual void SerializeTxnState(std::string &txnState) override;
 

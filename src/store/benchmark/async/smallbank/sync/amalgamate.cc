@@ -31,14 +31,14 @@
 namespace smallbank {
 
 SyncAmalgamate::SyncAmalgamate(const std::string &cust1, const std::string &cust2,
-                       const uint32_t timeout)
-    : SyncSmallbankTransaction(timeout), Amalgamate(cust1, cust2, timeout)
+                       const uint32_t timeout, bool bftsmart_exec_txn_server_side)
+    : SyncSmallbankTransaction(timeout, bftsmart_exec_txn_server_side), Amalgamate(cust1, cust2, timeout)
     {}
 
 SyncAmalgamate::~SyncAmalgamate() {}
 
 transaction_status_t SyncAmalgamate::Execute(SyncClient &client) {
-  return Amalgamate::BaseExecute(client, true);
+  return Amalgamate::BaseExecute(client, true, bftsmart_exec_txn_server_side);
 }
 
 }  // namespace smallbank

@@ -61,7 +61,7 @@ SmallbankClient::SmallbankClient(
     const uint32_t deposit_checking_ratio, const uint32_t transact_saving_ratio,
     const uint32_t amalgamate_ratio, const uint32_t num_hotspot_keys,
     const uint32_t num_non_hotspot_keys, const double hotspot_probability,
-    const std::string &customer_name_file_path,
+    const std::string &customer_name_file_path, bool bftsmart_exec_txn_server_side,
     const std::string &latencyFilename)
     : SyncTransactionBenchClient(client, transport, id, numRequests,
                                  expDuration, delay, warmupSec, cooldownSec,
@@ -75,7 +75,8 @@ SmallbankClient::SmallbankClient(
       num_hotspot_keys_(num_hotspot_keys),  // first `num_hotpost_keys_` in
                                             // `all_keys_` is the hotspot
       num_non_hotspot_keys_(num_non_hotspot_keys),
-      hotspot_probability_(hotspot_probability) {
+      hotspot_probability_(hotspot_probability),
+      bftsmart_exec_txn_server_side_(bftsmart_exec_txn_server_side) {
   std::string str;
   std::ifstream file(customer_name_file_path);
   while (getline(file, str, ',')) {
@@ -101,30 +102,30 @@ SyncTransaction *SmallbankClient::GetNextTransaction() {
   if (ttype < balanceThreshold) {
     last_op_ = "balance";
     return new SyncBal(GetCustomerKey(),
-                   timeout_);
+                   timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < depositThreshold) {
     last_op_ = "deposit";
     return new SyncDepositChecking(
         GetCustomerKey(),
-        GetRand()() % 50 + 1, timeout_);
+        GetRand()() % 50 + 1, timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < transactThreshold) {
     last_op_ = "transact";
     return new SyncTransactSaving(
         GetCustomerKey(),
-        GetRand()() % 101 - 50, timeout_);
+        GetRand()() % 101 - 50, timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < amalgamateThreshold) {
     last_op_ = "amalgamate";
     std::pair<string, string> keyPair =
         GetCustomerKeyPair();
-    return new SyncAmalgamate(keyPair.first, keyPair.second, timeout_);
+    return new SyncAmalgamate(keyPair.first, keyPair.second, timeout_, bftsmart_exec_txn_server_side_);
   }
   last_op_ = "write_check";
   return new SyncWriteCheck(
       GetCustomerKey(),
-      GetRand()() % 50, timeout_);
+      GetRand()() % 50, timeout_, bftsmart_exec_txn_server_side_);
 }
 
 std::string SmallbankClient::GetLastOp() const { return last_op_; }

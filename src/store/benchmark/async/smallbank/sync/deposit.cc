@@ -30,13 +30,13 @@
 namespace smallbank {
 
 SyncDepositChecking::SyncDepositChecking(const std::string &cust, const int32_t value,
-                                 const uint32_t timeout)
-    : SyncSmallbankTransaction(timeout), DepositChecking(cust, value, timeout) {}
+                                 const uint32_t timeout, bool bftsmart_exec_txn_server_side)
+    : SyncSmallbankTransaction(timeout, bftsmart_exec_txn_server_side), DepositChecking(cust, value, timeout) {}
 
 SyncDepositChecking::~SyncDepositChecking() {}
 
 transaction_status_t SyncDepositChecking::Execute(SyncClient &client) {
-  return DepositChecking::BaseExecute(client, true);
+  return DepositChecking::BaseExecute(client, true, bftsmart_exec_txn_server_side);
 }
 
 }  // namespace smallbank

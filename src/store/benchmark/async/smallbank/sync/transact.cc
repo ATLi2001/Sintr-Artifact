@@ -29,13 +29,14 @@
 
 namespace smallbank {
 
-SyncTransactSaving::SyncTransactSaving(const std::string &cust, const int32_t value, const uint32_t timeout)
-    : SyncSmallbankTransaction(timeout), TransactSaving(cust, value, timeout) {}
+SyncTransactSaving::SyncTransactSaving(const std::string &cust, const int32_t value, const uint32_t timeout,
+        bool bftsmart_exec_txn_server_side)
+    : SyncSmallbankTransaction(timeout, bftsmart_exec_txn_server_side), TransactSaving(cust, value, timeout) {}
 
 SyncTransactSaving::~SyncTransactSaving() {
 }
 transaction_status_t SyncTransactSaving::Execute(SyncClient &client) {
-    return TransactSaving::BaseExecute(client, true);
+    return TransactSaving::BaseExecute(client, true, bftsmart_exec_txn_server_side);
 }
 
 } // namespace smallbank

@@ -38,7 +38,7 @@ class DepositChecking : public SmallbankTransaction {
 
   virtual ~DepositChecking();
 
-  transaction_status_t BaseExecute(SyncClient &client, bool serialize);
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side = false);
 
   virtual void SerializeTxnState(std::string &txnState) override;
 

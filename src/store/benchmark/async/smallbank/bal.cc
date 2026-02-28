@@ -38,7 +38,7 @@ Bal::Bal(const std::string &cust, const uint32_t timeout)
 
 Bal::~Bal() {}
 
-transaction_status_t Bal::BaseExecute(SyncClient &client, bool serialize) {
+transaction_status_t Bal::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
   proto::AccountRow accountRow;
   proto::SavingRow savingRow;
   proto::CheckingRow checkingRow;
@@ -50,6 +50,9 @@ transaction_status_t Bal::BaseExecute(SyncClient &client, bool serialize) {
 
   client.Begin(timeout, txnState);
   Debug("Balance for customer %s", cust.c_str());
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
   if (!ReadAccountRow(client, cust, accountRow, timeout) ||
       !ReadSavingRow(client, accountRow.customer_id(), savingRow, timeout) ||
       !ReadCheckingRow(client, accountRow.customer_id(), checkingRow,

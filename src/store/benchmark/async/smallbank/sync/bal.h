@@ -36,7 +36,7 @@ namespace smallbank {
 
 class SyncBal : public SyncSmallbankTransaction, public Bal {
  public:
-  SyncBal(const std::string &cust, const uint32_t timeout);
+  SyncBal(const std::string &cust, const uint32_t timeout, bool bftsmart_exec_txn_server_side);
 
   virtual ~SyncBal();
 

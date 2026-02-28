@@ -35,7 +35,7 @@ namespace smallbank {
 TransactSaving::TransactSaving(const std::string &cust, const int32_t value, const uint32_t timeout) : SmallbankTransaction(TRANSACT), cust(cust), value(value), timeout(timeout) {}
 TransactSaving::~TransactSaving() {
 }
-transaction_status_t TransactSaving::BaseExecute(SyncClient &client, bool serialize) {
+transaction_status_t TransactSaving::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
 	proto::SavingRow savingRow;
     proto::AccountRow accountRow;
 
@@ -46,6 +46,9 @@ transaction_status_t TransactSaving::BaseExecute(SyncClient &client, bool serial
 
     client.Begin(timeout, txnState);
     Debug("TransactSaving for name %s with val %d", cust.c_str(), value);
+    if(bftsmart_exec_txn_server_side) {
+        return client.Commit(timeout);
+    }
     if (!ReadAccountRow(client, cust, accountRow, timeout)) {
         client.Abort(timeout);
         Debug("Aborted TransactSaving (AccountRow)");

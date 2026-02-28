@@ -35,8 +35,10 @@ namespace smallbank {
 
 class SyncSmallbankTransaction : public ::SyncTransaction {
  public:
-  SyncSmallbankTransaction(uint32_t timeout);
+  SyncSmallbankTransaction(uint32_t timeout, bool bftsmart_exec_txn_server_side);
   virtual ~SyncSmallbankTransaction();
+  protected: 
+    bool bftsmart_exec_txn_server_side = false;
 };
 
 }  // namespace smallbank
