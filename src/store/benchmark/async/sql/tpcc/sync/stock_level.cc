@@ -33,14 +33,14 @@
 namespace tpcc_sql {
 
 SyncSQLStockLevel::SyncSQLStockLevel(uint32_t timeout, uint32_t w_id, uint32_t d_id,
-    std::mt19937 &gen) : SyncTPCCSQLTransaction(timeout), SQLStockLevel(w_id, d_id, gen) {
+    std::mt19937 &gen, bool bftsmart_exec_txn_server_side) : SyncTPCCSQLTransaction(timeout, bftsmart_exec_txn_server_side), SQLStockLevel(w_id, d_id, gen) {
 }
 
 SyncSQLStockLevel::~SyncSQLStockLevel() {
 }
 
 transaction_status_t SyncSQLStockLevel::Execute(SyncClient &client) {
-  return SQLStockLevel::BaseExecute(client, timeout, true);
+  return SQLStockLevel::BaseExecute(client, timeout, true, bftsmart_exec_txn_server_side);
 }
 
 } // namespace tpcc_sql

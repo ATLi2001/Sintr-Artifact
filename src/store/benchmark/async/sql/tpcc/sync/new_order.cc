@@ -33,7 +33,7 @@
 namespace tpcc_sql {
 
 SyncSQLNewOrder::SyncSQLNewOrder(uint32_t timeout, uint32_t w_id, uint32_t C,
-    uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : SyncTPCCSQLTransaction(timeout),
+    uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts, bool bftsmart_exec_txn_server_side) : SyncTPCCSQLTransaction(timeout, bftsmart_exec_txn_server_side),
     SQLNewOrder(w_id, C, num_warehouses, gen, tpcc_lifts) {
 }
 
@@ -41,7 +41,7 @@ SyncSQLNewOrder::~SyncSQLNewOrder() {
 } 
  
 transaction_status_t SyncSQLNewOrder::Execute(SyncClient &client) {
-  return SQLNewOrder::BaseExecute(client, timeout, true);
+  return SQLNewOrder::BaseExecute(client, timeout, true, bftsmart_exec_txn_server_side);
 }
 
 } // namespace tpcc_sql

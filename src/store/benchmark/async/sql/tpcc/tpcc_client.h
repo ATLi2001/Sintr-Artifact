@@ -59,6 +59,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
       uint32_t stock_level_ratio, bool static_w_id,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts,
       uint32_t timeout, const std::string &policy_function_name,
+      bool bftsmart_exec_txn_server_side = false,
       const std::string &latencyFilename = "", const std::string &govTxnConfigPath = "");
 
   virtual ~TPCCSQLClient();
@@ -83,6 +84,7 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
   std::string lastOp;
 
  private:
+  bool bftsmart_exec_txn_server_side;
   bool delivery;
   uint32_t deliveryWId;
   uint32_t deliveryDId;

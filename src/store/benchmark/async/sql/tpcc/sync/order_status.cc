@@ -32,7 +32,7 @@
 namespace tpcc_sql {
 
 SyncSQLOrderStatus::SyncSQLOrderStatus(uint32_t timeout, uint32_t w_id,
-    uint32_t c_c_last, uint32_t c_c_id, std::mt19937 &gen) : SyncTPCCSQLTransaction(timeout),
+    uint32_t c_c_last, uint32_t c_c_id, std::mt19937 &gen, bool bftsmart_exec_txn_server_side) : SyncTPCCSQLTransaction(timeout, bftsmart_exec_txn_server_side),
     SQLOrderStatus(w_id, c_c_last, c_c_id, gen) {
 }
 
@@ -40,7 +40,7 @@ SyncSQLOrderStatus::~SyncSQLOrderStatus() {
 }
 
 transaction_status_t SyncSQLOrderStatus::Execute(SyncClient &client) {
-  return SQLOrderStatus::BaseExecute(client, timeout, true);
+  return SQLOrderStatus::BaseExecute(client, timeout, true, bftsmart_exec_txn_server_side);
 }
 
 } // namespace tpcc_sql

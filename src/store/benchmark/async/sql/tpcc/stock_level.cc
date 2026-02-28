@@ -47,7 +47,7 @@ SQLStockLevel::SQLStockLevel(uint32_t w_id, uint32_t d_id,
 SQLStockLevel::~SQLStockLevel() {
 }
 
-transaction_status_t SQLStockLevel::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
+transaction_status_t SQLStockLevel::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string query;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -65,6 +65,10 @@ transaction_status_t SQLStockLevel::BaseExecute(SyncClient &client, uint32_t tim
   }
 
   client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Select the specified row from District and extract the Next Order Id
   query = fmt::format("SELECT d_next_o_id FROM {} WHERE d_id = {} AND d_w_id = {}", DISTRICT_TABLE, d_id, w_id);

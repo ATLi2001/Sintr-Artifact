@@ -35,8 +35,10 @@ namespace tpcc_sql {
 
 class SyncTPCCSQLTransaction : public SyncTransaction {
  public:
-  SyncTPCCSQLTransaction(uint32_t timeout);
+  SyncTPCCSQLTransaction(uint32_t timeout, bool bftsmart_exec_txn_server_side = false);
   virtual ~SyncTPCCSQLTransaction();
+
+  bool bftsmart_exec_txn_server_side;
 
   virtual std::vector<TPCC_Table> HeuristicFunction() {
     return {};

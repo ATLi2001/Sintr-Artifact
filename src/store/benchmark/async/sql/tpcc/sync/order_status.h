@@ -37,7 +37,7 @@ namespace tpcc_sql {
 class SyncSQLOrderStatus : public SyncTPCCSQLTransaction, public SQLOrderStatus {
  public:
   SyncSQLOrderStatus(uint32_t timeout, uint32_t w_id, uint32_t c_c_last,
-      uint32_t c_c_id, std::mt19937 &gen);
+      uint32_t c_c_id, std::mt19937 &gen, bool bftsmart_exec_txn_server_side = false);
   virtual ~SyncSQLOrderStatus();
   virtual transaction_status_t Execute(SyncClient &client);
 };
