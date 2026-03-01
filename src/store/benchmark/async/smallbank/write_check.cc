@@ -35,7 +35,7 @@ namespace smallbank {
 WriteCheck::WriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout) : SmallbankTransaction(WRITE_CHECK), cust(cust), value(value), timeout(timeout) {}
 WriteCheck::~WriteCheck() {
 }
-transaction_status_t WriteCheck::BaseExecute(SyncClient &client, bool serialize) {
+transaction_status_t WriteCheck::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
     proto::AccountRow accountRow;
     proto::CheckingRow checkingRow;
     proto::SavingRow savingRow;
@@ -47,6 +47,9 @@ transaction_status_t WriteCheck::BaseExecute(SyncClient &client, bool serialize)
 
     client.Begin(timeout, txnState);
     Debug("WriteCheck for name %s with value %d", cust.c_str(), value);
+    if(bftsmart_exec_txn_server_side) {
+        return client.Commit(timeout);
+    }
     if (!ReadAccountRow(client, cust, accountRow, timeout)) {
         client.Abort(timeout);
         Debug("Aborted WriteCheck (AccountRow)");

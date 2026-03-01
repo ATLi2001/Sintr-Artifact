@@ -50,7 +50,8 @@ class RWSQLClient : public SyncTransactionBenchClient {
       int warmupSec, int cooldownSec, int tputInterval,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, 
       const uint32_t timeout,
-      const std::string &govTxnConfigPath,
+      const std::string &govTxnConfigPath, bool execTxnServerSide,
+      uint32_t simulatedComputationDelay = 0,
       const std::string &latencyFilename = "");
 
 
@@ -77,6 +78,8 @@ class RWSQLClient : public SyncTransactionBenchClient {
   std::string lastOp;
   // For policy change
   size_t policyChangeCount = 0;
+  bool execTxnServerSide = false;
+  uint32_t simulatedComputationDelay = 0; // in ms
 
   uint64_t tid = 0;
 };

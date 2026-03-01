@@ -133,6 +133,7 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote,
   std::string type;
   std::string data;
   proto::TransactionDecision transactionDecision;
+  proto::TxnExecReply txnExecReply;
 
   bool recvSignedMessage = false;
   if (t == signedMessage.GetTypeName()) {
@@ -150,6 +151,19 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote,
              Debug("dec signature was invalid");
              return;
             }
+      data = pmsg.msg();
+      type = pmsg.type();
+
+    } else if (pmsg.type() == txnExecReply.GetTypeName()) {
+      // TxnExecReply is signed by delegateEbatch using generateBatchedSignatures
+      // (same scheme as TransactionDecision), not ECDSA SignMessage.
+      crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(
+          signedMessage.replica_id());
+      if (!bftsmartBatchedSigs::verifyBatchedSignature(signedMessage.mutable_signature(), signedMessage.mutable_packed_msg(),
+            replicaPublicKey)) {
+        Debug("txn exec reply batched signature was invalid");
+        return;
+      }
       data = pmsg.msg();
       type = pmsg.type();
 
@@ -193,6 +207,15 @@ void ShardClient::ReceiveMessage(const TransportAddress &remote,
     }
 
     HandleWritebackReply(groupedDecisionAck, signedMessage);
+  } else if (type == txnExecReply.GetTypeName()) {
+    txnExecReply.ParseFromString(data);
+
+    if (signMessages && !recvSignedMessage) {
+      Warning("non signed message sent when signmessages is true");
+      return;
+    }
+
+    HandleTxnExecReply(txnExecReply, signedMessage);
   }
 }
 
@@ -896,4 +919,153 @@ void ShardClient::send_to_group(proto::Request& msg, int group_idx){
   Debug("finished sending the buffer to the group!");
 }
 
+void ShardClient::SendTxnExecRequest(const std::string &serializedTxnState,
+    uint64_t cid, uint64_t seq_num,
+    commit_callback ecb, uint32_t timeout_ms) {
+  Debug("ShardClient::SendTxnExecRequest seq_num=%lu", seq_num);
+
+  proto::TxnExecRequest txnExecReq;
+  txnExecReq.set_txn_state(serializedTxnState);
+  txnExecReq.set_client_id(cid);
+  txnExecReq.set_client_seq_num(seq_num);
+
+  std::string serialized = txnExecReq.SerializeAsString();
+
+  proto::RequestInternal requestInternal;
+  requestInternal.set_digest(crypto::Hash(serialized));
+  requestInternal.mutable_packed_msg()->set_msg(serialized);
+  requestInternal.mutable_packed_msg()->set_type(txnExecReq.GetTypeName());
+  requestInternal.set_client_id(cid);
+  requestInternal.set_groupidx(group_idx);
+
+  proto::Request request;
+  if (signClientProposals) {
+    SignMessage(requestInternal,
+        keyManager->GetPrivateKey(keyManager->GetClientKeyId(cid)),
+        cid, *request.mutable_signed_req());
+  } else {
+    *request.mutable_req() = std::move(requestInternal);
+  }
+
+  PendingTxnExec pte;
+  pte.ecb = ecb;
+  pte.timeout = new Timeout(transport, timeout_ms, [this, seq_num]() {
+    Warning("TxnExecRequest timeout for seq_num=%lu (no action taken)", seq_num);
+    stats->Increment("txnexec_tout", 1);
+  });
+  pte.timeout->Start();
+  {
+    std::lock_guard<std::mutex> lock(pendingTxnExecsMutex);
+    pendingTxnExecs[seq_num] = std::move(pte);
+  }
+  Debug("Created timeout for shardclient");
+
+  send_to_group(request, group_idx);
 }
+
+void ShardClient::HandleTxnExecReply(const proto::TxnExecReply &reply, const proto::SignedMessage &signedMsg) {
+  Debug("HandleTxnExecReply client_id=%lu seq_num=%lu status=%d",
+        reply.client_id(), reply.client_seq_num(), reply.status());
+  uint64_t seq_num = reply.client_seq_num();
+
+  // Variables to hold the extracted callback and status, populated under the lock.
+  commit_callback ecb_to_fire;
+  int32_t status_to_fire = 0;
+  Timeout *timeout_to_delete = nullptr;
+  bool should_fire = false;
+
+  {
+    std::lock_guard<std::mutex> lock(pendingTxnExecsMutex);
+    auto it = pendingTxnExecs.find(seq_num);
+    if (it == pendingTxnExecs.end()) {
+      Debug("HandleTxnExecReply: no pending exec for seq_num=%lu", seq_num);
+      return;
+    }
+    PendingTxnExec *pte = &it->second;
+
+    if (signMessages) {
+      uint64_t replica_id = signedMsg.replica_id();
+      // make sure the replica is from this shard
+      if (replica_id / config.n != (uint64_t) group_idx) {
+        Debug("TxnExecReply: replica not in group");
+        return;
+      }
+      if (reply.status() == 0 /* COMMITTED */) {
+        pte->receivedValidSigs[replica_id] = signedMsg.signature();
+        pte->okStatus = reply.status();
+      } else {
+        if (validate_abort) {
+          pte->receivedFailedSigs[replica_id] = signedMsg.signature();
+        } else {
+          pte->receivedFailedIds.insert(replica_id);
+        }
+        pte->failStatus = reply.status();
+      }
+
+      if (pte->receivedValidSigs.size() >= (uint64_t) config.f + 1) {
+        Debug("TxnExecReply: got quorum of valid replies for seq_num=%lu", seq_num);
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->okStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      } else if (validate_abort && pte->receivedFailedSigs.size() >= (uint64_t) config.f + 1) {
+        Debug("TxnExecReply: got quorum of failed (signed) replies for seq_num=%lu", seq_num);
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->failStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      } else if (!validate_abort && pte->receivedFailedIds.size() >= (uint64_t) config.f + 1) {
+        Debug("TxnExecReply: got quorum of failed replies for seq_num=%lu", seq_num);
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->failStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      }
+    } else {
+      // unsigned path
+      if (reply.status() == 0 /* COMMITTED */) {
+        uint64_t add_id = pte->receivedOkIds.size();
+        pte->receivedOkIds.insert(add_id);
+        pte->okStatus = reply.status();
+      } else {
+        uint64_t add_id = pte->receivedFailedIds.size();
+        pte->receivedFailedIds.insert(add_id);
+        pte->failStatus = reply.status();
+      }
+
+      if (pte->receivedOkIds.size() >= (uint64_t) config.f + 1) {
+        Debug("TxnExecReply: got quorum of ok replies (unsigned) for seq_num=%lu", seq_num);
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->okStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      } else if (pte->receivedFailedIds.size() >= (uint64_t) config.f + 1) {
+        Debug("TxnExecReply: got quorum of failed replies (unsigned) for seq_num=%lu", seq_num);
+        ecb_to_fire = std::move(pte->ecb);
+        timeout_to_delete = pte->timeout;
+        pte->timeout = nullptr;
+        status_to_fire = pte->failStatus;
+        pendingTxnExecs.erase(it);
+        should_fire = true;
+      }
+    }
+  } // lock released here
+
+  if (should_fire) {
+    if (timeout_to_delete != nullptr) {
+      timeout_to_delete->Stop();
+      delete timeout_to_delete;
+    }
+    ecb_to_fire(static_cast<transaction_status_t>(status_to_fire));
+  }
+}
+
+} // namespace bftsmartstore

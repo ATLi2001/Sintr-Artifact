@@ -422,11 +422,15 @@ DEFINE_uint64(pbft_esig_batch_timeout, 10, "signature batch timeout ms"
 
 DEFINE_bool(pbft_order_commit, true, "order commit writebacks as well");
 DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
+DEFINE_bool(bftsmart_exec_txn_server_side, false,
+    "When true, the BFTSmart server executes full transactions server-side "
+    "(via ServerClient) instead of waiting for client-driven two-phase commit");
 
 //PG-SMR / Peloton-SMR settings.
 DEFINE_bool(pg_fake_SMR, true, "Indicate if server is asynchronous or not. If so, will return leader's results for consistency");
 DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart");
 DEFINE_uint64(hs_dummy_to, 5, "hotstuff dummy timeout ms (to fill pipeline)");
+DEFINE_uint32(rw_sql_sim_delay, 0, "simulation delay for rw sql transactions in ms");
 
 const std::string occ_type_args[] = {
 	"tapir",
@@ -1106,7 +1110,7 @@ int main(int argc, char **argv) {
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
                                      FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
                                      FLAGS_indicus_watermark_time_delta, part, tport, FLAGS_local_config, FLAGS_pg_SMR_mode,
-                                     sintr_params);
+                                     sintr_params, FLAGS_bftsmart_exec_txn_server_side, FLAGS_rw_sql_sim_delay, FLAGS_pg_fake_SMR);
 
       replica = new pelotonstore::Replica(config, &keyManager,
                                        dynamic_cast<pelotonstore::App *>(server),
@@ -1144,7 +1148,8 @@ int main(int argc, char **argv) {
 																		 FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
 																		 FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
 																		 FLAGS_indicus_watermark_time_delta, part, tport,
-																		 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
+																		 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
+                                     FLAGS_bftsmart_exec_txn_server_side);
       std::cerr << "FLAGS: bftsmart config path: " << FLAGS_bftsmart_codebase_dir << std::endl;
 			replica = new bftsmartstore::Replica(config, &keyManager,
 																			 dynamic_cast<bftsmartstore::App *>(server),

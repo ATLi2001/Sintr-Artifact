@@ -75,7 +75,7 @@ SQLPayment::SQLPayment(uint32_t w_id, uint32_t c_c_last,
 SQLPayment::~SQLPayment() {
 }
 
-transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
+transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -93,6 +93,10 @@ transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeou
   }
 
   client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Retrieve WAREHOUSE row. Update year to date balance. 
   statement = fmt::format("SELECT * FROM {} WHERE w_id = {}", WAREHOUSE_TABLE, w_id);

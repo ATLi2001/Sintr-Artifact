@@ -26,7 +26,11 @@
  **********************************************************************/
 #include "store/bftsmartstore/server.h"
 #include "store/bftsmartstore/common.h"
+#include "store/bftsmartstore/serverclient.h"
 #include "store/common/transaction.h"
+#include "store/common/common-proto.pb.h"
+#include "store/common/frontend/sync_client.h"
+#include "store/common/sintring/validation_parse_client.h"
 #include <iostream>
 #include <sys/time.h>
 
@@ -37,13 +41,13 @@ using namespace std;
 Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   int groupIdx, int idx, int numShards, int numGroups, bool signMessages,
   bool validateProofs, SintrParameters sintr_params, uint64_t timeDelta, Partitioner *part, Transport* tp,
-  bool order_commit, bool validate_abort,
+  bool order_commit, bool validate_abort, bool execTxnServerSide,
   TrueTime timeServer) : config(config), keyManager(keyManager),
   groupIdx(groupIdx), idx(idx), id(groupIdx * config.n + idx),
   numShards(numShards), numGroups(numGroups), signMessages(signMessages),
   validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp),
   order_commit(order_commit), validate_abort(validate_abort),
-  timeServer(timeServer), sintr_params(sintr_params) {
+  timeServer(timeServer), sintr_params(sintr_params), execTxnServerSide(execTxnServerSide) {
   dummyProof = std::make_shared<proto::CommitProof>();
 
   dummyProof->mutable_writeback_message()->set_status(REPLY_OK);
@@ -58,7 +62,10 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager,
   policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
 }
 
-Server::~Server() {}
+Server::~Server() {
+  delete syncClientForExec;
+  delete serverClientForExec;
+}
 
 bool Server::CCC2(const proto::Transaction& txn) {
   Debug("Starting ccc v2 check");
@@ -233,6 +240,7 @@ bool Server::CCC(const proto::Transaction& txn) {
 ::google::protobuf::Message* Server::returnMessage(::google::protobuf::Message* msg) {
   // Send decision to client
   if (signMessages) {
+    Debug("Signing message");
     proto::SignedMessage *signedMessage = new proto::SignedMessage();
     SignMessage(*msg, keyManager->GetPrivateKey(id), id, *signedMessage);
     delete msg;
@@ -248,6 +256,7 @@ std::vector<::google::protobuf::Message*> Server::Execute(const string& type, co
 
   proto::Transaction transaction;
   proto::GroupedDecision gdecision;
+  proto::TxnExecRequest txnExecRequest;
   if (type == transaction.GetTypeName()) {
     transaction.ParseFromString(msg);
 
@@ -267,6 +276,10 @@ std::vector<::google::protobuf::Message*> Server::Execute(const string& type, co
     else{
       Panic("Only failed grouped decisions should be atomically broadcast");
     }
+  } else if (type == txnExecRequest.GetTypeName()) {
+    UW_ASSERT(execTxnServerSide);
+    txnExecRequest.ParseFromString(msg);
+    return ExecuteTxnServerSide(txnExecRequest);
   }
   std::vector<::google::protobuf::Message*> results;
   results.push_back(nullptr);
@@ -303,7 +316,7 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
   }
 
   //endorsement check
-  if(!EndorsementCheck(transaction)) {
+  if(!execTxnServerSide && !EndorsementCheck(transaction)) {
     Panic("Endorsement check failed for txn %s", TransactionDigest(transaction));
   }
 
@@ -458,8 +471,8 @@ std::vector<::google::protobuf::Message*> Server::HandleTransaction(const proto:
     // struct timeval tp;
     // gettimeofday(&tp, NULL);
     // long int us = tp.tv_sec * 1000 * 1000 + tp.tv_usec;
-
-  if (verifyGDecision_parallel(gdecision, pendingTransactions[digest], keyManager, signMessages, config.f, tp)) {
+  // skip validating GDecision if we are executing txn server side
+  if (execTxnServerSide || verifyGDecision_parallel(gdecision, pendingTransactions[digest], keyManager, signMessages, config.f, tp)) {
 
   //if (verifyGDecision(gdecision, pendingTransactions[digest], keyManager, signMessages, config.f)) {
  //if(true){
@@ -796,6 +809,136 @@ bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, 
     // validate_endorsements_us.add(duration);
   }
   return true;
+}
+
+////////////////////////////////////////////
+/*     SERVERCLIENT DIRECT-CALL METHODS   */
+////////////////////////////////////////////
+
+void Server::DirectRead(const std::string &key, const Timestamp &ts, uint64_t req_id,
+    std::function<void(int, const std::string&, const std::string&, const Timestamp&)> gcb) {
+  proto::Read read;
+  read.set_req_id(req_id);
+  read.set_key(key);
+  ts.serialize(read.mutable_timestamp());
+  read.set_client_id(0);
+
+  ::google::protobuf::Message *msg = HandleRead(read);
+  proto::ReadReply *reply = dynamic_cast<proto::ReadReply*>(msg);
+  if (reply == nullptr) {
+    // HandleRead returned a SignedMessage wrapper - unwrap it.
+    // packed_msg holds a serialized PackedMessage (not a raw ReadReply).
+    proto::SignedMessage *signedMsg = dynamic_cast<proto::SignedMessage*>(msg);
+    if (signedMsg != nullptr) {
+      proto::PackedMessage packedMsg;
+      proto::ReadReply inner;
+      if (packedMsg.ParseFromString(signedMsg->packed_msg()) &&
+          inner.ParseFromString(packedMsg.msg())) {
+        delete msg;
+        Timestamp valTs;
+        if (inner.status() == REPLY_OK && inner.has_value_timestamp()) {
+          valTs = Timestamp(inner.value_timestamp());
+        }
+        gcb(inner.status(), inner.key(), inner.status() == REPLY_OK ? inner.value() : "", valTs);
+        return;
+      }
+      delete msg;
+    }
+    gcb(REPLY_FAIL, key, "", Timestamp());
+    return;
+  }
+  Timestamp valTs;
+  if (reply->status() == REPLY_OK && reply->has_value_timestamp()) {
+    valTs = Timestamp(reply->value_timestamp());
+  }
+  gcb(reply->status(), reply->key(), reply->status() == REPLY_OK ? reply->value() : "", valTs);
+  delete msg;
+}
+
+transaction_status_t Server::DirectCommit(const proto::Transaction &txn) {
+  // Run the CCC check and get shard decision
+  std::vector<::google::protobuf::Message*> results = HandleTransaction(txn);
+
+  transaction_status_t status = ABORTED_SYSTEM;
+  for (auto *msg : results) {
+    if (msg == nullptr) continue;
+    proto::TransactionDecision *decision = dynamic_cast<proto::TransactionDecision*>(msg);
+    if (decision != nullptr) {
+      if (decision->status() == REPLY_OK) {
+        status = COMMITTED;
+      } else {
+        status = ABORTED_SYSTEM;
+        delete msg;
+        break;
+      }
+    }
+    delete msg;
+  }
+
+  if (status == COMMITTED) {
+    // Build a trivial GroupedDecision to finalize the commit in the store
+    std::string digest = TransactionDigest(txn);
+    proto::GroupedDecision gdec;
+    gdec.set_txn_digest(digest);
+    gdec.set_status(REPLY_OK);
+    ::google::protobuf::Message *ack = HandleGroupedCommitDecision(gdec, /*lock=*/true);
+    if (ack != nullptr) delete ack;
+  }
+
+  return status;
+}
+
+std::vector<::google::protobuf::Message*> Server::ExecuteTxnServerSide(
+    const proto::TxnExecRequest &req) {
+  std::vector<::google::protobuf::Message*> results;
+
+  // Lazily construct the ServerClient + SyncClient pair (once per Server).
+  if (serverClientForExec == nullptr) {
+    uint64_t exec_client_id = static_cast<uint64_t>(-1); // sentinel: server-side exec id
+    serverClientForExec = new ServerClient(this, exec_client_id, tp);
+    syncClientForExec   = new SyncClient(serverClientForExec);
+  }
+  Debug("Starting transaction for client %lu seq num %lu", req.client_id(), req.client_seq_num());
+
+  // Parse the embedded TxnState to obtain the right ValidationTransaction.
+  TxnState txnState;
+  if (!txnState.ParseFromString(req.txn_state())) {
+    Debug("ExecuteTxnServerSide: failed to parse TxnState");
+    proto::TxnExecReply *reply = new proto::TxnExecReply();
+    reply->set_client_id(req.client_id());
+    reply->set_client_seq_num(req.client_seq_num());
+    reply->set_status(static_cast<int32_t>(ABORTED_SYSTEM));
+    results.push_back(reply);
+    return results;
+  }
+
+  // ValidationParseClient is stateless (timeout only) – cheap to construct.
+  ValidationParseClient parseClient(/*timeout=*/5000);
+  ValidationTransaction *valTxn = parseClient.Parse(txnState);
+  if (valTxn == nullptr) {
+    Warning("ExecuteTxnServerSide: ParseClient returned nullptr for txn_name=%s",
+            txnState.txn_name().c_str());
+    proto::TxnExecReply *reply = new proto::TxnExecReply();
+    reply->set_client_id(req.client_id());
+    reply->set_client_seq_num(req.client_seq_num());
+    reply->set_status(static_cast<int32_t>(ABORTED_SYSTEM));
+    results.push_back(reply);
+    return results;
+  }
+
+  // Run the transaction synchronously via SyncClient (which wraps ServerClient,
+  // which calls DirectRead / DirectCommit directly on this Server).
+  transaction_status_t status = valTxn->Validate(*syncClientForExec);
+  delete valTxn;
+  Debug("status is %d", static_cast<int32_t>(status));
+
+  proto::TxnExecReply *reply = new proto::TxnExecReply();
+  reply->set_client_id(req.client_id());
+  reply->set_client_seq_num(req.client_seq_num());
+  reply->set_status(static_cast<int32_t>(status));
+  Debug("Successfully executed txn for client %lu seq num %lu", req.client_id(), req.client_seq_num());
+  results.push_back(reply);
+  return results;
 }
 
 }

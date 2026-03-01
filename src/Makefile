@@ -45,7 +45,7 @@ LDFLAGS += -lsodium
 LDFLAGS += -lblake3
 # bitcoin-core/secp256k1
 LIBSECP256K1_CFLAGS := $(shell pkg-config --cflags libsecp256k1)
-LIBSECP256K1_LDFLAGS := /usr/local/lib/libsecp256k1.so.0
+LIBSECP256K1_LDFLAGS := $(shell pkg-config --libs libsecp256k1)
 CFLAGS += $(LIBSECP256K1_CFLAGS)
 LDFLAGS += $(LIBSECP256K1_LDFLAGS)
 #ed25519-donna
@@ -222,7 +222,6 @@ include store/pequinstore/Rules.mk
 include store/sintrstore/query-engine/Rules.mk
 include store/sintrstore/Rules.mk
 
-include store/Rules.mk
 include store/benchmark/Rules.mk
 include store/benchmark/async/common/Rules.mk
 include store/benchmark/async/rw/Rules.mk
@@ -245,6 +244,7 @@ include lockserver/Rules.mk
 include timeserver/Rules.mk
 #include libtapir/Rules.mk # removed because .so file is incompatible with static linking for compression libs. 
 include create_keys/Rules.mk
+include store/Rules.mk
 #include simple_app/Rules.mk 
 ##################################################################
 # General rules

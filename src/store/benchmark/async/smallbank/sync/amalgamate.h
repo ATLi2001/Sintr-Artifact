@@ -37,7 +37,7 @@ namespace smallbank {
 class SyncAmalgamate : public SyncSmallbankTransaction, public Amalgamate {
  public:
   SyncAmalgamate(const std::string &cust1, const std::string &cust2,
-             const uint32_t timeout);
+             const uint32_t timeout, bool bftsmart_exec_txn_server_side);
 
   virtual ~SyncAmalgamate();
 

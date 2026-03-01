@@ -29,7 +29,8 @@
 
 namespace tpcc_sql {
 
-SyncTPCCSQLTransaction::SyncTPCCSQLTransaction(uint32_t timeout) : SyncTransaction(timeout) {
+SyncTPCCSQLTransaction::SyncTPCCSQLTransaction(uint32_t timeout, bool bftsmart_exec_txn_server_side) : SyncTransaction(timeout),
+    bftsmart_exec_txn_server_side(bftsmart_exec_txn_server_side) {
 }
 
 SyncTPCCSQLTransaction::~SyncTPCCSQLTransaction() {

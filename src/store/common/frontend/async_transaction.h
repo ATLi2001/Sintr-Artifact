@@ -42,6 +42,9 @@ class AsyncTransaction {
   virtual Operation GetNextOperation(size_t outstandingOpCount, size_t finishedOpCount,
       const std::map<std::string, std::string> readValues) = 0;
 
+    // Optional: return a serialized txnState for server-side execution.
+    virtual std::string GetTxnState() const { return std::string(); }
+
 };
 
 #endif

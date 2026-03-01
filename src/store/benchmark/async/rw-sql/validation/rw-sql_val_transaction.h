@@ -42,7 +42,9 @@ class RWSQLValTransaction : public ::ValidationTransaction, RWSQLBaseTransaction
   virtual ~RWSQLValTransaction();
 
   transaction_status_t Validate(SyncClient &client);
-  
+
+  transaction_status_t Validate(SyncClient &client, uint32_t simDelay) override;
+
  private:
   size_t liveOps;
   

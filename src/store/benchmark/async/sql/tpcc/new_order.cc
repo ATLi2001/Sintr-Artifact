@@ -90,7 +90,7 @@ SQLNewOrder::SQLNewOrder(uint32_t w_id, uint32_t C,
 SQLNewOrder::~SQLNewOrder() {
 } 
 
-transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize) {
+transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -106,6 +106,10 @@ transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeo
   }
 
   client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Retrieve row from WAREHOUSE, extract tax rate
   statement = fmt::format("SELECT * FROM {} WHERE w_id = {}", WAREHOUSE_TABLE, w_id);

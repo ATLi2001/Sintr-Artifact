@@ -63,4 +63,10 @@ transaction_status_t RWSQLValTransaction::Validate(SyncClient &client) {
   return RWSQLBaseTransaction::BaseExecute(client, timeout, false, liveOps, numKeys);
 }
 
+transaction_status_t RWSQLValTransaction::Validate(SyncClient &client, uint32_t simDelay) {
+  statements.clear();
+
+  return RWSQLBaseTransaction::BaseExecute(client, timeout, false, liveOps, numKeys, false, simDelay);
+}
+
 } // namespace rwsql

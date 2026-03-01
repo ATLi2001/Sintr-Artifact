@@ -42,7 +42,7 @@ DepositChecking::DepositChecking(const std::string &cust, const int32_t value,
       
 DepositChecking::~DepositChecking() {}
 
-transaction_status_t DepositChecking::BaseExecute(SyncClient &client, bool serialize) {
+transaction_status_t DepositChecking::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
   Debug("DepositChecking for name %s with val %d", cust.c_str(), value);
   if (value < 0) {
     client.Abort(timeout);
@@ -58,6 +58,9 @@ transaction_status_t DepositChecking::BaseExecute(SyncClient &client, bool seria
   }
 
   client.Begin(timeout, txnState);
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
   if (!ReadAccountRow(client, cust, accountRow, timeout)) {
     client.Abort(timeout);
     Debug("Aborted DepositChecking (AccountRow)");

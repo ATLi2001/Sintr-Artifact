@@ -1,6 +1,6 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
 
-SRCS += $(addprefix $(d), app.cc replica.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc bftsmartagent.cc validation_client.cc client2client.cc)
+SRCS += $(addprefix $(d), app.cc replica.cc serverclient.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc bftsmartagent.cc validation_client.cc client2client.cc)
 
 PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto bftsmart-sintr-proto.proto)
 
@@ -13,7 +13,7 @@ LIB-pbft-batched-sigs := $(LIB-crypto) $(o)pbft_batched_sigs.o
 LIB-bftsmart-store := $(o)common.o $(o)slots.o $(o)replica.o $(o)server.o \
 	$(o)pbft-proto.o $(o)bftsmart-sintr-proto.o $(o)server-proto.o $(o)app.o $(o)bftsmartagent.o \
 	$(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
-	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface)
+    $(o)serverclient.o $(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface)
 
 
 LIB-bftsmart-client := $(o)common.o $(o)slots.o \

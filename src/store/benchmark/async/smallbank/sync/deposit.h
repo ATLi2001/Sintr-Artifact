@@ -37,7 +37,7 @@ namespace smallbank {
 class SyncDepositChecking : public SyncSmallbankTransaction, public DepositChecking {
  public:
   SyncDepositChecking(const std::string &cust, const int32_t value,
-                  const uint32_t timeout);
+                  const uint32_t timeout, bool bftsmart_exec_txn_server_side);
   
   virtual ~SyncDepositChecking();
 

@@ -36,7 +36,8 @@ namespace smallbank {
 
 class SyncWriteCheck : public SyncSmallbankTransaction, public WriteCheck  {
  public:
-  SyncWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout);
+  SyncWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout,
+    bool bftsmart_exec_txn_server_side);
   virtual ~SyncWriteCheck();
 
   transaction_status_t Execute(SyncClient &client);

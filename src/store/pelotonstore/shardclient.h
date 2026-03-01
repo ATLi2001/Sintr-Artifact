@@ -46,6 +46,9 @@
 
 #include <map>
 #include <string>
+#include <mutex>
+
+#include "store/common/frontend/client.h"
 
 namespace pelotonstore {
 
@@ -79,6 +82,13 @@ class ShardClient : public TransportReceiver {
     const std::vector<std::shared_ptr<::google::protobuf::Message>> &endorsements);
 
   void Abort(uint64_t client_id, uint64_t client_seq_num);
+
+  // Send a TxnExecRequest through the ordering layer.
+  // ecb is called when a quorum of TxnExecReply arrives (same type as commit_callback).
+  void SendTxnExecRequest(const std::string &serializedTxnState,
+      uint64_t client_id, uint64_t client_seq_num,
+      commit_callback ecb,
+      uint32_t timeout);
 
  private:
   pelotonstore::BftSmartAgent* bftsmartagent;
@@ -177,6 +187,23 @@ class ShardClient : public TransportReceiver {
   // req id to (read)
   std::unordered_map<uint64_t, PendingSQL_RPC> pendingSQL_RPCs;
   std::unordered_map<uint64_t, PendingTryCommit> pendingTryCommits;
+
+  // Pending server-side execution requests: key = client_seq_num
+  struct PendingTxnExec {
+    commit_callback ecb;
+    Timeout *timeout = nullptr;
+    // the set of replica ids that we have received a reply for, keyed by status
+    std::unordered_map<int32_t, std::unordered_set<uint64_t>> receivedReplies;
+    uint64_t numReceivedReplies{0};
+    // fake_SMR tracking
+    bool hasLeaderReply{false};
+    int32_t leaderStatus{0};
+  };
+  std::unordered_map<uint64_t, PendingTxnExec> pendingTxnExecs;
+  std::mutex pendingTxnExecsMutex;
+
+  proto::TxnExecReply txnExecReply;
+  void HandleTxnExecReply(const proto::TxnExecReply &reply, int replica_id);
 
   Stats* stats;
 };

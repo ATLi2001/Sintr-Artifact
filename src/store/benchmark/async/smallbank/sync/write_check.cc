@@ -29,13 +29,14 @@
 
 namespace smallbank {
 
-SyncWriteCheck::SyncWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout) :
-    SyncSmallbankTransaction(timeout), WriteCheck(cust, value, timeout) {}
+SyncWriteCheck::SyncWriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout,
+        bool bftsmart_exec_txn_server_side) :
+    SyncSmallbankTransaction(timeout, bftsmart_exec_txn_server_side), WriteCheck(cust, value, timeout) {}
 
 SyncWriteCheck::~SyncWriteCheck() {
 }
 transaction_status_t SyncWriteCheck::Execute(SyncClient &client) {
-    return WriteCheck::BaseExecute(client, true);
+    return WriteCheck::BaseExecute(client, true, bftsmart_exec_txn_server_side);
 }
 
 } // namespace smallbank

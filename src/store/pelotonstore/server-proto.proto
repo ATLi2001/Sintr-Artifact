@@ -45,3 +45,19 @@ message TryCommitReply {
   required uint64 req_id = 1;
   required int32 status = 2;
 }
+
+// Server-side execution: client sends serialised TxnState so the server
+// can execute the whole transaction on its behalf.
+message TxnExecRequest {
+  required bytes txn_state = 1;   // serialized TxnState proto
+  required uint64 client_id = 2;
+  required uint64 client_seq_num = 3;
+}
+
+// Reply sent back after the server executes the transaction.
+message TxnExecReply {
+  required uint64 client_id = 1;
+  required uint64 client_seq_num = 2;
+  // Maps to transaction_status_t: 0=COMMITTED, 1=ABORTED_USER, 2=ABORTED_SYSTEM
+  required int32 status = 3;
+}

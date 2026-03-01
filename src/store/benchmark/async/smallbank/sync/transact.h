@@ -36,7 +36,8 @@ namespace smallbank {
 
 class SyncTransactSaving : public SyncSmallbankTransaction, public TransactSaving {
  public:
-  SyncTransactSaving(const std::string &cust, int32_t value, const uint32_t timeout);
+  SyncTransactSaving(const std::string &cust, int32_t value, const uint32_t timeout, 
+      bool bftsmart_exec_txn_server_side);
   virtual ~SyncTransactSaving();
 
   transaction_status_t Execute(SyncClient &client);

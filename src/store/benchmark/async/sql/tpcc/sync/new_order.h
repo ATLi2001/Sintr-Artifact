@@ -38,7 +38,7 @@ namespace tpcc_sql {
 class SyncSQLNewOrder : public SyncTPCCSQLTransaction, public SQLNewOrder {
  public:
   SyncSQLNewOrder(uint32_t timeout, uint32_t w_id, uint32_t C,
-      uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
+      uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts, bool bftsmart_exec_txn_server_side = false);
   virtual ~SyncSQLNewOrder();
   virtual transaction_status_t Execute(SyncClient &client);
 };

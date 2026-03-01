@@ -40,7 +40,7 @@ class SQLStockLevel : public TPCCSQLTransaction {
       std::mt19937 &gen);
   virtual ~SQLStockLevel();
   SQLStockLevel() {};
-  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize);
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side = false);
   virtual void SerializeTxnState(std::string &txnState) override;
   std::vector<TPCC_Table> HeuristicFunction();
 

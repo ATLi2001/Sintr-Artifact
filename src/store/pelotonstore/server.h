@@ -56,6 +56,8 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+class SyncClient;
+
 namespace pelotonstore {
 
 typedef std::function<void(std::vector<google::protobuf::Message*>&)> execute_callback;
@@ -66,11 +68,18 @@ typedef struct ColRegistry {
 } ColRegistry;
 typedef std::map<std::string, ColRegistry> TableRegistry_t;
 
+// Forward-declared to avoid circular includes (serverclient.h includes server.h)
+class ServerClient;
+
 class Server : public App, public ::Server {
 public:
   Server(const transport::Configuration& config, KeyManager *keyManager, std::string &table_registry_path, 
     int groupIdx, int idx, int numShards, int numGroups, bool signMessages, bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp,
-    bool localConfig, int SMR_mode, SintrParameters sintr_params, TrueTime timeServer = TrueTime(0, 0));
+    bool localConfig, int SMR_mode, SintrParameters sintr_params,
+    bool execTxnServerSide = false,
+    uint32_t simDelay = 0,
+    bool fake_SMR = true,
+    TrueTime timeServer = TrueTime(0, 0));
   ~Server();
 
   void RegisterTables(std::string &table_registry);
@@ -108,6 +117,27 @@ public:
   inline Stats &GetStats() {return stats;};
 
   inline Stats* mutableStats() {return &stats;};
+
+  // Public wrappers for ServerClient to call directly (bypasses network).
+  // Begin a transaction for the given client_id / tx_id.
+  void DirectBegin(uint64_t client_id, uint64_t tx_id);
+
+  // Execute a SQL statement within the client's current transaction.
+  // Returns the serialised result string and sets status to REPLY_OK or REPLY_FAIL.
+  std::string DirectExecSQL(const std::string &query, uint64_t client_id,
+      uint64_t tx_id, int &status);
+
+  // Commit the client's current transaction. Returns REPLY_OK or REPLY_FAIL.
+  int DirectCommit(uint64_t client_id, uint64_t tx_id);
+
+  // Abort the client's current transaction.
+  void DirectAbort(uint64_t client_id, uint64_t tx_id);
+
+  // Execute a TxnExecRequest by running the embedded transaction server-side
+  // via ServerClient + SyncClient + ValidationParseClient.
+  // thread_id selects which per-thread ServerClient/SyncClient pair to use.
+  std::vector<::google::protobuf::Message*> ExecuteTxnServerSide(
+      const proto::TxnExecRequest &req, uint64_t thread_id);
 
 private:  
   struct ClientState {
@@ -165,10 +195,12 @@ private:
   int numGroups;
   bool signMessages;
   bool validateProofs;
+  bool fake_SMR = true;
   uint64_t timeDelta;
   Partitioner *part;
   bool localConfig;
   TrueTime timeServer;
+  uint32_t simDelay = 0;
 
   proto::SQL_RPC sql_rpc_template;
   proto::TryCommit try_commit_template;
@@ -212,6 +244,13 @@ private:
   void ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyClient);
   bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, uint64_t client_id, const std::string &txnDigest);
   bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
+
+  // Server-side transaction execution via per-thread ServerClient + SyncClient pairs.
+  // One pair per indexed thread so that multiple transactions can execute in parallel.
+  bool execTxnServerSide;
+  std::vector<ServerClient*> serverClientsForExec;
+  std::vector<SyncClient*>   syncClientsForExec;
+  void InitExecClients();
 };
 
 }

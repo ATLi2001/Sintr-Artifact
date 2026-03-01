@@ -68,7 +68,8 @@ class Client : public ::Client {
       SintrParameters sintr_params, TrueTime timeserver = TrueTime(0,0),
       transport::Configuration *clients_config = nullptr, ClientSelector *valClientSelector = nullptr,
       bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "",
-      const std::vector<std::string> &keys = std::vector<std::string>());
+      const std::vector<std::string> &keys = std::vector<std::string>(),
+      bool execTxnServerSide = false);
   ~Client();
 
   // Begin a transaction.
@@ -138,6 +139,16 @@ class Client : public ::Client {
   bool fake_SMR;
   uint64_t SMR_mode; //Control whether to run without replication (0), with Hotstuff (1) or BFTSmart (2)
   const std::string& PG_BFTSMART_config_path; //Path for BFTSmart (if in use)
+
+  // When true, Begin() serialises the TxnState and forwards it to the server
+  // via a TxnExecRequest; Query/Write become no-ops and Commit waits for the reply.
+  bool execTxnServerSide = false;
+  // Per-seq_num commit callbacks and early-arriving results (open-loop safe).
+  std::unordered_map<uint64_t, commit_callback> pending_exec_ccbs;
+  std::unordered_map<uint64_t, transaction_status_t> pending_exec_results;
+
+  // Handles a TxnExecReply from the server (server-side execution mode).
+  void HandleTxnExecReply(uint64_t seq_num, transaction_status_t status);
 
   // track overall readset and writeset of transaction
   TransactionMessage *txn_msg;

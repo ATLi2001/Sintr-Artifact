@@ -315,6 +315,9 @@ DEFINE_uint64(indicus_batch_verification_timeout, 5, "batch verification timeout
 DEFINE_bool(pbft_order_commit, true, "order commit writebacks as well");
 DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
 
+DEFINE_bool(bftsmart_exec_txn_server_side, false,
+    "When true, the BFTSmart client sends a TxnExecRequest to the server "
+    "(server-side execution mode) instead of running the transaction locally.");
 
 DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart configurations");
 
@@ -849,6 +852,7 @@ DEFINE_bool(rw_read_only, false, "only do read operations");
  */
 DEFINE_uint64(rw_read_only_rate, 0, "percentage of read only operations");
 DEFINE_bool(rw_secondary_condition, true, "whether the read/update has a condition on a secondary key");
+DEFINE_uint32(rw_sql_sim_delay, 0, "simulation delay for rw sql transactions in ms");
 
 DEFINE_uint64(num_tables, 1, "number of tables for rw-sql");
 DEFINE_uint64(num_keys_per_table, 1000, "number of keys per table for rw-sql");
@@ -1996,7 +2000,8 @@ int main(int argc, char **argv) {
                                        keyManager, sintr_params,
                                        TrueTime(FLAGS_clock_skew, FLAGS_clock_error), clients_config,
                                        sintrValClientSelector, FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode,
-                                       FLAGS_bftsmart_codebase_dir, keys);
+                                       FLAGS_bftsmart_codebase_dir, keys,
+                                       FLAGS_bftsmart_exec_txn_server_side);
         break;
     }
 
@@ -2009,7 +2014,8 @@ int main(int argc, char **argv) {
 		                                       FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, FLAGS_indicus_sign_client_proposals,
 		                                       keyManager, FLAGS_bftsmart_codebase_dir, sintr_params, clients_config, sintrValClientSelector,
 																					 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
-																					 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), keys);
+																					 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), keys,
+                                         FLAGS_bftsmart_exec_txn_server_side);
 		        break;
 		    }
 
@@ -2147,7 +2153,7 @@ int main(int argc, char **argv) {
             FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
             FLAGS_static_w_id, FLAGS_abort_backoff,
             FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
-            FLAGS_sintr_policy_function_name, "", FLAGS_gov_txn_config_path);
+            FLAGS_sintr_policy_function_name, FLAGS_bftsmart_exec_txn_server_side, "", FLAGS_gov_txn_config_path);
         break;
       case BENCH_TPCC_LIFT_SQL:
         UW_ASSERT(syncClient != nullptr);
@@ -2173,7 +2179,7 @@ int main(int argc, char **argv) {
             FLAGS_timeout, FLAGS_balance_ratio, FLAGS_deposit_checking_ratio,
             FLAGS_transact_saving_ratio, FLAGS_amalgamate_ratio,
             FLAGS_num_hotspots, FLAGS_num_customers - FLAGS_num_hotspots, FLAGS_hotspot_probability,
-            FLAGS_customer_name_file_path);
+            FLAGS_customer_name_file_path, FLAGS_bftsmart_exec_txn_server_side);
         break;
       case BENCH_RW:
         UW_ASSERT(asyncClient != nullptr);
@@ -2210,7 +2216,8 @@ int main(int argc, char **argv) {
             FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
             FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
             FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts,
-            FLAGS_timeout, FLAGS_gov_txn_config_path);
+            FLAGS_timeout, FLAGS_gov_txn_config_path, FLAGS_bftsmart_exec_txn_server_side, 
+            FLAGS_rw_sql_sim_delay);
         break;
       case BENCH_SEATS_SQL:
         {
