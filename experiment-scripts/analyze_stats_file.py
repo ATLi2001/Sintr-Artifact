@@ -64,6 +64,7 @@ ANALYSIS_TYPES = [
     "overheads_lat_grouped_bar",
     "throughput_time",
     "client_failures",
+    "norm_tput_bar",
 ]
 
 # the original stats directory should have subdirectories, each corresponding to a single experiment run
@@ -694,6 +695,149 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     # plt.close()
 
 
+def _compute_norm_columns(df, client_num=None, csv_path=None):
+    """Compute norm_tput and norm_latency columns if missing.
+
+    Groups by experiment_name. For each experiment, averages tput/latency at the
+    chosen client count (highest available by default, or *client_num* if given).
+    The first experiment (in order of appearance) is the baseline (norm = 1.0).
+
+    If *csv_path* is provided the enriched CSV is saved back to that path.
+
+    Returns a *summary* DataFrame with one row per experiment containing:
+        experiment_name, num_clients, tput, latency, norm_tput, norm_latency
+    """
+    df = df.copy()
+
+    # If both norm columns already present, just return a summary
+    if "norm_tput" in df.columns and "norm_latency" in df.columns:
+        # Collapse to one row per experiment (take mean of norm values)
+        summary = (
+            df.groupby("experiment_name", sort=False)
+            .agg(
+                num_clients=("num_clients", "max") if "num_clients" in df.columns else ("tput", "size"),
+                tput=("tput", "mean"),
+                latency=("latency", "mean"),
+                norm_tput=("norm_tput", "mean"),
+                norm_latency=("norm_latency", "mean"),
+            )
+            .reset_index()
+        )
+        return summary
+
+    # Determine unique experiments in order of first appearance
+    experiments = list(dict.fromkeys(df["experiment_name"]))
+
+    # Pick the client count to use for normalisation
+    if client_num is not None:
+        target_clients = client_num
+    else:
+        if "num_clients" in df.columns:
+            target_clients = int(df["num_clients"].max())
+        else:
+            target_clients = None  # single-row-per-experiment case
+
+    # Filter to the target client count (if applicable)
+    if target_clients is not None and "num_clients" in df.columns:
+        filtered = df[df["num_clients"] == target_clients]
+    else:
+        filtered = df
+
+    # Mean tput & latency per experiment at target client count
+    means = (
+        filtered.groupby("experiment_name", sort=False)
+        .agg(tput=("tput", "mean"), latency=("latency", "mean"))
+        .reindex(experiments)  # keep original appearance order
+    )
+
+    baseline_tput = means["tput"].iloc[0]
+    baseline_lat = means["latency"].iloc[0]
+
+    means["norm_tput"] = means["tput"] / baseline_tput
+    means["norm_latency"] = means["latency"] / baseline_lat
+    means["num_clients"] = target_clients if target_clients is not None else 0
+    means = means.reset_index()
+
+    # Also enrich the original df so it can be saved
+    norm_map_tput = dict(zip(means["experiment_name"], means["norm_tput"]))
+    norm_map_lat = dict(zip(means["experiment_name"], means["norm_latency"]))
+    df["norm_tput"] = df["experiment_name"].map(norm_map_tput)
+    df["norm_latency"] = df["experiment_name"].map(norm_map_lat)
+
+    if csv_path is not None:
+        df.to_csv(csv_path, index=False)
+        print(f"Saved enriched CSV to {csv_path}")
+
+    return means
+
+
+def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_string):
+    """Helper: single normalised bar chart (tput or latency)."""
+    x = np.arange(len(labels))
+    width = 0.5
+
+    fig, ax = plt.subplots(layout="constrained")
+    fig.set_size_inches(8, 6)
+
+    rects = ax.bar(x, values, width)
+    ax.bar_label(rects, fmt="%.3f", padding=3)
+
+    ax.set_ylabel(y_label)
+    ax.set_xticks(x, labels)
+    ax.set_xlabel("")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    ax.grid(False, axis="x")
+
+    ylims = ax.get_ylim()
+    y_bottom = min(1.0, min(values))
+    ax.set_ylim(y_bottom, ylims[1] * 1.05)
+
+    # Baseline reference line
+    ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1.0)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
+
+    fname = f"{analysis_suffix}-{now_string}.pdf"
+    plt.savefig(os.path.join(output_dir, fname), format="pdf", dpi=600, transparent=True)
+    plt.close()
+    print(f"Saved {fname}")
+
+
+def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_path=None):
+    """Create bar charts of normalised throughput AND latency.
+
+    If the DataFrame does not contain norm_tput / norm_latency columns they are
+    computed automatically (first experiment = baseline, at highest client count
+    or at *client_num* if specified). The enriched CSV is saved back to
+    *csv_path* when provided.
+    """
+    summary = _compute_norm_columns(df, client_num=client_num, csv_path=csv_path)
+
+    labels = summary["experiment_name"].tolist()
+
+    _plot_norm_bar(
+        summary["norm_tput"].tolist(),
+        labels,
+        "Normalized Throughput",
+        ANALYSIS_TYPES[7],
+        output_dir,
+        now_string,
+    )
+
+    _plot_norm_bar(
+        summary["norm_latency"].tolist(),
+        labels,
+        "Normalized Latency",
+        "norm_lat_bar",
+        output_dir,
+        now_string,
+    )
+
+
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
     # experiment runs produce stats.json files, which should be placed in the original_stats_dir
@@ -738,6 +882,13 @@ if __name__ == "__main__":
         required=False,
         help="Path to csv file that contains the data to analyze. If provided, generates plots from this file instead of going through original_stats_dir."
     )
+    parser.add_argument(
+        "-n", "--client_num",
+        type=int,
+        required=False,
+        default=None,
+        help="Client count to use when computing normalised tput/latency. If not given, uses the highest client count in the data."
+    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -779,3 +930,5 @@ if __name__ == "__main__":
         # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         # create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
         create_client_failures_plot(client_failures_df, None, args.output_plot_dir, now_string)
+    elif args.analysis_type == ANALYSIS_TYPES[7]:
+        create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv)
