@@ -35,9 +35,8 @@ matplotlib.use("pgf")
 plt.style.use("fivethirtyeight")
 plt.rcParams.update({
     "pgf.texsystem": "pdflatex",
-    "font.family": "serif",
-    "text.usetex": True,
-    "pgf.rcfonts": False,
+    "font.family": "sans-serif",
+    "text.usetex": False,
     "lines.linewidth": 2.0,
 })
 colors_538_extended = {
@@ -48,7 +47,7 @@ colors_538_extended = {
     "green": ["#2ca02c", "#6d904f"],
     "purple": ["#9467bd"],
     "gray": ["#8b8b8b"],
-    "brown": ["#8c564b",]
+    "brown": ["#8c564b"],
 }
 
 
@@ -295,7 +294,9 @@ def create_lat_tput_plots(df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
     ax.set_xlabel("Throughput (tx/s)")
+    # ax.set_xlabel("Throughput (tx/s)", fontsize=24)
     ax.set_ylabel("Mean Latency (ms)")
+    # ax.set_ylabel("Mean Latency (ms)", fontsize=24)
     ax.grid(True)
 
     # order = [
@@ -322,6 +323,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
         ax.plot(tput, latency, "--o", label=experiment_name)
         # ax.plot(tput, latency, "--o", label=experiment_name, color=color_order[order.index(experiment_name)])
     ax.legend(loc="upper center", ncol=3, fontsize=12, framealpha=0.5)
+    # ax.legend(loc="upper left", ncol=1, fontsize=16, framealpha=0.5)
 
     # tpcc
     # ax.set_ylim(bottom=0, top=120)
@@ -372,14 +374,16 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
         multiplier += 1
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_ylabel(y_label)
+    # ax.set_ylabel(y_label)
+    ax.set_ylabel(y_label, fontsize=24)
     ax.set_xticks(x + width, x_labels)
-    ax.set_xlabel(x_axis_label)
+    # ax.set_xlabel(x_axis_label)
+    ax.set_xlabel(x_axis_label, fontsize=24)
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
-    ax.legend(loc="upper center", ncol=bars_per_group, fontsize=12, framealpha=0.5)
+    ax.legend(loc="upper center", ncol=bars_per_group, fontsize=16, framealpha=0.5)
 
     for spine in ax.spines.values():
         spine.set_visible(True)
@@ -605,7 +609,7 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
 
 def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
-    fig.set_size_inches(8, 6)
+    fig.set_size_inches(8, 4)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Throughput (tx/s)")
     ax.grid(True)
@@ -621,7 +625,7 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         label = "Policy Change" if i == 0 else None
         ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
-    ax.legend(loc="lower center", ncol=3, fontsize=12, framealpha=1.0)
+    ax.legend(loc="lower center", ncol=3, fontsize=16, framealpha=1.0)
     ax.set_xlim(left=0, right=tput_time_df["time_s"].max())
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
