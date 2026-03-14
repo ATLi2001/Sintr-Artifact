@@ -640,7 +640,7 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
-def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
+def create_client_failures_bar_plot(client_failures_df, byz_client_df, output_dir, now_string, combined=False):
 
     target_num_byz_clients = [0, 2, 5]
     grouped_data = {}
@@ -697,6 +697,34 @@ def create_client_failures_plot(client_failures_df, byz_client_df, output_dir, n
     # ax.set_ylim(0, ylims[1] + 10)
     # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.png"))
     # plt.close()
+
+def create_client_failures_line_plot(client_failures_df, output_dir, now_string):
+    fig, ax = plt.subplots(layout="constrained")
+    ax.set_xlabel("Num Byzantine Clients")
+    ax.set_ylabel(f"Throughput / Correct Client (tx/s)")
+    ax.grid(True)
+
+    for experiment_name, group in client_failures_df.groupby("experiment_name"):
+        client_groups = group.groupby("num_byz_clients")
+        num_byz_clients = client_groups["num_byz_clients"].mean()
+        tput_per_correct_client = client_groups["tput_per_correct_client"].mean()
+        # technically should not take mean of std devs but assume only 1 data point per num_byz_clients
+        std_dev_per_correct_client = client_groups["tput_std_dev"].mean()
+
+        ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt="-o", capsize=4, label=experiment_name)
+    
+    ax.legend(loc="lower center", ncol=2)
+    ylims = ax.get_ylim()
+    ax.set_ylim(0, ylims[1] * 1.1)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
+
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
+    plt.close()
 
 
 def _compute_norm_columns(df, client_num=None, csv_path=None):
@@ -933,6 +961,7 @@ if __name__ == "__main__":
             client_failures_df = client_failures_csv(logs_df, total_recorded_time, args.output_csv_dir, now_string)
         # byz_client_df = client_failures_csv(byz_logs_df, total_recorded_time, args.output_csv_dir, now_string + "-byz", tput_per_correct=False)
         # create_client_failures_plot(client_failures_df, byz_client_df, args.output_plot_dir, now_string, combined=True)
-        create_client_failures_plot(client_failures_df, None, args.output_plot_dir, now_string)
+        # create_client_failures_bar_plot(client_failures_df, None, args.output_plot_dir, now_string)
+        create_client_failures_line_plot(client_failures_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[7]:
         create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv)
