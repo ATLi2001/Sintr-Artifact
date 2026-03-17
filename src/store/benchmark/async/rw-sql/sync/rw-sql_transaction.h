@@ -52,7 +52,6 @@ class RWSQLTransaction : public SyncTransaction, public RWSQLBaseTransaction { /
  private:
   size_t liveOps;
   bool execTxnServerSide = false;
-  uint32_t simulatedComputationDelay = 0;
   
   std::vector<std::string> statements; //keep statements in scope to allow for parallel Writes
 

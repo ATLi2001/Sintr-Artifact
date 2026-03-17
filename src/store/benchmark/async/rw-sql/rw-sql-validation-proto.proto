@@ -20,6 +20,7 @@ message RWSql {
   repeated int32 starts = 10;
   repeated int32 ends = 11;
   repeated SecondaryPair secondary_values = 12;
+  required uint32 simulated_computation_delay = 13;
 }
 
 message RWSqlPolicyChange {

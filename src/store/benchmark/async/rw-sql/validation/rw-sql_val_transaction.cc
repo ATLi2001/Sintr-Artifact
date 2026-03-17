@@ -32,7 +32,8 @@ namespace rwsql {
 
 RWSQLValTransaction::RWSQLValTransaction(uint32_t timeout, std::mt19937 &rand, const validation::proto::RWSql &msg) 
     : ValidationTransaction(timeout), liveOps(msg.num_ops()), RWSQLBaseTransaction(msg.num_ops(), msg.read_secondary_condition(),
-    msg.num_keys(), msg.value_size(), msg.value_categories(), rand, msg.read_only(), msg.scan_as_point(), msg.exec_point_scan_parallel())
+    msg.num_keys(), msg.value_size(), msg.value_categories(), rand, msg.read_only(), msg.scan_as_point(), msg.exec_point_scan_parallel(),
+    msg.simulated_computation_delay())
 {
   for(const int32_t &i : msg.tables()) {
     tables.push_back(i);
@@ -61,12 +62,6 @@ transaction_status_t RWSQLValTransaction::Validate(SyncClient &client) {
   statements.clear();
   
   return RWSQLBaseTransaction::BaseExecute(client, timeout, false, liveOps, numKeys);
-}
-
-transaction_status_t RWSQLValTransaction::Validate(SyncClient &client, uint32_t simDelay) {
-  statements.clear();
-
-  return RWSQLBaseTransaction::BaseExecute(client, timeout, false, liveOps, numKeys, false, simDelay);
 }
 
 } // namespace rwsql

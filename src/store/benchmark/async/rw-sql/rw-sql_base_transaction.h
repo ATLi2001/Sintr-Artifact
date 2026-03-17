@@ -46,19 +46,19 @@ inline int mod(int &x, const int &N){
 class RWSQLBaseTransaction {
  public:
   RWSQLBaseTransaction(QuerySelector *querySelector, uint64_t &numOps, std::mt19937 &rand, bool readSecondaryCondition, bool fixedRange, 
-                   int32_t value_size, uint64_t value_categories, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false);
+                   int32_t value_size, uint64_t value_categories, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false, uint32_t simulatedComputationDelay = 0);
   RWSQLBaseTransaction(const uint64_t &numOps, bool readSecondaryCondition, int32_t numKeys, int32_t value_size, uint64_t value_categories,
-    std::mt19937 &rand, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false) : numOps(numOps),
+    std::mt19937 &rand, bool readOnly=false, bool scanAsPoint=false, bool execPointScanParallel=false, uint32_t simulatedComputationDelay = 0) : numOps(numOps),
     readSecondaryCondition(readSecondaryCondition), numKeys(numKeys), value_size(value_size), value_categories(value_categories),
     readOnly(readOnly), scanAsPoint(scanAsPoint),
-    execPointScanParallel(execPointScanParallel), rand(rand) {}; // initializing rand to avoid initialization error (rand is not used in validation txn)
+    execPointScanParallel(execPointScanParallel), simulatedComputationDelay(simulatedComputationDelay), rand(rand) {}; // initializing rand to avoid initialization error (rand is not used in validation txn)
   virtual ~RWSQLBaseTransaction();
 
   inline const std::vector<int> getKeyIdxs() const {
     return keyIdxs;
   }
  protected:
-  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide = false, uint32_t simulatedComputationDelay = 0);
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide = false);
   void SerializeTxnState(std::string &txnState);
 
   std::string GenerateStatement(const std::string &table_name, int &left_bound, int &right_bound);
@@ -69,9 +69,9 @@ class RWSQLBaseTransaction {
 
   std::pair<uint64_t, std::string> GenerateSecondaryCondition();
   void ExecuteScanStatement(SyncClient &client, uint32_t timeout, const std::string &table_name, int &left_bound, int &right_bound,
-    const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay = 0);
+    const std::pair<uint64_t, std::string> &cond_pair);
   void ExecutePointStatements(SyncClient &client, uint32_t timeout, const std::string &table_name, int &left_bound, int &right_bound,
-    const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay = 0);
+    const std::pair<uint64_t, std::string> &cond_pair);
   void ProcessPointResult(SyncClient &client, uint32_t timeout, const std::string &table_name, const int &key, std::unique_ptr<const query_result::QueryResult> &queryResult, const std::pair<uint64_t, std::string> &cond_pair);
   void Update(SyncClient &client, uint32_t timeout, const std::string &table_name, const int &key, std::unique_ptr<const query_result::QueryResult> &queryResult, uint64_t row);
   
@@ -95,6 +95,7 @@ class RWSQLBaseTransaction {
   uint64_t max_random_size;
   const bool scanAsPoint;
   const bool execPointScanParallel;
+  const uint32_t simulatedComputationDelay;
 
   // not used in the rw sql transaction
   std::vector<int> keyIdxs;

@@ -41,9 +41,10 @@ static std::map<uint64_t, uint64_t> base_freq;
 static uint64_t periodic = 0;
 
 RWSQLBaseTransaction::RWSQLBaseTransaction(QuerySelector *querySelector, uint64_t &numOps, std::mt19937 &rand, bool readSecondaryCondition, bool fixedRange, 
-    int32_t value_size, uint64_t value_categories, bool readOnly, bool scanAsPoint, bool execPointScanParallel) 
+    int32_t value_size, uint64_t value_categories, bool readOnly, bool scanAsPoint, bool execPointScanParallel, uint32_t simulatedComputationDelay) 
     : querySelector(querySelector), numOps(numOps), readOnly(readOnly), readSecondaryCondition(readSecondaryCondition), rand(rand),
-    value_size(value_size), value_categories(value_categories), scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel), numKeys((int) querySelector->numKeys){
+    value_size(value_size), value_categories(value_categories), scanAsPoint(scanAsPoint), execPointScanParallel(execPointScanParallel),
+    simulatedComputationDelay(simulatedComputationDelay), numKeys((int) querySelector->numKeys){
 
   // not used in the code
   max_random_size = value_categories < 0? UINT64_MAX : log(value_categories) / log(alpha_numeric_size);
@@ -119,7 +120,7 @@ RWSQLBaseTransaction::~RWSQLBaseTransaction() {
 }
 
 //WARNING: CURRENTLY DO NOT SUPPORT READ YOUR OWN WRITES
-transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide, uint32_t simulatedComputationDelay) {
+transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, size_t liveOps, int32_t numKeys, bool execTxnServerSide) {
   //Note: Semantic CC cannot help this Transaction avoid aborts. Since it does value++, all TXs that touch value must be totally ordered.
 
   Debug("Start next Transaction");
@@ -150,10 +151,10 @@ transaction_status_t RWSQLBaseTransaction::BaseExecute(SyncClient &client, uint3
     auto &secondary_val = secondary_values[i];
 
     if(scanAsPoint){
-      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val, simulatedComputationDelay);
+      ExecutePointStatements(client, timeout, table_name, left_bound, right_bound, secondary_val);
     }
     else{
-      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val, simulatedComputationDelay);
+      ExecuteScanStatement(client, timeout, table_name, left_bound, right_bound, secondary_val);
     }
     //TODO: Re-factor into Submit/Get logic so its naturally parallelizable between queries?
 
@@ -216,6 +217,7 @@ void RWSQLBaseTransaction::SerializeTxnState(std::string &txnState) {
     pair->set_first(i.first);
     pair->set_second(i.second);
   }
+  curr_txn.set_simulated_computation_delay(simulatedComputationDelay);
 
   curr_txn.SerializeToString(currTxnState.mutable_txn_data());
   currTxnState.SerializeToString(&txnState);
@@ -264,7 +266,7 @@ std::pair<uint64_t, std::string> RWSQLBaseTransaction::GenerateSecondaryConditio
 
 void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t timeout,
   const std::string &table_name, int &left_bound, int &right_bound,
-  const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay){
+  const std::pair<uint64_t, std::string> &cond_pair){
 
   std::string statement;
 
@@ -298,18 +300,26 @@ void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t tim
   if(execPointScanParallel) {
     client.Query(statement, timeout);
     // do some "fake" computation here (async)
-    if(simulatedComputationDelay > 0) {
-      Debug("Waiting for %lu ms", simulatedComputationDelay);
-      std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
-    }
+    // if(simulatedComputationDelay > 0) {
+    //   Debug("Waiting for %lu ms", simulatedComputationDelay);
+    //   std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+    // }
     client.Wait(results);
     UW_ASSERT(results.size() == 1 && results[0]);
     queryResult = std::move(results[0]);
   } else {
     client.Query(statement, queryResult, timeout);
-    if(simulatedComputationDelay > 0) {
-      Debug("Waiting for %lu ms", simulatedComputationDelay);
-      std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+    // if(simulatedComputationDelay > 0) {
+    //   Debug("Waiting for %lu ms", simulatedComputationDelay);
+    //   std::this_thread::sleep_for(std::chrono::milliseconds(simulatedComputationDelay));
+    // }
+  }
+
+  if (simulatedComputationDelay > 0) {
+    Debug("Simulating computation for %lu ms", simulatedComputationDelay);
+    auto start = std::chrono::high_resolution_clock::now();
+    while (std::chrono::high_resolution_clock::now() - start < std::chrono::milliseconds(simulatedComputationDelay)) {
+      // Busy wait loop
     }
   }
 
@@ -329,7 +339,7 @@ void RWSQLBaseTransaction::ExecuteScanStatement(SyncClient &client, uint32_t tim
 //////////////////////////////// Point handling
 void RWSQLBaseTransaction::ExecutePointStatements(SyncClient &client, uint32_t timeout, 
   const std::string &table_name, int &left_bound, int &right_bound,
-  const std::pair<uint64_t, std::string> &cond_pair, uint32_t simulatedComputationDelay){
+  const std::pair<uint64_t, std::string> &cond_pair){
 
   // auto cond_pair = GenerateSecondaryCondition();
 

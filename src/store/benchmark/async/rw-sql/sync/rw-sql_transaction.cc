@@ -34,8 +34,7 @@ RWSQLTransaction::RWSQLTransaction(QuerySelector *querySelector, uint64_t &numOp
                                      int32_t value_size, uint64_t value_categories, bool readOnly, bool scanAsPoint, bool execPointScanParallel, bool execTxnServerSide,
                                     uint32_t simulatedComputationDelay) 
     : SyncTransaction(10000), RWSQLBaseTransaction(querySelector, numOps, rand, readSecondaryCondition, fixedRange, 
-      value_size, value_categories, readOnly, scanAsPoint, execPointScanParallel), execTxnServerSide(execTxnServerSide),
-      simulatedComputationDelay(simulatedComputationDelay) {
+      value_size, value_categories, readOnly, scanAsPoint, execPointScanParallel, simulatedComputationDelay), execTxnServerSide(execTxnServerSide) {
 }
 
 RWSQLTransaction::~RWSQLTransaction() {
@@ -54,7 +53,7 @@ transaction_status_t RWSQLTransaction::Execute(SyncClient &client) {
     secondary_values.push_back(GenerateSecondaryCondition());
   }
 
-  return RWSQLBaseTransaction::BaseExecute(client, timeout, true, liveOps, (int) querySelector->numKeys, execTxnServerSide, simulatedComputationDelay);
+  return RWSQLBaseTransaction::BaseExecute(client, timeout, true, liveOps, (int) querySelector->numKeys, execTxnServerSide);
 }
 
 } // namespace rwsql
