@@ -20,18 +20,10 @@
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
   "analysis_name": "ignore-val-pessimistic-delay10",
-  "replication_protocol": [
-    "sintr"
-  ],
-  "client_protocol_mode": [
-    "sintr"
-  ],
-  "num_shards": [
-    1
-  ],
-  "num_groups": [
-    1
-  ],
+  "replication_protocol": ["sintr"],
+  "client_protocol_mode": ["sintr"],
+  "num_shards": [1],
+  "num_groups": [1],
   "benchmark_type": "sql_bench",
   "benchmark_name": "rw-sql",
   "benchmark_schema_file_path": "/users/atli/rw-sql.json",
@@ -66,11 +58,7 @@
   "__CLIENT RAND SLEEP NEEDS TO BE HIGH FOR NON CRYPTO; backoff too": true,
   "client_message_timeout": 10000,
   "run_locally": false,
-  "stats_merge_lists": [
-    "txn_groups",
-    "sig_batch",
-    "NumRetries"
-  ],
+  "stats_merge_lists": ["txn_groups", "sig_batch", "NumRetries"],
   "replication_protocol_settings": [
     {
       "message_transport_type": "tcp",
@@ -144,7 +132,7 @@
   "sintr_protocol_settings": {
     "client_network_config_file_name": "client.config",
     "client_port": 7587,
-    "sintr_max_val_threads": 1,
+    "sintr_max_val_threads": 2,
     "sintr_sign_fwd_read_results": true,
     "sintr_sign_finish_validation": true,
     "sintr_debug_endorse_check": false,
@@ -164,7 +152,7 @@
     "sintr_use_occ_for_policies": true,
     "sintr_blind_write_message": false,
     "sintr_sort_writeset": true,
-    "sintr_max_client_sig_check_threads": 2,
+    "sintr_max_client_sig_check_threads": 1,
     "sintr_profile_one_client_load": false,
     "sintr_val_client_selector": "ring",
     "sintr_val_client_selector_zipf": 1.1,
@@ -178,37 +166,13 @@
   "codebase_name": "indicus",
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
-  "client_total": [
-    [
-      20
-    ]
-  ],
-  "client_processes_per_client_node": [
-    [
-      2
-    ]
-  ],
-  "client_threads_per_process": [
-    [
-      1
-    ]
-  ],
+  "client_total": [[20]],
+  "client_processes_per_client_node": [[2]],
+  "client_threads_per_process": [[1]],
   "client_nodes_per_server": 2,
   "_NOTE: Pin again since now we don't use Peloton threads": 0,
-  "pin_server_processes": [
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7
-  ],
-  "pin_client_processes": [
-    0,
-    4
-  ],
+  "pin_server_processes": [0, 1, 2, 3, 4, 5, 6, 7],
+  "pin_client_processes": [0, 4],
   "client_debug_output": false,
   "_client_debug_output": "store/sintrstore/*",
   "server_debug_output": false,
@@ -225,16 +189,10 @@
   "_client_host_format_str": "client-%d-%d.%s.%s.wisc.cloudlab.us",
   "project_name": "pequin-pg0",
   "fault_tolerance": 1,
-  "_server_names": [
-    [
-      "us-east-1-0"
-    ]
-  ],
+  "_server_names": [["us-east-1-0"]],
   "_server_regions": [
     {
-      "us-east-1": [
-        "us-east-1-0"
-      ]
+      "us-east-1": ["us-east-1-0"]
     }
   ],
   "server_names": [
@@ -249,16 +207,8 @@
   ],
   "server_regions": [
     {
-      "us-east-1": [
-        "us-east-1-0",
-        "us-east-1-1",
-        "us-east-1-2"
-      ],
-      "eu-west-1": [
-        "eu-west-1-0",
-        "eu-west-1-1",
-        "eu-west-1-2"
-      ]
+      "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
+      "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"]
     }
   ],
   "__server_names": [
@@ -279,26 +229,14 @@
   ],
   "__server_regions": [
     {
-      "us-east-1": [
-        "us-east-1-0",
-        "us-east-1-1",
-        "us-east-1-2"
-      ],
-      "eu-west-1": [
-        "eu-west-1-0",
-        "eu-west-1-1",
-        "eu-west-1-2"
-      ],
+      "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
+      "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"],
       "ap-northeast-1": [
         "ap-northeast-1-0",
         "ap-northeast-1-1",
         "ap-northeast-1-2"
       ],
-      "us-west-1": [
-        "us-west-1-0",
-        "us-west-1-1",
-        "us-west-1-2"
-      ]
+      "us-west-1": ["us-west-1-0", "us-west-1-1", "us-west-1-2"]
     }
   ],
   "___server_names": [
@@ -325,31 +263,15 @@
   ],
   "___server_regions": [
     {
-      "us-east-1": [
-        "us-east-1-0",
-        "us-east-1-1",
-        "us-east-1-2"
-      ],
-      "eu-west-1": [
-        "eu-west-1-0",
-        "eu-west-1-1",
-        "eu-west-1-2"
-      ],
+      "us-east-1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
+      "eu-west-1": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"],
       "ap-northeast-1": [
         "ap-northeast-1-0",
         "ap-northeast-1-1",
         "ap-northeast-1-2"
       ],
-      "us-west-1": [
-        "us-west-1-0",
-        "us-west-1-1",
-        "us-west-1-2"
-      ],
-      "eu-central-1": [
-        "eu-central-1-0",
-        "eu-central-1-1",
-        "eu-central-1-2"
-      ],
+      "us-west-1": ["us-west-1-0", "us-west-1-1", "us-west-1-2"],
+      "eu-central-1": ["eu-central-1-0", "eu-central-1-1", "eu-central-1-2"],
       "ap-southeast-2": [
         "ap-southeast-2-0",
         "ap-southeast-2-1",
@@ -415,24 +337,13 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Indicus-Multi"
-      ],
+      "series_titles": ["Indicus-Multi"],
       "x_var_is_config": false,
-      "x_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "mean"
-      ],
+      "x_var": ["run_stats", "combined", "tput", "mean"],
       "x_label": "Throughput (txn/s)",
       "y_label": "mean Latency (ms)",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "aggregate",
-        "combined",
-        "mean"
-      ]
+      "y_var": ["aggregate", "combined", "mean"]
     },
     {
       "name": "tput-clients",
@@ -440,22 +351,13 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Indicus-Multi"
-      ],
+      "series_titles": ["Indicus-Multi"],
       "x_var_is_config": true,
-      "x_var": [
-        "client_total"
-      ],
+      "x_var": ["client_total"],
       "x_label": "Number of Clients",
       "y_label": "Throughput (txn/s)",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "mean"
-      ]
+      "y_var": ["run_stats", "combined", "tput", "mean"]
     }
   ],
   "cdf_plots": {
@@ -505,10 +407,7 @@
   "server_bin_name": "server",
   "server_port": 7087,
   "src_directory": "/home/atl63/Pequin-Artifact/src",
-  "make_collect_bins": [
-    "store/benchmark/async/benchmark",
-    "store/server"
-  ],
+  "make_collect_bins": ["store/benchmark/async/benchmark", "store/server"],
   "make_clean": false,
   "network_config_file_name": "shard.config",
   "remote_bin_directory_nfs_enabled": false,
@@ -540,5 +439,5 @@
   "server_gc_debug_trace": false,
   "_server_wrap_command": "valgrind --tool=none %s",
   "__server_wrap_command": "valgrind --tool=callgrind --instr-atstart=no --toggle-collect=\"*TCPTransport::Run*\" %s",
-  "rw_sql_sim_delay": 10
+  "rw_sql_sim_delay": 3
 }

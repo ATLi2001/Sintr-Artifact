@@ -1,24 +1,7 @@
 {
-  "ddos-delay10-byz0": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
-    "replication_protocol_settings": [
-      {
-        "sig_batch": 2
-      }
-    ],
-    "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
-      "sintr_val_client_selector": "ring"
-    },
-    "client_total": [[20]],
-    "client_processes_per_client_node": [[2]],
-    "client_threads_per_process": [[1]],
-    "client_nodes_per_server": 2
-  },
-  "ddos-delay10-byz1": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
+  "ddos-delay2-byz0": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
     "replication_protocol_settings": [
       {
         "sig_batch": 2
@@ -27,6 +10,27 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1
+    },
+    "client_total": [[20]],
+    "client_processes_per_client_node": [[2]],
+    "client_threads_per_process": [[1]],
+    "client_nodes_per_server": 2
+  },
+  "ddos-delay2-byz1": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
+    "replication_protocol_settings": [
+      {
+        "sig_batch": 2
+      }
+    ],
+    "sintr_protocol_settings": {
+      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1,
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 1
     },
@@ -35,9 +39,9 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ddos-delay10-byz2": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
+  "ddos-delay2-byz2": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
     "replication_protocol_settings": [
       {
         "sig_batch": 2
@@ -46,6 +50,8 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1,
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 2
     },
@@ -54,9 +60,9 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ddos-delay10-byz3": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
+  "ddos-delay2-byz3": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
     "replication_protocol_settings": [
       {
         "sig_batch": 2
@@ -65,6 +71,8 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1,
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 3
     },
@@ -73,9 +81,9 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ddos-delay10-byz4": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
+  "ddos-delay2-byz4": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
     "replication_protocol_settings": [
       {
         "sig_batch": 2
@@ -84,6 +92,8 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1,
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 4
     },
@@ -92,9 +102,9 @@
     "client_threads_per_process": [[1]],
     "client_nodes_per_server": 2
   },
-  "ddos-delay10-byz5": {
-    "analysis_name": "ddos-delay10",
-    "rw_sql_sim_delay": 10,
+  "ddos-delay2-byz5": {
+    "analysis_name": "ddos-delay2",
+    "rw_sql_sim_delay": 2,
     "replication_protocol_settings": [
       {
         "sig_batch": 2
@@ -103,6 +113,8 @@
     "sintr_protocol_settings": {
       "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
+      "sintr_max_val_threads": 2,
+      "sintr_max_client_sig_check_threads": 1,
       "sintr_failure_type": "request-extra-validation",
       "sintr_byz_client_total": 5
     },
