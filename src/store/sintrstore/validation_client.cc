@@ -259,12 +259,13 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
   
   proto::Transaction *txn = a->second->txn;
 
-  if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
+  threadValtoSQLMap::accessor b;
+  if (!threadValtoSQL.find(b, std::this_thread::get_id())) {
     std::ostringstream oss;
     oss << std::this_thread::get_id();
     Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
   }
-  SQLTransformer *sql_interpreter = threadValtoSQL[std::this_thread::get_id()];
+  SQLTransformer *sql_interpreter = b->second;
 
   a->second->pendingWriteStatements.push_back(write_statement);
 
@@ -381,12 +382,13 @@ void ValidationClient::Query(const std::string &query, query_callback qcb,
     pendingQuery = new PendingValidationQuery(Timestamp(txn->timestamp()), query, qcb, cache_result, "", params.sintr_params.hashQueryGenId);
   } 
 
-  if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
+  threadValtoSQLMap::accessor b;
+  if (!threadValtoSQL.find(b, std::this_thread::get_id())) {
     std::ostringstream oss;
     oss << std::this_thread::get_id();
     Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
   }
-  SQLTransformer *sql_interpreter = threadValtoSQL[std::this_thread::get_id()];
+  SQLTransformer *sql_interpreter = b->second;
 
   // update involved groups for txn
   std::vector<int> txnGroups(txn->involved_groups().begin(), txn->involved_groups().end());
@@ -689,11 +691,14 @@ void ValidationClient::LiftTransaction(std::vector<std::string> &lift_keys) {
 }
 
 void ValidationClient::SetThreadValSQLInterpreter() {
-  if(threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
+  threadValtoSQLMap::accessor a;
+  const bool isNewKey = threadValtoSQL.insert(a, std::this_thread::get_id());
+  if (isNewKey) {
     Debug("Setting new sql transformer");
-    threadValtoSQL[std::this_thread::get_id()] = new SQLTransformer(&params.query_params);
-    threadValtoSQL[std::this_thread::get_id()]->RegisterTables(table_registry);
-    threadValtoSQL[std::this_thread::get_id()]->RegisterPartitioner(part, nshards, ngroups, -1);
+    SQLTransformer *sql_transformer = new SQLTransformer(&params.query_params);
+    sql_transformer->RegisterTables(table_registry);
+    sql_transformer->RegisterPartitioner(part, nshards, ngroups, -1);
+    a->second = sql_transformer;
   }
 }
 
@@ -722,13 +727,14 @@ void ValidationClient::SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_clie
   }
   
   if(params.query_params.sql_mode && txn->policy_type() != proto::Transaction::POLICY_ID_POLICY) {
-    if (threadValtoSQL.find(std::this_thread::get_id()) == threadValtoSQL.end()) {
+    threadValtoSQLMap::accessor b;
+    if (!threadValtoSQL.find(b, std::this_thread::get_id())) {
       std::ostringstream oss;
       oss << std::this_thread::get_id();
       Panic("cannot find thread ID %s in thread ID to SQL accessor", oss.str().c_str());
     }
     Debug("CREATING NEW TX for client id %lu, seq num %lu", txn_client_id, txn_client_seq_num);
-    threadValtoSQL[std::this_thread::get_id()]->NewTx(txn);
+    b->second->NewTx(txn);
   }
 }
 

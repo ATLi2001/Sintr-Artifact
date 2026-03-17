@@ -107,7 +107,7 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
     cpus_per_client = 4;
   }
   int main_client_cpu = (client_id * cpus_per_client) % num_cpus;
-  Warning("CPUs per client is %lu main client cpu is %d num_cpus is %lu", cpus_per_client, main_client_cpu, num_cpus);
+  Notice("CPUs per client is %lu main client cpu is %d num_cpus is %lu", cpus_per_client, main_client_cpu, num_cpus);
 
 
   Debug("Starting %lu validation threads", params.sintr_params.maxValThreads);
@@ -118,10 +118,15 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
       if(cpus_per_client == 8) {
-        Warning("8 cores client validation thread pinned to core: %lu", (main_client_cpu + 1 + i) % num_cpus);
+        Notice("8 cores client validation thread pinned to core: %lu", (main_client_cpu + 1 + i) % num_cpus);
         CPU_SET((main_client_cpu + 1 + i) % num_cpus, &cpuset);
-      } else {
-        Warning("client validation thread pinned to core : %lu", (main_client_cpu + 1) % num_cpus);
+      } 
+      else if (cpus_per_client == 4 && params.sintr_params.maxValThreads == 2 && params.sintr_params.maxClientSigCheckThreads == 1) {
+        Notice("client validation thread pinned to core : %lu", (main_client_cpu + 1 + i) % num_cpus);
+        CPU_SET((main_client_cpu + 1 + i) % num_cpus, &cpuset);
+      }
+      else {
+        Notice("client validation thread pinned to core : %lu", (main_client_cpu + 1) % num_cpus);
         CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
       }
       pthread_setaffinity_np(valThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
@@ -135,7 +140,12 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       // set cpu affinity
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      if (cpus_per_client == 4 && params.sintr_params.maxValThreads == 2 && params.sintr_params.maxClientSigCheckThreads == 1) {
+        CPU_SET((main_client_cpu + 3) % num_cpus, &cpuset);
+      }
+      else {
+        CPU_SET((main_client_cpu + 1) % num_cpus, &cpuset);
+      }
       pthread_setaffinity_np(c2cSendThread->native_handle(), sizeof(cpu_set_t), &cpuset);
       Debug("C2C SEND THREAD PINNED TO CORE %lu", (main_client_cpu + 1) % num_cpus);
     }
@@ -175,10 +185,15 @@ Client2Client::Client2Client(transport::Configuration *config, transport::Config
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
       if(cpus_per_client == 8) {
-        Warning("8 cores client sig check thread pinned to core: %lu", (main_client_cpu + 1 + params.sintr_params.maxValThreads + i) % num_cpus);
+        Notice("8 cores client sig check thread pinned to core: %lu", (main_client_cpu + 1 + params.sintr_params.maxValThreads + i) % num_cpus);
         CPU_SET((main_client_cpu + 1 + params.sintr_params.maxValThreads + i) % num_cpus, &cpuset);
-      } else {
-        Warning("client sig check thread pinned to core : %lu", (main_client_cpu + 2 + i % 2) % num_cpus);
+      } 
+      else if (cpus_per_client == 4 && params.sintr_params.maxValThreads == 2 && params.sintr_params.maxClientSigCheckThreads == 1) {
+        Notice("client sig check thread pinned to core : %lu", (main_client_cpu + 3) % num_cpus);
+        CPU_SET((main_client_cpu + 3) % num_cpus, &cpuset);
+      }
+      else {
+        Notice("client sig check thread pinned to core : %lu", (main_client_cpu + 2 + i % 2) % num_cpus);
         CPU_SET((main_client_cpu + 2 + i % 2) % num_cpus, &cpuset);
       }
       pthread_setaffinity_np(parallelSigCheckThreads[i]->native_handle(), sizeof(cpu_set_t), &cpuset);
@@ -1717,7 +1732,7 @@ void Client2Client::HandleFinishValidateTxnMessageOptimistic(const proto::Finish
   // stale finish validation message
   std::shared_lock lock(seq_num_lock);
   if (val_txn_seq_num != client_seq_num) {
-    Warning(
+    Debug(
       "Received stale finishValidateTxnMessage from client id %lu, seq num %lu; curr seq num %lu", 
       peer_client_id, 
       val_txn_seq_num,

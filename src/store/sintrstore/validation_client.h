@@ -295,7 +295,8 @@ class ValidationClient : public ::ValidationClientCommon {
   typedef tbb::concurrent_hash_map<std::string, AllValidationTxnState *> allValTxnStatesMap;
   allValTxnStatesMap allValTxnStates;
   // map from thread id to (SQL Transformer) that stores a sql interpreter for each validation thread
-  std::unordered_map<std::thread::id, SQLTransformer*> threadValtoSQL;
+  typedef tbb::concurrent_hash_map<std::thread::id, SQLTransformer*> threadValtoSQLMap;
+  threadValtoSQLMap threadValtoSQL;
 
   uint64_t query_fin_us;
   uint64_t get_fin_us;
