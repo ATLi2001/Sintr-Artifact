@@ -354,6 +354,7 @@ void ValidationClient::Write(std::string &write_statement, write_callback wcb,
   else{
     Debug("Issuing re-con Query validation");
     a.release();
+    b.release();
     Query(read_statement, std::move(write_cont), wtcb, timeout, false, skip_query_interpretation); //cache_result = false
   }
   return;
