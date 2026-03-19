@@ -83,16 +83,16 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
   }
   uint32_t wid, did;
   std::mt19937 &gen = GetRand();
-  // if (delivery && deliveryDId < 10) {
-  //   deliveryDId++;
-  //   wid = deliveryWId;
-  //   did = deliveryDId;
-  //   lastOp = "delivery";
-  //   if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, GetRand());
-  //   return new SyncSQLDelivery(GetTimeout(), wid, did, GetRand(), tpcc_lifts);
-  // } else {
-  //   delivery = false;
-  // }
+  if (delivery && deliveryDId < 2) {
+    deliveryDId = 6;
+    wid = deliveryWId;
+    did = deliveryDId;
+    lastOp = "delivery";
+    if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, GetRand());
+    return new SyncSQLDelivery(GetTimeout(), wid, did, GetRand(), tpcc_lifts);
+  } else {
+    delivery = false;
+  }
 
   //USE even dist when testing...
   // new_order_ratio = 0;
@@ -134,7 +134,7 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
     deliveryDId = 1;
     deliveryWId = wid;
     did = deliveryDId;
-    // delivery = true;
+    delivery = true;
     lastOp = "delivery";
     if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, gen);
     return new SyncSQLDelivery(GetTimeout(), wid, did, gen, tpcc_lifts);

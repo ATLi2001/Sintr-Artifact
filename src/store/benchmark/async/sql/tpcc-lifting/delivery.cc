@@ -27,6 +27,7 @@
 #include "store/benchmark/async/sql/tpcc-lifting/delivery.h"
 
 #include <fmt/core.h>
+#include <chrono>
 
 #include "store/benchmark/async/sql/tpcc-lifting/tpcc_common.h"
 #include "store/benchmark/async/sql/tpcc-lifting/tpcc-lift-sql-validation-proto.pb.h"
@@ -37,7 +38,7 @@ namespace tpcc_lift_sql {
 
 SQLDelivery::SQLDelivery(uint32_t w_id, uint32_t d_id,
     std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : w_id(w_id), d_id(d_id),
-    tpcc_lifts(tpcc_lifts) {
+    tpcc_lifts(std::move(tpcc_lifts)) {
   o_carrier_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen);
   ol_delivery_d = std::time(0);
 
@@ -68,8 +69,18 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
   std::vector<int32_t> total_amts;
 
   client.Begin(timeout, txnState);
-  for(int i = 0; i < 10; i++){
-  d_id = i+1; // district ID should go from 1 to 10
+  if(d_id == 10) { //aborted at 10, retrying second delivery txn
+    d_id = 1;
+  }
+  if(d_id == 5) {
+    d_id = 1; // aborted at 5, so retrying first delivery txn
+  }
+  int start_delivery = d_id; // should be either one or 6
+  UW_ASSERT(start_delivery == 1 || start_delivery == 6);
+  for(int i = 0; i < 5; i++){
+  d_id = i + start_delivery; // district ID should go from 1 to 5
+  Debug("District: %u i %i, Warehouse %u", d_id, i, w_id);
+
   
   // (1) Retrieve the row from NEW-ORDER with the lowest order id
   //     If none is found, skip delivery of an order for this district. 
@@ -83,6 +94,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
     if (queryResult->empty()) {
       // Note: technically we're supposed to check each district in this warehouse  ==>> We instead are doing a TX for each district sequentially (see tpcc_client.cc)
+      Debug("Empty query result here d_id is %u", d_id);
       continue;
     }
 
@@ -99,6 +111,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
     if (queryResult->empty()) {
       // Note: technically we're supposed to check each district in this warehouse  ==>> We instead are doing a TX for each district sequentially (see tpcc_client.cc)
+      Debug("Empty query result here2 d_id is %u", d_id);
       continue;
     }
 
@@ -123,7 +136,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   if (queryResult->empty()) {
     // already delivered all orders for this warehouse
-    Debug("Already delivered all orders for this warehouse district");
+    Debug("Already delivered all orders for this warehouse district d_id is %u", d_id);
     continue;
   }
   // int c_id;
@@ -154,9 +167,9 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
   int total_amount = 0;
   //for result in result
   Debug("Result size: %d", queryResult->size());
-  for(int i = 0; i < queryResult->size(); ++i){
+  for(int j = 0; j < queryResult->size(); ++j){
     OrderLineRow olr;
-    deserialize(olr, queryResult, i);
+    deserialize(olr, queryResult, j);
     Debug("Olr amount: %i", olr.get_amount());
     total_amount += olr.get_amount();
   }
@@ -186,12 +199,15 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   client.Wait(results);
   // determine if we should lift this transaction
-  bool abort = false;
+  // auto lift_start = std::chrono::steady_clock::now();
   if (tpcc_lifts.IsLiftedPolicyFunction()) {
     std::vector<std::string> lifts = tpcc_lifts.DeliveryLiftFunction(client.GetPolicyCache(), client.GetReadset(),
       total_amts, customer_amts);
     client.LiftTransaction(lifts);
   }
+  // auto lift_end = std::chrono::steady_clock::now();
+  // auto lift_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(lift_end - lift_start).count();
+  // Debug("DELIVERY lift block execution time: %ld us", lift_duration_us);
 
   Debug("COMMIT");
   return client.Commit(timeout);

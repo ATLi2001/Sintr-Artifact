@@ -732,7 +732,7 @@ def _compute_norm_columns(df, client_num=None, csv_path=None):
 
     Groups by experiment_name. For each experiment, averages tput/latency at the
     chosen client count (highest available by default, or *client_num* if given).
-    The first experiment (in order of appearance) is the baseline (norm = 1.0).
+    The experiment with the lowest throughput is the baseline (norm = 1.0).
 
     If *csv_path* is provided the enriched CSV is saved back to that path.
 
@@ -782,8 +782,9 @@ def _compute_norm_columns(df, client_num=None, csv_path=None):
         .reindex(experiments)  # keep original appearance order
     )
 
-    baseline_tput = means["tput"].iloc[0]
-    baseline_lat = means["latency"].iloc[0]
+    baseline_idx = means["tput"].idxmin()
+    baseline_tput = means.loc[baseline_idx, "tput"]
+    baseline_lat = means.loc[baseline_idx, "latency"]
 
     means["norm_tput"] = means["tput"] / baseline_tput
     means["norm_latency"] = means["latency"] / baseline_lat
@@ -843,11 +844,12 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
     """Create bar charts of normalised throughput AND latency.
 
     If the DataFrame does not contain norm_tput / norm_latency columns they are
-    computed automatically (first experiment = baseline, at highest client count
-    or at *client_num* if specified). The enriched CSV is saved back to
-    *csv_path* when provided.
+    computed automatically (lowest-throughput experiment = baseline, at highest
+    client count or at *client_num* if specified). The enriched CSV is saved
+    back to *csv_path* when provided.
     """
     summary = _compute_norm_columns(df, client_num=client_num, csv_path=csv_path)
+    summary = summary.sort_values(by="norm_tput", ascending=True)
 
     labels = summary["experiment_name"].tolist()
 
