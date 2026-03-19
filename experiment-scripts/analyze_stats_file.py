@@ -64,6 +64,7 @@ ANALYSIS_TYPES = [
     "throughput_time",
     "client_failures",
     "norm_tput_bar",
+    "tput_bar",
 ]
 
 # the original stats directory should have subdirectories, each corresponding to a single experiment run
@@ -713,9 +714,9 @@ def create_client_failures_line_plot(client_failures_df, output_dir, now_string)
 
         ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt="-o", capsize=4, label=experiment_name)
     
-    ax.legend(loc="lower center", ncol=2)
-    ylims = ax.get_ylim()
-    ax.set_ylim(0, ylims[1] * 1.1)
+    ax.legend(loc="upper center", ncol=2)
+    ax.set_ylim(0, 300)
+    ax.set_yticks(np.arange(0, 301, 50))
 
     for spine in ax.spines.values():
         spine.set_visible(True)
@@ -869,6 +870,30 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
         now_string,
     )
 
+def create_tput_bar_plot(df, output_dir, now_string):
+    fig, ax = plt.subplots(layout="constrained")
+    fig.set_size_inches(8, 4)
+    ax.set_xlabel("Experiment")
+    ax.set_ylabel("Throughput (tx/s)")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.7)
+    ax.grid(False, axis="x")
+
+    for experiment_name, group in df.groupby("experiment_name"):
+        client_groups = group.groupby("num_clients")
+        tput = client_groups["tput"].mean()
+        ax.bar(experiment_name, tput)
+    
+    ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.1)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("black")
+        spine.set_linewidth(1.0)
+    ax.tick_params(axis="both", which="both", length=5)
+
+    plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[8]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
+    plt.close()
+
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -965,3 +990,5 @@ if __name__ == "__main__":
         create_client_failures_line_plot(client_failures_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[7]:
         create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv)
+    elif args.analysis_type == ANALYSIS_TYPES[8]:
+        create_tput_bar_plot(df, args.output_plot_dir, now_string)
