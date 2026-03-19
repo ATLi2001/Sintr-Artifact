@@ -199,15 +199,11 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   client.Wait(results);
   // determine if we should lift this transaction
-  // auto lift_start = std::chrono::steady_clock::now();
   if (tpcc_lifts.IsLiftedPolicyFunction()) {
     std::vector<std::string> lifts = tpcc_lifts.DeliveryLiftFunction(client.GetPolicyCache(), client.GetReadset(),
       total_amts, customer_amts);
     client.LiftTransaction(lifts);
   }
-  // auto lift_end = std::chrono::steady_clock::now();
-  // auto lift_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(lift_end - lift_start).count();
-  // Debug("DELIVERY lift block execution time: %ld us", lift_duration_us);
 
   Debug("COMMIT");
   return client.Commit(timeout);
