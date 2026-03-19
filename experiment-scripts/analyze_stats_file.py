@@ -880,10 +880,10 @@ def create_tput_bar_plot(df, output_dir, now_string):
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
 
-    for experiment_name, group in df.groupby("experiment_name"):
+    for experiment_name, group in df.groupby("experiment_name", sort=False):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
-        ax.bar(experiment_name, tput)
+        ax.bar(experiment_name, tput, color=['tab:blue'])
     
     ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.1)
 
