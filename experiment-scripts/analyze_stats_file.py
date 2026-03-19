@@ -883,7 +883,7 @@ def create_tput_bar_plot(df, output_dir, now_string):
     for experiment_name, group in df.groupby("experiment_name", sort=False):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
-        ax.bar(experiment_name, tput, color=['tab:blue'])
+        ax.bar(experiment_name, tput, color=[colors_538_extended["blue"][0]])
     
     ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.1)
 
