@@ -838,7 +838,8 @@ int main(int argc, char **argv) {
     FLAGS_sintr_hash_query_gen_id,
     false, 0, false, SintrFailure(),
     FLAGS_sintr_include_readset_for_txn_policy,
-    FLAGS_sintr_enable_lifting
+    FLAGS_sintr_enable_lifting,
+    false
   );
 
   switch (proto) {

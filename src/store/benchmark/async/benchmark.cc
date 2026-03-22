@@ -564,6 +564,7 @@ DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
 DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
 DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
 DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
+DEFINE_bool(sintr_contact_all_byz_clients, false, "sintr contact all byz clients in system for validation");
 
 ///////////////////////////////////////////////////////////
 
@@ -1772,7 +1773,8 @@ int main(int argc, char **argv) {
       FLAGS_sintr_use_endorsement_cb,
       sintrFailure,
       FLAGS_sintr_include_readset_for_txn_policy,
-      FLAGS_sintr_enable_lifting
+      FLAGS_sintr_enable_lifting,
+      FLAGS_sintr_contact_all_byz_clients
     );
 
     switch (mode) {

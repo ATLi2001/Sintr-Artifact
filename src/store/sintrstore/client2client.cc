@@ -290,7 +290,7 @@ void Client2Client::ReceiveMessage(const TransportAddress &remote,
   }
   else if (type == beginValTxnMsg.GetTypeName()) {
     if (ignoreValidationRequest) {
-      Debug("Ignoring BeginValidateTxnMessage from due to failure simulation");
+      Debug("Ignoring BeginValidateTxnMessage due to failure simulation");
       return;
     }
     ManageDispatchBeginValidateTxnMessage(remote, data);
@@ -552,13 +552,21 @@ void Client2Client::SendBeginValidateTxnMessageHelper(const uint64_t client_seq_
     }
 
     // extract out the clients that need to be contacted
+    // byz clients should not be in set of already contacted clients
     std::set<uint64_t> clients;
+    if(params.sintr_params.contactAllByzClients &&
+        !std::includes(beginValSent.begin(), beginValSent.end(),
+        sintrFailure.byz_client_ids.begin(), sintrFailure.byz_client_ids.end())) {
+      // the type of failure should be ignore validation request, should only be run when byz clients exist
+      UW_ASSERT(sintrFailure.type == SintrFailureType::IGNORE_VALIDATION_REQUEST);
+      // should contact all byz clients
+      clients.insert(sintrFailure.byz_client_ids.begin(), sintrFailure.byz_client_ids.end());
+      beginValSent.insert(sintrFailure.byz_client_ids.begin(), sintrFailure.byz_client_ids.end());
+    }
     // need to use DifferenceToSatisfied to account for self
     ExtractFromPolicyClientsToContact(policyClient->DifferenceToSatisfied(beginValSent), clients);
     
-    if (params.sintr_params.clientValidationHeuristic == 0) {
-    }
-    else { // params.sintr_params.clientValidationHeuristic > 0
+    if(params.sintr_params.clientValidationHeuristic > 0) { // params.sintr_params.clientValidationHeuristic > 0
       size_t offset = 0;
       for (int i = 0; i < params.sintr_params.clientValidationHeuristic; i++) {
         uint64_t target = GetNextClientToContact(offset, endorseClient->GetBlacklistedClients(), clients);
@@ -2240,13 +2248,14 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
   int offset = 1;
   size_t order_index = 0;
   for (const auto &i : policySatSet) {
+    uint64_t client_inserted = i;
     if (i == client_id) {
       continue;
     }
     // i < 0 means can choose any client
     else if (i < 0) {
-      uint64_t target = GetNextClientToContact(order_index, blacklistedClients, clients);
-      clients.insert(target);
+      client_inserted = GetNextClientToContact(order_index, blacklistedClients, clients);
+      clients.insert(client_inserted);
     }
     // otherwise i is a specific client to contact
     else {
@@ -2260,6 +2269,18 @@ void Client2Client::ExtractFromPolicyClientsToContact(const std::vector<int> &po
       else {
         Panic("Client %lu already sent beginValTxnMsg to client %d", client_id, i);
       }
+    }
+    
+    // contacted byz client so conctact extra (optimistically)
+    // Realistically client would contact byz client, no response so would contact more clients
+    // Then continuously contact F more clients where F is number of byz clients it initially contacted
+    if(sintrFailure.byz_client_ids.find(client_inserted) != sintrFailure.byz_client_ids.end()) {
+      uint64_t next_client_contacted = GetNextClientToContact(order_index, blacklistedClients, clients);
+      // TODO: should we also contact the next byz client in a ring or just contact the next correct client?
+      while(sintrFailure.byz_client_ids.find(next_client_contacted) != sintrFailure.byz_client_ids.end()) {
+        next_client_contacted = GetNextClientToContact(order_index, blacklistedClients, clients);
+      }
+      clients.insert(next_client_contacted);
     }
   }
 }

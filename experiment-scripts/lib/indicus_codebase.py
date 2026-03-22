@@ -225,6 +225,8 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --sintr_include_readset_for_txn_policy=%s' % str(config['sintr_protocol_settings']['sintr_include_readset_for_txn_policy']).lower()
             if 'sintr_enable_lifting' in config['sintr_protocol_settings']:
                 client_command += ' --sintr_enable_lifting=%s' % str(config['sintr_protocol_settings']['sintr_enable_lifting']).lower()
+            if 'sintr_contact_all_byz_clients' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_contact_all_byz_clients=%s' % str(config['sintr_protocol_settings']['sintr_contact_all_byz_clients']).lower()
 
 
         if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
