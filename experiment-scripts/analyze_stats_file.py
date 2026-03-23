@@ -323,7 +323,7 @@ def create_lat_tput_plots(df, output_dir, now_string):
         latency = client_groups["latency"].mean()
         ax.plot(tput, latency, "--o", label=experiment_name)
         # ax.plot(tput, latency, "--o", label=experiment_name, color=color_order[order.index(experiment_name)])
-    ax.legend(loc="upper center", ncol=3, fontsize=12, framealpha=0.5)
+    ax.legend(loc="upper center", ncol=3, fontsize=13, framealpha=0.5)
     # ax.legend(loc="upper left", ncol=1, fontsize=16, framealpha=0.5)
 
     # tpcc
@@ -610,7 +610,7 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
 
 def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
-    fig.set_size_inches(8, 4)
+    fig.set_size_inches(8, 6)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Throughput (tx/s)")
     ax.grid(True)
@@ -626,7 +626,7 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         label = "Policy Change" if i == 0 else None
         ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
-    ax.legend(loc="lower center", ncol=3, fontsize=16, framealpha=1.0)
+    ax.legend(loc="lower center", ncol=3, fontsize=13, framealpha=1.0)
     ax.set_xlim(left=0, right=tput_time_df["time_s"].max())
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
@@ -701,8 +701,9 @@ def create_client_failures_bar_plot(client_failures_df, byz_client_df, output_di
 
 def create_client_failures_line_plot(client_failures_df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
+    fig.set_size_inches(8, 6)
     ax.set_xlabel("Num Byzantine Clients")
-    ax.set_ylabel(f"Throughput / Correct Client (tx/s)")
+    ax.set_ylabel("Throughput / Correct Client (tx/s)")
     ax.grid(True)
 
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
@@ -714,7 +715,7 @@ def create_client_failures_line_plot(client_failures_df, output_dir, now_string)
 
         ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt="-o", capsize=4, label=experiment_name)
     
-    ax.legend(loc="upper center", ncol=2)
+    ax.legend(loc="upper center", ncol=2, fontsize=13, framealpha=0.5)
     ax.set_ylim(0, 300)
     ax.set_yticks(np.arange(0, 301, 50))
 
@@ -874,8 +875,8 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
 
 def create_tput_bar_plot(df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
-    fig.set_size_inches(8, 4)
-    ax.set_xlabel("Experiment")
+    fig.set_size_inches(8, 6)
+    # ax.set_xlabel("Experiment")
     ax.set_ylabel("Throughput (tx/s)")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
