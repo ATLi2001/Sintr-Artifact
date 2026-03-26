@@ -53,7 +53,7 @@
   "rw_secondary_condition": false,
   "disable_wraparound": true,
   "fixed_range": true,
-  "max_range": 10,
+  "max_range": 5,
   "point_op_freq": 0,
   "scan_as_point": false,
   "scan_as_point_parallel": false,
@@ -174,7 +174,7 @@
     "sintr_policy_CCC": true,
     "sintr_use_endorsement_cb": false
   },
-  "experiment_name": "sintr",
+  "experiment_name": "sintr-rw",
   "codebase_name": "indicus",
   "_client total is the upper bound on total client processes": 0,
   "_actual client count = threads_per_client * min(client_total, num_servers * client_nodes_per_server * processes_per_node)": 0,
