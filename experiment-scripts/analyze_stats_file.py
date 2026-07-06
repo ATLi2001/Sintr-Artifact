@@ -50,6 +50,112 @@ colors_538_extended = {
     "brown": ["#8c564b"],
 }
 
+# Color ordering shared by the SQL-style benchmarks (tpcc/seats/smallbank).
+# Positionally matched against each benchmark's "order" list below.
+_SQL_COLOR_ORDER = [
+    colors_538_extended["purple"][0], colors_538_extended["blue"][0], colors_538_extended["blue"][1],
+    colors_538_extended["brown"][0], colors_538_extended["orange"][0], colors_538_extended["orange"][1],
+    colors_538_extended["yellow"][0], colors_538_extended["green"][0], colors_538_extended["green"][1],
+]
+
+# Line style + marker per experiment family. Each benchmark's "order" list is
+# three families of three (Pesto/Basil, Peloton-HS/Tx-HS, Peloton-Smart/Tx-Smart),
+# so the family is order-index // 3. Matches the distinct line shapes in the
+# original paper figures.
+_FAMILY_LINE_STYLES = [
+    ("-.", "D"),  # Pesto / Basil        : dash-dot + diamond
+    ("-", "s"),   # Peloton-HS / Tx-HS   : solid + square
+    (":", "^"),   # Peloton-Smart / Tx-Smart : dotted + triangle
+]
+
+# Distinct line style + marker per series for plots without a fixed family
+# ordering (e.g. the rw-sql microbenchmark), cycled in plotting order so each
+# series is visually distinguishable.
+_DISTINCT_LINE_STYLES = [
+    ("--", "o"),  # dashed + circle
+    ("-", "s"),   # solid + square
+    ("-.", "D"),  # dash-dot + diamond
+    (":", "^"),   # dotted + triangle
+    ("--", "v"),  # dashed + down-triangle
+    ("-", "P"),   # solid + plus
+    ("-.", "X"),  # dash-dot + x
+    (":", "*"),   # dotted + star
+]
+
+# Per-benchmark configuration for the latency/throughput plot. Each entry controls
+# the legend/color scheme and the axis limits so the benchmark can be selected via
+# the --benchmark flag instead of commenting blocks in/out by hand.
+#   order       : experiment_name plotting/legend order (None -> natural groupby order)
+#   color_order : colors positionally matched to "order" (None -> matplotlib defaults)
+#   legend      : kwargs forwarded to ax.legend()
+#   ylim/xlim   : (bottom, top) / (left, right); None on either side leaves it unset
+#   yticks      : args for np.arange(...) to set y ticks (None -> automatic)
+BENCHMARK_PLOT_CONFIGS = {
+    "tpcc": {
+        "order": [
+            "Pesto", "Pesto-P-1", "Pesto-P-2",
+            "Peloton-HS", "Peloton-HS-P-1", "Peloton-HS-P-2",
+            "Peloton-Smart", "Peloton-Smart-P-1", "Peloton-Smart-P-2",
+        ],
+        "color_order": _SQL_COLOR_ORDER,
+        "legend": {"loc": "upper center", "ncol": 3, "fontsize": 16, "framealpha": 0.5},
+        "ylim": (0, 127),
+        "yticks": (0, 128, 20),
+        "xlim": (0, None),
+    },
+    "seats": {
+        "order": [
+            "Pesto", "Pesto-P-1", "Pesto-P-2",
+            "Peloton-HS", "Peloton-HS-P-1", "Peloton-HS-P-2",
+            "Peloton-Smart", "Peloton-Smart-P-1", "Peloton-Smart-P-2",
+        ],
+        "color_order": _SQL_COLOR_ORDER,
+        "legend": {"loc": "upper center", "ncol": 3, "fontsize": 16, "framealpha": 0.5},
+        "ylim": (0, 50),
+        "yticks": (0, 51, 10),
+        "xlim": (0, None),
+    },
+    "smallbank": {
+        "order": [
+            "Basil", "Basil-P-1", "Basil-P-2",
+            "Tx-HS", "Tx-HS-P-1", "Tx-HS-P-2",
+            "Tx-Smart", "Tx-Smart-P-1", "Tx-Smart-P-2",
+        ],
+        "color_order": _SQL_COLOR_ORDER,
+        "legend": {"loc": "upper center", "ncol": 3, "fontsize": 16, "framealpha": 0.5},
+        "ylim": (0, 37),
+        "yticks": (0, 38, 5),
+        "xlim": (0, None),
+    },
+    "rw-sql": {
+        "order": None,
+        "color_order": None,
+        "legend": {"loc": "upper center", "ncol": 3, "fontsize": 16, "framealpha": 0.5},
+        "ylim": (0, 12),
+        "yticks": (0, 13, 2),
+        # fixed right bound so RW-SQL-U and RW-SQL-Z share identical axes
+        # (Z's data only reaches ~4700 but should use the same frame as U)
+        "xlim": (0, 8600),
+    },
+}
+
+
+def _benchmark_bar_colors(experiment_names, benchmark):
+    """Colors for the given experiment names using the benchmark's color scheme.
+
+    Returns a color list positionally matched to *experiment_names* (same scheme
+    as the latency/throughput plot), or None when the benchmark has no fixed
+    order/color scheme so callers can fall back to their default coloring.
+    """
+    config = BENCHMARK_PLOT_CONFIGS.get(benchmark) if benchmark else None
+    if not config:
+        return None
+    order = config.get("order")
+    color_order = config.get("color_order")
+    if order is None or color_order is None:
+        return None
+    return [color_order[order.index(name)] if name in order else None for name in experiment_names]
+
 
 BASE_DIR = "experiment-results"
 ORIGINAL_STATS_DIR = f"{BASE_DIR}/original"
@@ -291,62 +397,64 @@ def tput_time_csv(logs_df, output_dir, now_string):
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.csv"), index=False)
     return out_df, policy_change_time_s
 
-def create_lat_tput_plots(df, output_dir, now_string):
+def create_lat_tput_plots(df, output_dir, now_string, benchmark=None):
+    # benchmark (tpcc/seats/smallbank/rw-sql) selects the legend/color scheme and
+    # axis limits from BENCHMARK_PLOT_CONFIGS. When None, fall back to the generic
+    # auto-scaled plot with no fixed ordering or limits.
+    config = BENCHMARK_PLOT_CONFIGS.get(benchmark) if benchmark else None
+
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
     ax.set_xlabel("Throughput (tx/s)")
-    # ax.set_xlabel("Throughput (tx/s)", fontsize=24)
     ax.set_ylabel("Mean Latency (ms)")
-    # ax.set_ylabel("Mean Latency (ms)", fontsize=24)
     ax.grid(True)
 
-    # order = [
-    #     "Sintr-Policy1", "Sintr-Policy2", "Pesto",
-    #     "Peloton-HS-Sintr-Policy1", "Peloton-HS-Sintr-Policy2", "Peloton-HS",
-    #     "Peloton-Smart-Sintr-Policy1", "Peloton-Smart-Sintr-Policy2", "Peloton-Smart",
-    # ]
-    # order = [
-    #     "Sintr-Policy1", "Sintr-Policy2", "Basil",
-    #     "Tx-HS-Sintr-Policy1", "Tx-HS-Sintr-Policy2", "Tx-HS",
-    #     "Tx-Smart-Sintr-Policy1", "Tx-Smart-Sintr-Policy2", "Tx-Smart",
-    # ]
-    # df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
-    # color_order = [
-    #     colors_538_extended["blue"][0], colors_538_extended["blue"][1], colors_538_extended["purple"][0],
-    #     colors_538_extended["orange"][0], colors_538_extended["orange"][1], colors_538_extended["brown"][0],
-    #     colors_538_extended["green"][0], colors_538_extended["green"][1], colors_538_extended["yellow"][0],
-    # ]
+    order = config["order"] if config else None
+    color_order = config["color_order"] if config else None
+    if order is not None:
+        df = df.copy()
+        df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
 
-    for experiment_name, group in df.groupby("experiment_name"):
+    for series_idx, (experiment_name, group) in enumerate(df.groupby("experiment_name", observed=True)):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
         latency = client_groups["latency"].mean()
-        ax.plot(tput, latency, "--o", label=experiment_name)
-        # ax.plot(tput, latency, "--o", label=experiment_name, color=color_order[order.index(experiment_name)])
-    ax.legend(loc="upper center", ncol=3, fontsize=13, framealpha=0.5)
-    # ax.legend(loc="upper left", ncol=1, fontsize=16, framealpha=0.5)
+        if order is not None:
+            idx = order.index(experiment_name)
+            linestyle, marker = _FAMILY_LINE_STYLES[(idx // 3) % len(_FAMILY_LINE_STYLES)]
+            fmt = f"{linestyle}{marker}"
+            if color_order is not None:
+                ax.plot(tput, latency, fmt, label=experiment_name, color=color_order[idx])
+            else:
+                ax.plot(tput, latency, fmt, label=experiment_name)
+        else:
+            linestyle, marker = _DISTINCT_LINE_STYLES[series_idx % len(_DISTINCT_LINE_STYLES)]
+            ax.plot(tput, latency, f"{linestyle}{marker}", label=experiment_name)
 
-    # tpcc
-    # ax.set_ylim(bottom=0, top=120)
-    # ax.set_yticks(np.arange(0, 121, 20))
-    # seats
-    # ax.set_ylim(bottom=0, top=50)
-    # ax.set_yticks(np.arange(0, 51, 10))
-    # smallbank
-    # ax.set_ylim(bottom=0, top=35)
-    # ax.set_yticks(np.arange(0, 36, 5))
+    legend_kwargs = config["legend"] if config else {"loc": "upper center", "ncol": 3, "fontsize": 16, "framealpha": 0.5}
+    # matplotlib fills legend entries column-major, so with the family-grouped
+    # order each protocol family reads top-to-bottom down its own column
+    # (e.g. Pesto, Pesto-P-1, Pesto-P-2), matching the reference figures.
+    ax.legend(**legend_kwargs)
 
-    # ax.set_xlim(left=0)
-
-    # rw-sql u/z
-    # ax.set_xlim(left=0, right=6500)
-    # ax.set_ylim(bottom=0, top=10)
+    if config:
+        ylim = config.get("ylim")
+        if ylim is not None:
+            ax.set_ylim(bottom=ylim[0], top=ylim[1])
+        yticks = config.get("yticks")
+        if yticks is not None:
+            ax.set_yticks(np.arange(*yticks))
+        xlim = config.get("xlim")
+        if xlim is not None:
+            ax.set_xlim(left=xlim[0], right=xlim[1])
 
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
     # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.png"))
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[0]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
@@ -389,8 +497,10 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
 
     # plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
     plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
@@ -626,7 +736,7 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
         label = "Policy Change" if i == 0 else None
         ax.axvline(x=policy_change_time, color="black", linestyle="--", label=label)
 
-    ax.legend(loc="lower center", ncol=3, fontsize=13, framealpha=1.0)
+    ax.legend(loc="lower center", ncol=3, fontsize=16, framealpha=1.0)
     ax.set_xlim(left=0, right=tput_time_df["time_s"].max())
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
@@ -634,8 +744,10 @@ def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_st
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
 
     # plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.png"))
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
@@ -715,15 +827,17 @@ def create_client_failures_line_plot(client_failures_df, output_dir, now_string)
 
         ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt="-o", capsize=4, label=experiment_name)
     
-    ax.legend(loc="upper center", ncol=2, fontsize=13, framealpha=0.5)
+    ax.legend(loc="upper center", ncol=2, fontsize=16, framealpha=0.5)
     ax.set_ylim(0, 300)
     ax.set_yticks(np.arange(0, 301, 50))
 
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
 
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[6]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
@@ -806,7 +920,7 @@ def _compute_norm_columns(df, client_num=None, csv_path=None):
     return means
 
 
-def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_string):
+def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_string, colors=None):
     """Helper: single normalised bar chart (tput or latency)."""
     x = np.arange(len(labels))
     width = 0.5
@@ -814,7 +928,7 @@ def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_str
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
 
-    rects = ax.bar(x, values, width)
+    rects = ax.bar(x, values, width, color=colors)
     ax.bar_label(rects, fmt="%.3f", padding=3)
 
     ax.set_ylabel(y_label)
@@ -833,8 +947,10 @@ def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_str
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
 
     fname = f"{analysis_suffix}-{now_string}.pdf"
     plt.savefig(os.path.join(output_dir, fname), format="pdf", dpi=600, transparent=True)
@@ -842,7 +958,7 @@ def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_str
     print(f"Saved {fname}")
 
 
-def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_path=None):
+def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_path=None, benchmark=None):
     """Create bar charts of normalised throughput AND latency.
 
     If the DataFrame does not contain norm_tput / norm_latency columns they are
@@ -854,6 +970,7 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
     summary = summary.sort_values(by="norm_tput", ascending=True)
 
     labels = summary["experiment_name"].tolist()
+    colors = _benchmark_bar_colors(labels, benchmark)
 
     _plot_norm_bar(
         summary["norm_tput"].tolist(),
@@ -862,6 +979,7 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
         ANALYSIS_TYPES[7],
         output_dir,
         now_string,
+        colors=colors,
     )
 
     _plot_norm_bar(
@@ -871,9 +989,10 @@ def create_norm_tput_bar_plot(df, output_dir, now_string, client_num=None, csv_p
         "norm_lat_bar",
         output_dir,
         now_string,
+        colors=colors,
     )
 
-def create_tput_bar_plot(df, output_dir, now_string):
+def create_tput_bar_plot(df, output_dir, now_string, benchmark=None):
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
     # ax.set_xlabel("Experiment")
@@ -881,18 +1000,31 @@ def create_tput_bar_plot(df, output_dir, now_string):
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
 
-    for experiment_name, group in df.groupby("experiment_name", sort=False):
+    # For the SQL-style benchmarks, order the bars and match their colors to the
+    # scheme used by the latency/throughput plot; otherwise keep df order + blue.
+    config = BENCHMARK_PLOT_CONFIGS.get(benchmark) if benchmark else None
+    order = config.get("order") if config else None
+    if order is not None:
+        df = df.copy()
+        df["experiment_name"] = pd.Categorical(df["experiment_name"], categories=order, ordered=True)
+        df = df.sort_values("experiment_name")
+
+    for experiment_name, group in df.groupby("experiment_name", sort=False, observed=True):
         client_groups = group.groupby("num_clients")
         tput = client_groups["tput"].mean()
-        ax.bar(experiment_name, tput, color=[colors_538_extended["blue"][0]])
+        color = _benchmark_bar_colors([experiment_name], benchmark)
+        color = color if color and color[0] is not None else [colors_538_extended["blue"][0]]
+        ax.bar(experiment_name, tput, color=color)
     
     ax.set_ylim(bottom=0, top=ax.get_ylim()[1] * 1.1)
 
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
-        spine.set_linewidth(1.0)
-    ax.tick_params(axis="both", which="both", length=5)
+        spine.set_linewidth(2.0)
+    ax.tick_params(axis="both", which="both", length=6, width=2.0, color="black")
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontweight("bold")
 
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[8]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
@@ -949,6 +1081,13 @@ if __name__ == "__main__":
         default=None,
         help="Client count to use when computing normalised tput/latency. If not given, uses the highest client count in the data."
     )
+    parser.add_argument(
+        "-b", "--benchmark",
+        choices=list(BENCHMARK_PLOT_CONFIGS.keys()),
+        default=None,
+        required=False,
+        help="Benchmark whose legend/color scheme and axis limits to use for the latency/throughput and tput/norm bar plots. If not given, uses an auto-scaled plot with default coloring."
+    )
     args = parser.parse_args()
 
     now_string = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
@@ -965,7 +1104,7 @@ if __name__ == "__main__":
         df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
     if args.analysis_type == ANALYSIS_TYPES[0]:
-        create_lat_tput_plots(df, args.output_plot_dir, now_string)
+        create_lat_tput_plots(df, args.output_plot_dir, now_string, benchmark=args.benchmark)
     elif args.analysis_type == ANALYSIS_TYPES[1] or args.analysis_type == ANALYSIS_TYPES[2]:
         create_sig_no_sig_bar_plot(df, args.output_plot_dir, args.analysis_type, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[3]:
@@ -992,6 +1131,6 @@ if __name__ == "__main__":
         # create_client_failures_bar_plot(client_failures_df, None, args.output_plot_dir, now_string)
         create_client_failures_line_plot(client_failures_df, args.output_plot_dir, now_string)
     elif args.analysis_type == ANALYSIS_TYPES[7]:
-        create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv)
+        create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv, benchmark=args.benchmark)
     elif args.analysis_type == ANALYSIS_TYPES[8]:
-        create_tput_bar_plot(df, args.output_plot_dir, now_string)
+        create_tput_bar_plot(df, args.output_plot_dir, now_string, benchmark=args.benchmark)
