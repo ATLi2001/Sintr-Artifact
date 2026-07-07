@@ -1,9 +1,9 @@
 # Running experiments <a name="experiments"></a>
-Hurray! You have completed the tedious process of installing the binaries and setting up Cloudlab. 
+Hurray! You have completed the tedious process of installing the binaries and setting up CloudLab. 
 Next, we will cover how to run experiments in order to re-produce all results. This is a straightforward but time-consuming process.
 
 Ideally you have good network connectivity to quickly upload binaries to the remote machines and download experiment results. 
-Uploading binaries on high speed connections (e.g at your university) takes a few minutes and needs to be done only once per instantiated Cloudlab experiment -- however, if your uplink speed is low it may take (as I have painstakingly experienced in preparing this documentation for you) several hours. Downloading experiment outputs requires a moderate amount of download bandwidth and is usually quite fast.
+Uploading binaries on high speed connections (e.g at your university) takes a few minutes and needs to be done only once per instantiated CloudLab experiment -- however, if your uplink speed is low it may take (as I have painstakingly experienced in preparing this documentation for you) several hours. Downloading experiment outputs requires a moderate amount of download bandwidth and is usually quite fast.
 
 This section is split into 5 subsections: 
 1. [Preparing Benchmarks](#prep)
@@ -35,7 +35,7 @@ Running experiments involves 5 steps. Refer back to this checklist to stay on tr
 
 > :warning: Make sure that the names of your CloudLab machines match those in the helper scripts!
 
-The following benchmarks must be uploaded to the Cloudlab machines:
+The following benchmarks must be uploaded to the CloudLab machines:
 1. TPCC
 2. Seats
 3. TPCC-Lifting (`tpcc-lifting`); this is used for our microbenchmark evaluating [lifting](#24-policy-lifting).
@@ -71,11 +71,11 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
 
 > :warning:  HotStuff is pre-configured to use the server names `us-east-1-0`, `us-east-1-1`, `us-east-1-2`, and `eu-west-1-0`. If you want to change the names of your servers you must also adjust the files `src/scripts/hosts_pg_smr` and `src/scripts/config_pghs/shard0/hotstuff.gen.conf` accordingly.
 
-   <!-- 3. Open file `config_remote.sh` and edit the following lines to match your Cloudlab credentials:
+   <!-- 3. Open file `config_remote.sh` and edit the following lines to match your CloudLab credentials:
       - Line 3: `TARGET_DIR="/users/<cloudlab-user>/config/"`
       - Line 14: `rsync -rtuv config <cloudlab-user>@${machine}.<experiment-name>.<project-name>.utah.cloudlab.us:/users/<cloudlab-user>/`
    4. Finally, run `./config_remote.sh` 
-   5. This will upload the necessary configurations for the Hotstuff Consensus module to the Cloudlab machines. -->
+   5. This will upload the necessary configurations for the Hotstuff Consensus module to the CloudLab machines. -->
 
 ### **BFT-SMaRt**
    1. Navigate to `Pequin-Artifact/src/scripts`
@@ -83,7 +83,7 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
    3. Navigate to `Pequin-Artifact/src/scripts/bftsmart-configs` 
    4. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
    5. For example: `scripts/bftsmart-configs/one_step_config.sh ../../.. atli sintr pequin-pg0 utah.cloudlab.us`
-   6. This will upload the necessary configurations for the BFT-SMaRt Consensus module to the Cloudlab machines.
+   6. This will upload the necessary configurations for the BFT-SMaRt Consensus module to the CloudLab machines.
       - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/bftsmart-configs/` do not contain empty lines at the end
       - You may need to modify the `client-hosts` in `/src/scripts/bftsmart-configs/` depending on how many clients you are using.
 
@@ -91,7 +91,7 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
 
    <!-- 2. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
    3. For example: `./one_step_config.sh /home/floriansuri/Research/Projects/Pequin/Pequin-Artifact fs435 pequin pequin-pg0 utah.cloudlab.us`
-   4. This will upload the necessary configurations for the BFT-SMaRt Conesnsus module to the Cloudlab machines.
+   4. This will upload the necessary configurations for the BFT-SMaRt Conesnsus module to the CloudLab machines.
       - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/` do not contain empty lines at the end -->
 
 
@@ -115,20 +115,20 @@ python3 experiment-scripts/update_configs.py <path_to_configs> <override_file> [
 
 ### Detailed Manual Instructions
 
-To run an experiment, you simply need to run: `python3 Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote Cloudlab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `Pequin-Artifact/experiment-configs`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
+To run an experiment, you simply need to run: `python3 Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote CloudLab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `Pequin-Artifact/experiment-configs`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
 
  <!-- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`. -->
 
 #### Required Modifications:
 1. `"project_name": "pequin-pg0"`
-   - change the value field to the name of your Cloudlab project `<project-name>`. On cloudlab.us (utah cluster) you will generally need to add "-pg0" to your project_name in order to ssh into the machines. To confirm which is the case for you, try to ssh into a machine directly using `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`.  
+   - change the value field to the name of your CloudLab project `<project-name>`. On cloudlab.us (utah cluster) you will generally need to add "-pg0" to your project_name in order to ssh into the machines. To confirm which is the case for you, try to ssh into a machine directly using `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`.  
 2. `"experiment_name": "sintr"`
-   - change the value field to the name of your Cloudlab experiment `<experiment-name>`.
+   - change the value field to the name of your CloudLab experiment `<experiment-name>`.
 3. `"base_local_exp_directory": "/home/atl63/Pequin-Artifact/output"`
    - :warning: Some of our helper scripts assume that this directory is named `output` and directly under the root of the artifact.
    - Set the value field to be the local path (on your machine or the control machine) where experiment output files will be downloaded to and aggregated. 
 4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/indicus"` 
-   - Set the field `<cloudlab-user>`. This is the directory on the Cloudlab machines where the binaries will be uploaded
+   - Set the field `<cloudlab-user>`. This is the directory on the CloudLab machines where the binaries will be uploaded
 5. `"src_directory" : "/home/atl63/Pequin-Artifact/src"` 
    - Set the value field to your local path (on your machine or the control machine) to the source directory 
 6. `"emulab_user": "<cloudlab-user>"`
