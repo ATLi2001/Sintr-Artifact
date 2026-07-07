@@ -7,16 +7,16 @@ Uploading binaries on high speed connections (e.g at your university) takes a fe
 
 This section is split into 5 subsections: 
 1. [Preparing Benchmarks](#prep)
-2. [Pre-configurations for HotStuff and BFTSmart](#preconfig)
+2. [Pre-configurations for HotStuff and BFT-SMaRt](#preconfig)
 3. [Experiment script instructions](#scripts)
 4. [Parsing outputs](#output)
 5. [Reproducing our experiments 1-by-1](#exp)
 
 
 Before you proceed, please confirm that your CloudLab credentials are accurate:
-1. Cloudlab-username `<cloudlab-user>`: e.g. "fs435"
-2. Cloudlab experiment name `<experiment-name>`: e.g. "pequin"
-3. Cloudlab project name `<project-name`>: e.g. "pequin-pg0"  (May need the "-pg0" extension)
+1. CloudLab-username `<cloudlab-user>`: e.g. "atli"
+2. CloudLab experiment name `<experiment-name>`: e.g. "sintr"
+3. CloudLab project name `<project-name>`: e.g. "pequin-pg0"  (May need the "-pg0" extension)
 
 Confirm these by attempting to ssh into a machine you started (on the Utah cluster): `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`
 
@@ -40,34 +40,36 @@ The following benchmarks must be uploaded to the Cloudlab machines:
 2. Seats
 3. TPCC-Lifting (`tpcc-lifting`); this is used for our microbenchmark evaluating [lifting](#24-policy-lifting).
 
-To generate benchmark data simple run the script `src/generate_benchmark_data.sh`. Configure it as follows:
+To generate benchmark data, simply run the script `src/generate_benchmark_data.sh`. Configure it as follows:
 1) specify the benchmark you want to generate, e.g. to run TPC-C use `-b 'tpcc'`
 2) specify the benchmark parameters, e.g. to create 20 warehouses for TPC-C use `-n 20`
 
-> 📓 You may need to enable permissions for the scripts before running: `cmod +x <scriptname>`
+> 📓 You may need to enable permissions for the scripts before running: `chmod +x <scriptname>`
 
-- Generate TPC-C data using: `./generate_benchmark_data -n 20` (tpcc is the default benchmark)
-<!-- - Generate Auctionmark data using: `./generate_benchmark_data -b 'auctionmark'` (using default scale factor) -->
-- Generate Seats data using: `./generate_benchmark_data -b 'seats'` (using default scale factor)
+- Generate TPC-C data using: `./generate_benchmark_data.sh -n 20` (tpcc is the default benchmark)
+<!-- - Generate Auctionmark data using: `./generate_benchmark_data.sh -b 'auctionmark'` (using default scale factor) -->
+- Generate Seats data using: `./generate_benchmark_data.sh -b 'seats'` (using default scale factor)
+- Generate TPC-C lifting data using: `./generate_benchmark_data.sh -b 'tpcc-lifting' -n 20`
 
 Once you created the benchmark data (you can create all data upfront), upload the respective benchmark data to your CloudLab cluster using `src/upload_data_remote.sh`.
 Simply specify which benchmark you are uploading, and to how many clients per server you are uploading. 
 You can also pass in your cloudlab user and experiment name.
-- E.g. use `./upload_data_remote -b 'tpcc' -n 3 -u 'fs435'` to upload TPC-C data to 3 clients per replica, with cloudlab user `fs435`
-- TPC-C and 1 client per server are default parameters. Check our the script for exact usage!
+- E.g. use `./upload_data_remote.sh -b 'tpcc' -n 3 -u 'atli'` to upload TPC-C data to 3 clients per replica, with cloudlab user `atli`
+- TPC-C and 1 client per server are default parameters. Check out the script for exact usage!
 
 Note: Benchmark data, by default, is uploaded to `/users/<cloudlab-user>/benchmark_data/`. 
 
-## (2) Pre-configurations for Hotstuff and BFTSmart <a name="preconfig"></a>
+## (2) Pre-configurations for HotStuff and BFT-SMaRt <a name="preconfig"></a>
 
 When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to complete the following pre-configuration steps before running an experiment script:
 
-### **Hotstuff**
+### **HotStuff**
    1. Navigate to `Pequin-Artifact/src/scripts`
-   2. [**OPTIONAL**] Run `./batch_size <batch_size>` to configure the internal batch size used by the HotStuff consensus module. See sub-section "1-by-1 experiment guide" for what settings to use. The default value is an *upper* cap of 200. Since we modified Hotstuff to use more efficient, dynamic batch sizes, changing the default batch cap is not necessary.
-   3. Run `./pghs_config_remote.sh <cloudlab-user>` (e.g. `fs435`). This will upload the necessary configurations for the HotStuff Consensus module.
+   2. [**OPTIONAL**] Run `./batch_size.sh <batch_size>` to configure the internal batch size used by the HotStuff consensus module. See sub-section "1-by-1 experiment guide" for what settings to use. The default value is an *upper* cap of 200. Since we modified HotStuff to use more efficient, dynamic batch sizes, changing the default batch cap is not necessary.
+   3. Run `./pghs_config_remote.sh <cloudlab-user>` (e.g. `atli`). This will upload the necessary configurations for the HotStuff Consensus module.
+      - You may need to adjust the experiment name and project name within this script depending on your experiment/project name.
 
-> :warning:  HotStuff is pre-configured to use the server names `us-east-1-0`, `us-east-1-1`, `us-east-1-2`, and `eu-west-1-0`. If you want to change the names of your servers you must also adjust the files `src/scripts/hosts_pg_smr` and `scr/scripts/config_pghs/shard0/hotstuff.gen.conf` accordingly.
+> :warning:  HotStuff is pre-configured to use the server names `us-east-1-0`, `us-east-1-1`, `us-east-1-2`, and `eu-west-1-0`. If you want to change the names of your servers you must also adjust the files `src/scripts/hosts_pg_smr` and `src/scripts/config_pghs/shard0/hotstuff.gen.conf` accordingly.
 
    <!-- 3. Open file `config_remote.sh` and edit the following lines to match your Cloudlab credentials:
       - Line 3: `TARGET_DIR="/users/<cloudlab-user>/config/"`
@@ -75,20 +77,21 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
    4. Finally, run `./config_remote.sh` 
    5. This will upload the necessary configurations for the Hotstuff Consensus module to the Cloudlab machines. -->
 
-### **BFTSmart**
+### **BFT-SMaRt**
    1. Navigate to `Pequin-Artifact/src/scripts`
-   2. Build BFT-Smart using `./build_bftsmart.sh`. You only need to do this *once*.
+   2. Build BFT-SMaRt using `./build_bftsmart.sh`. You only need to do this *once*.
    3. Navigate to `Pequin-Artifact/src/scripts/bftsmart-configs` 
    4. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
-   3. For example: `scripts/bftsmart-configs/one_step_config.sh ../../.. fs435 pequin pequin-pg0 utah.cloudlab.us`
-   4. This will upload the necessary configurations for the BFTSmart Conesnsus module to the Cloudlab machines.
+   5. For example: `scripts/bftsmart-configs/one_step_config.sh ../../.. atli sintr pequin-pg0 utah.cloudlab.us`
+   6. This will upload the necessary configurations for the BFT-SMaRt Consensus module to the Cloudlab machines.
       - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/bftsmart-configs/` do not contain empty lines at the end
+      - You may need to modify the `client-hosts` in `/src/scripts/bftsmart-configs/` depending on how many clients you are using.
 
 > :warning: Do NOT use `src/scripts/one_step_config.sh` -- specifically use `src/scripts/bftsmart-configs/one_step_config.sh`. The scripts are identical, but for convenience reference different host file configurations.
 
    <!-- 2. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
    3. For example: `./one_step_config.sh /home/floriansuri/Research/Projects/Pequin/Pequin-Artifact fs435 pequin pequin-pg0 utah.cloudlab.us`
-   4. This will upload the necessary configurations for the BFTSmart Conesnsus module to the Cloudlab machines.
+   4. This will upload the necessary configurations for the BFT-SMaRt Conesnsus module to the Cloudlab machines.
       - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/` do not contain empty lines at the end -->
 
 
@@ -107,7 +110,7 @@ In backup mode all existing files that would be changed are backed up to a folde
 python3 experiment-scripts/update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]
 ```
 
-> :warning: For configs for BFTSmart, you also need to adjust `"bftsmart_codebase_dir"` to reflect your cloudlab username.
+> :warning: For configs for BFT-SMaRt, you also need to adjust `"bftsmart_codebase_dir"` to reflect your cloudlab username.
 
 
 ### Detailed Manual Instructions
@@ -119,29 +122,29 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
 #### Required Modifications:
 1. `"project_name": "pequin-pg0"`
    - change the value field to the name of your Cloudlab project `<project-name>`. On cloudlab.us (utah cluster) you will generally need to add "-pg0" to your project_name in order to ssh into the machines. To confirm which is the case for you, try to ssh into a machine directly using `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`.  
-2. `"experiment_name": "pequin"`
+2. `"experiment_name": "sintr"`
    - change the value field to the name of your Cloudlab experiment `<experiment-name>`.
-3. `"base_local_exp_directory": “home/floriansuri/Research/Projects/Pequin/output”`
+3. `"base_local_exp_directory": "/home/atl63/Pequin-Artifact/output"`
    - :warning: Some of our helper scripts assume that this directory is named `output` and directly under the root of the artifact.
    - Set the value field to be the local path (on your machine or the control machine) where experiment output files will be downloaded to and aggregated. 
-4. `"base_remote_bin_directory_nfs": “users/<cloudlab-user>/indicus”` 
+4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/indicus"` 
    - Set the field `<cloudlab-user>`. This is the directory on the Cloudlab machines where the binaries will be uploaded
-5. `"src_directory" : “/home/floriansuri/Research/Projects/Pequin/Pequin-Artifact/src”` 
+5. `"src_directory" : "/home/atl63/Pequin-Artifact/src"` 
    - Set the value field to your local path (on your machine or the control machine) to the source directory 
-6. `"emulab_user": "<cloudlab-username>"`
+6. `"emulab_user": "<cloudlab-user>"`
    - Set the field `<cloudlab-user>`. 
-7. `"benchmark_schema_file_path": "/users/fs435/benchmark_data/sql-tpcc-tables-schema.json",`
-    - change the user name (fs435) to your <cloudlab-username>
+7. `"benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",`
+    - change the user name (atli) to your `<cloudlab-user>`
     - note: the file itself depends on which workload you are using
-8. `"bftsmart_codebase_dir" : "/users/fs435"`
-    - change the user name (fs435) to your <cloudlab-username>
-    - this is only applicable to BFTSmart configs
+8. `"bftsmart_codebase_dir" : "/users/atli"`
+    - change the user name (atli) to your `<cloudlab-user>`
+    - this is only applicable to BFT-SMaRt configs
 9. `"sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
     - change this to be the absolute path to the appropriate policy config
 
 #### **Optional** Modifications 
 1. Experiment duration:
-   - The provided configs are by default set to run for 60 seconds total, using a warmup and cooldown period of 15 seconds respectively. You may adjust the fields to shorten/lengthen experiments accordingly. For example:
+   - The provided configs are by default set to run for 60 seconds total, using a warm-up and cool-down period of 15 seconds respectively. You may adjust the fields to shorten/lengthen experiments accordingly. For example:
       - "client_experiment_length": 30,
       - "client_ramp_down": 5,
       - "client_ramp_up": 5,
@@ -156,11 +159,11 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
       - "client_total": [[30]],
          - "client_total" specifies the upper limit for total client *processes* used
       - "client_processes_per_client_node": [[8]],
-         - "client_proccesses_per_client_node" specifies the number of client processes run on each server machine. 
+         - "client_processes_per_client_node" specifies the number of client processes run on each client machine. 
       - "client_threads_per_process": [[1]],
          - "client_threads_per_process" specifies the number of client threads run by each client process.  
    - The *absolute total number* of clients used by an experiment is: 
-    - **Total clients** *= max(client_total, num_servers x client_node_per_server x client_processes_per_client_node) *x client_threads_per_process*. 
+    - **Total clients** *= max(client_total, num_servers x client_nodes_per_server x client_processes_per_client_node) *x client_threads_per_process*. 
     - For Pesto (1 shard) "num_servers" = 6, for Peloton (unreplicated) "num_servers" = 1, and for Peloton-SMR "num_servers" = 4.
 
    - An example client series:
@@ -169,15 +172,15 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
       - "client_threads_per_process": [[1, 1, 1, 1, 2]]
 
 4. Server names:
-   - The provided config files use default `server_names`. The name has no meaning in LAN deployments, and serves only as unique identifier (e.g. `us-east-1-0` does not imply where the server will be located). These server names must be consistent with the server names in your deployed CloudLab cluster.
+   - The provided config files use default `server_names`. The name has no meaning in LAN deployments, and serves only as a unique identifier (e.g. `us-east-1-0` does not imply where the server will be located). These server names must be consistent with the server names in your deployed CloudLab cluster.
    - If you change the default names, you must also adjust the `server_regions` and `region_rtt_latencies` parameters. Group server names into the region you want to assign them to. The `region_rtt_latencies` values do not matter for LAN deployments; they are placeholders for WAN simulation---see [WAN instructions](#wan-instructions).
   
 #### Starting an experiment:
 You are ready to start an experiment. The JSON configs we used can be found under `Pequin-Artifact/experiment-configs/<PATH>/<config>.json`. **Note that** all microbenchmark configs are Pesto (Pequin) exclusive.
 
-Run: `python3 <PATH>/Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <PATH>Pequin-Artifact/experiment-configs/<PATH>/<config>.json` and wait!
+Run: `python3 <PATH>/Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <PATH>/Pequin-Artifact/experiment-configs/<PATH>/<config>.json` and wait!
 
-Optional: To monitor experiment progress you can ssh into a server machine (e.g., us-east-1-0) and run htop. During the experiment run-time the cpus will be loaded (to different degrees depending on contention and client count).
+Optional: To monitor experiment progress you can ssh into a server machine (e.g., us-east-1-0) and run htop. During the experiment run-time the CPUs will be loaded (to different degrees depending on contention and client count).
   
    
 ## (4) Parsing outputs <a name="output"></a>
@@ -250,7 +253,7 @@ To directly compare against the numbers reported in our paper please refer to th
 
 > :warning: Make sure you have correctly set the  `"benchmark_schema_file_path"` as described above!
 
-> **Notice**: When running experiments with load load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
+> **Notice**: When running experiments with low load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
 
 <!-- > **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes or experienced miscellaneous changes to debug logging). This should have very little impact on performance, but we acknowledge it nonetheless for completeness. The main claims remain consistent. -->
 
@@ -271,11 +274,11 @@ The root `output` directory is configured by default to store the complete raw e
 We report evaluation results for 3 workloads (TPCC, Seats, and Smallbank) over 4 baseline systems with Sintr integrated: 
 1. **Basil** -- A BFT KVS.
 2. **Pesto** -- A BFT DB.
-3. **Peloton-SMR** -- Peloton, an SQL DB, (with reply signatures) run atop a BFT consensus protocol; we run with HotStuff (Peloton-HS) and BFTSmart (Peloton-Smart).
-4. **Tx-SMR** -- A transactional KVS (with reply signatures) run atop a BFT consensus protocol; we run with HotStuff (Tx-HS) and BFTSmart (Tx-Smart).
+3. **Peloton-SMR** -- Peloton, an SQL DB, (with reply signatures) run atop a BFT consensus protocol; we run with HotStuff (Peloton-HS) and BFT-SMaRt (Peloton-Smart).
+4. **Tx-SMR** -- A transactional KVS (with reply signatures) run atop a BFT consensus protocol; we run with HotStuff (Tx-HS) and BFT-SMaRt (Tx-Smart).
 
 Detailed explanations of the Pesto and Peloton-SMR baselines can be found in the [Pesto artifact](https://github.com/fsuri/Pequin-Artifact).
-Simimlarly, detailed explanations of the Basil and Tx-SMR baselines can be found in the [Basil artifact](https://github.com/fsuri/Basil_SOSP21_artifact/).
+Similarly, detailed explanations of the Basil and Tx-SMR baselines can be found in the [Basil artifact](https://github.com/fsuri/Basil_SOSP21_artifact/).
 
 All systems were evaluated using a single shard, but use different replication factors. For f=1, Basil/Pesto uses 6 replicas (5f+1), while the SMR based systems use 4 (3f+1).
 
@@ -389,16 +392,18 @@ Correct clients optimistically contact five validators per transaction; in `igno
 
 We find that Byzantine clients in Sintr cannot compromise correctness and have limited performance impact unless validation is computationally expensive.
 
-| Experiment | Result Graph (PDF) | Result CSV |
-|---|---|---|
-| Client failures (uniform) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.csv` |
-| Client failures (zipfian) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.csv` |
+| Experiment | Config Path | Result Graph (PDF) | Result CSV |
+|---|---|---|---|
+| Client failures (uniform) | `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-U` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.csv` |
+| Client failures (zipfian) | `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z` |`experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.csv` |
 
 #### 2.4 Policy Lifting
 
 We evaluate the impact of lifting and heterogeneous policies in Sintr.
 To do so, we take the TPCC benchmark as a starting point.
 In the `Delivery` transaction, we add a lift function that checks order amounts do not exceed available credit; upon success, the order data is lifted and the transaction proceeds safely. 
+In addition, each delivery transaction delivers 5 orders instead of the 1 order in the original TPC-C implementation.
+We also move latest-order tracking out of the district table into a new latest-order table (assigned `P-1`).
 Financial tables (warehouse, district, customer, history) are assigned `P-5`, while record-keeping tables (orders, stock, item) are assigned `P-1`. 
 We compare this configuration against uniform `P-5` and uniform `P-1` deployments.
 

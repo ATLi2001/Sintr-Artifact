@@ -9,7 +9,7 @@ The high-level requirements for building the codebase are:
   
 - Requires python3 (install included below)
 - Requires C++ 17 
-- Requires Java Version >= 1.8 (for BFTSmart). We suggest you run the Open JDK java 11 version (install included below) as our Makefile is currently hard-coded for it. (install included below)
+- Requires Java Version >= 1.8 (for BFT-SMaRt). We suggest you run the Open JDK java 11 version (install included below) as our Makefile is currently hard-coded for it. (install included below)
 
 ### AUTOMATIC INSTALLATION
 
@@ -348,7 +348,7 @@ Note, that this must be done every time you open a new terminal. You may add it 
 (When building on a Cloudlab controller instead of locally, the setvars.sh must be sourced manually every time since bashrc will not be persisted across images. All other experiment machines will be sourced via the experiment scripts, so no further action is necessary there.)
 
 
-#### Additional prereq for BFTSmart 
+#### Additional prereq for BFT-SMaRt 
 
 First, install Java open jdk 1.11.0 in /usr/lib/jvm and export your `LD_LIBRARY_PATH`:
 
