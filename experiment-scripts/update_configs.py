@@ -1,7 +1,26 @@
 import json
 import sys
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+
+# Fields whose override value only replaces the *directory prefix* of the path.
+# The final path component (the filename) in each config file is left unchanged,
+# so the override picks the directory while each config keeps its own file.
+PREFIX_ONLY_FIELDS = {"sintr_policy_config_path"}
+
+def prefix_replace(original_value, override_value):
+    """
+    Replace the directory prefix of `original_value` with the directory of
+    `override_value`, keeping `original_value`'s own filename (last component).
+    Falls back to `override_value` if `original_value` isn't a usable path.
+    """
+    if not isinstance(original_value, str) or not isinstance(override_value, str):
+        return override_value
+    override_dir = PurePosixPath(override_value).parent
+    original_name = PurePosixPath(original_value).name
+    if not original_name:
+        return override_value
+    return str(override_dir / original_name)
 
 def deep_update(original, updates):
     """
@@ -10,6 +29,8 @@ def deep_update(original, updates):
     for key, value in updates.items():
         if isinstance(value, dict) and isinstance(original.get(key), dict):
             deep_update(original[key], value)
+        elif key in PREFIX_ONLY_FIELDS and key in original:
+            original[key] = prefix_replace(original[key], value)
         else:
             original[key] = value
     return original
