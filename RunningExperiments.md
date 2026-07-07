@@ -35,6 +35,11 @@ Running experiments involves 5 steps. Refer back to this checklist to stay on tr
 
 > :warning: Make sure that the names of your CloudLab machines match those in the helper scripts!
 
+The following benchmarks must be uploaded to the Cloudlab machines:
+1. TPCC
+2. Seats
+3. TPCC-Lifting (`tpcc-lifting`); this is used for our microbenchmark evaluating [lifting](#24-policy-lifting).
+
 To generate benchmark data simple run the script `src/generate_benchmark_data.sh`. Configure it as follows:
 1) specify the benchmark you want to generate, e.g. to run TPC-C use `-b 'tpcc'`
 2) specify the benchmark parameters, e.g. to create 20 warehouses for TPC-C use `-n 20`
@@ -305,6 +310,8 @@ python3 experiment-scripts/analyze_stats_file.py -b "<BENCH>" -o <output-dir> -p
 | Smallbank | `smallbank` | `experiment-configs/Sintr/1-Workloads/Smallbank`  |
 
 Our results for each benchmark are located as follows.
+Note that the label names produced from the scripts may not exactly match the naming used in the final result graph/csv (e.g., the final graph/csv has Pesto-P-1 but the script by default produces sintr-policy1).
+The labels with Sintr in them correspond to Basil/Pesto with Sintr on top of it.
 
 | Experiment | Result Graph (PDF) | Result CSV |
 |---|---|---|
@@ -314,18 +321,19 @@ Our results for each benchmark are located as follows.
 
 ### **2 - Microbenchmarks**
 
-Same three-step workflow, with a few differences per experiment (see table):
+We evaluate 4 microbenchmarks on Sintr with Pesto as baseline.
+To run each experiment, use the same three-step workflow, with a few differences per experiment (see table):
 
 - **`--recursive`** — append it to the step 1 command only where the table says so.
-- **`COLLECT_LOGS`** — where noted, set `COLLECT_LOGS=1` in `collect_results.sh` *before* running step 2.
+- **`COLLECT_LOGS`** — where noted, pass in 1 to collect logs in `collect_results.sh`.
 - **Analyze flag** — some experiments select the benchmark with `-b`, others select a plot type with `-t`.
 
 ```bash
 # 1. Run the experiment (append --recursive only where the table says so)
 ./experiment-scripts/run_many_experiment_configs.sh <CONFIG> [--recursive]
 
-# 2. (If required) set COLLECT_LOGS=1 in collect_results.sh, then collect
-./experiment-scripts/collect_results.sh
+# 2. (If required) pass in 1 to collect_results.sh
+./experiment-scripts/collect_results.sh [COLLECT_LOGS]
 
 # 3. Analyze and plot with the flag from the table
 python3 experiment-scripts/analyze_stats_file.py <ANALYZE FLAG> -o <output-dir> -p <plot-output-dir>
@@ -340,16 +348,32 @@ python3 experiment-scripts/analyze_stats_file.py <ANALYZE FLAG> -o <output-dir> 
 | Client failures — Zipfian| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z`         | yes | yes | `-t "client_failures"`    |
 | Lifting throughput       | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting`                          | –   | –   | `-t "tput_bar"`           |
 
-Our results for each microbenchmark are located as follows.
 
 #### 2.1 Vary Policy
+
+We study how performance scales with policy strength using a YCSB-based microbenchmark (10 tables, 1M keys each; transactions read and update five rows).
+We consider two workloads: an uncontended uniform access pattern and a contended Zipfian access pattern with coefficient 0.99. 
+For each workload, we instantiate Sintr under a family of policies `P-x-[U/Z]`, where all keys share a static policy, `x` is the number of required client endorsements, and `U` and `Z` indicate uniform and Zipfian distributions (also coefficient 0.99) of validation load, respectively. 
+The Zipfian case models scenarios where certain clients are preferred as validators, e.g., because of reputation or proximity.
+
+We find that Sintr’s overhead is primarily determined by where the system bottlenecks: it is more pronounced in CPU-bound settings with short transactions, but modest when contention dominates. 
+Even under skewed or stronger policies, endorsement costs scale predictably.
 
 | Experiment | Config Path | Result Graph (PDF) | Result CSV |
 |---|---|---|---|
 | Uniform workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Uniform-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.csv` |
 | Zipfian workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Zipf-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.csv` |
 
-#### 2.2 Gov Txn (dynamically changing policies)
+#### 2.2 Governance Transactions
+
+We evaluate dynamic policy updates in Sintr using a YCSB-based microbenchmark with a uniform access pattern.
+The experiment runs for 90 s with 20 clients, including 15 s warm-up and cool-down periods. 
+Initially, all keys are assigned P-1. 
+We then inject a governance transaction that upgrades `x%` of keys (`Gov-x`) from P-1 to P-5, followed 30 s later by a second governance transaction that reverts the change. 
+For reference, we also report steady-state performance with all keys fixed at P-1 or P-5.
+
+We find that Sintr supports fast, minimally disruptive policy changes at runtime. 
+Governance transactions take effect immediately, with throughput adapting smoothly and without pausing execution.
 
 | Experiment | Config Path | Result Graph (PDF) | Result CSV |
 |---|---|---|---|
@@ -357,12 +381,29 @@ Our results for each microbenchmark are located as follows.
 
 #### 2.3 Client Failures
 
+We study two representative Byzantine client failures: `ignore-val`, where Byzantine clients ignore validation requests, and `ddos`, where they request endorsements from all clients.
+We use a YCSB-based microbenchmark with uniform and Zipfian access patterns. 
+We deploy 20 clients and configure the system to tolerate up to five Byzantine clients by assigning `P-5` to all keys. 
+Validation cost is varied using an artificial `x` ms busy-wait (`delay-x`). 
+Correct clients optimistically contact five validators per transaction; in `ignore-val`, ignored requests trigger contacting additional validators, both immediately and in subsequent transactions.
+
+We find that Byzantine clients in Sintr cannot compromise correctness and have limited performance impact unless validation is computationally expensive.
+
 | Experiment | Result Graph (PDF) | Result CSV |
 |---|---|---|
 | Client failures (uniform) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.csv` |
 | Client failures (zipfian) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.csv` |
 
 #### 2.4 Policy Lifting
+
+We evaluate the impact of lifting and heterogeneous policies in Sintr.
+To do so, we take the TPCC benchmark as a starting point.
+In the `Delivery` transaction, we add a lift function that checks order amounts do not exceed available credit; upon success, the order data is lifted and the transaction proceeds safely. 
+Financial tables (warehouse, district, customer, history) are assigned `P-5`, while record-keeping tables (orders, stock, item) are assigned `P-1`. 
+We compare this configuration against uniform `P-5` and uniform `P-1` deployments.
+
+We find that lifting enables heterogeneous policies that
+substantially improve performance without sacrificing safety.
 
 | Experiment | Config Path | Result Graph (PDF) | Result CSV |
 |---|---|---|---|
