@@ -70,7 +70,7 @@ transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeo
 
   client.Begin(timeout, txnState);
   if(d_id == 10) { //aborted at 10, retrying second delivery txn
-    d_id = 1;
+    d_id = 6;
   }
   if(d_id == 5) {
     d_id = 1; // aborted at 5, so retrying first delivery txn
