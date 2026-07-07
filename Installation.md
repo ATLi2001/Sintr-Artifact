@@ -345,7 +345,7 @@ Note, that this must be done every time you open a new terminal. You may add it 
 4. `echo source /opt/intel/oneapi/setvars.sh --force >> ~/.bashrc`
 5. `source ~/.bashrc`
 
-(When building on a Cloudlab controller instead of locally, the setvars.sh must be sourced manually every time since bashrc will not be persisted across images. All other experiment machines will be sourced via the experiment scripts, so no further action is necessary there.)
+(When building on a CloudLab controller instead of locally, the setvars.sh must be sourced manually every time since bashrc will not be persisted across images. All other experiment machines will be sourced via the experiment scripts, so no further action is necessary there.)
 
 
 #### Additional prereq for BFT-SMaRt 
