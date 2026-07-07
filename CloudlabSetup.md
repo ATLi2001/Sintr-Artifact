@@ -1,12 +1,13 @@
 # Setting up Cloudlab <a name="cloudlab"></a>
    
-To run experiments on [Cloudlab](https://www.cloudlab.us/) you will need to request an account with your academic email (if you do not already have one) and create a new project  To request an account click [here](https://cloudlab.us/signup.php). You can create a new project either directly while requesting an account, or by selecting "Start/Join project" in your account drop down menu.
+To run experiments on [Cloudlab](https://www.cloudlab.us/) you will need to request an account with your academic email (if you do not already have one) and create a new project.
+To request an account click [here](https://cloudlab.us/signup.php). You can create a new project either directly while requesting an account, or by selecting "Start/Join project" in your account drop down menu.
 
  > :warning: **[NOTE]** On Cloudlab, make sure to select `bash` as your default shell in your Account settings.
 
 We have included screenshots below for easy usebility. Follow the [cloudlab manual](http://docs.cloudlab.us/) if you need additional information for any of the outlined steps. 
 
-If you face any issues with registering, please make a post at the [Cloudlab forum](https://groups.google.com/g/cloudlab-users?pli=1). Replies are usually very swift during workdays on US mountain time (MT). Alternatively -- but *not recommended* --, if you are unable to get access to create a new project, request to join project "pequin" and wait to be accepted. Reach out to Florian Suri-Payer <fsp@cs.cornell.edu> if you are not accepted, or unsure how to join.
+If you face any issues with registering, please make a post at the [Cloudlab forum](https://groups.google.com/g/cloudlab-users?pli=1). Replies are usually very swift during workdays on US mountain time (MT). Alternatively -- but *not recommended* --, if you are unable to get access to create a new project, request to join project "pequin" and wait to be accepted. Reach out to Austin Li <atl63@cornell.edu> if you are not accepted, or unsure how to join.
 
 ![image](https://user-images.githubusercontent.com/42611410/129490833-eb99f58c-8f0a-43d9-8b99-433af5dab559.png)
 
@@ -16,7 +17,7 @@ Install ssh if you do not already have it: `sudo apt-get install ssh`. To create
 
 Next, you are ready to start up an experiment:
 
-To use a pre-declared profile supplied by us, start an experiment using the public profile ["pequin-base"](https://www.cloudlab.us/p/pequin/pequin-base). If you face any issues using this profile (or the disk images specified below), please make a post at the [Cloudlab forum](https://groups.google.com/g/cloudlab-users?pli=1) or contact Florian Suri-Payer <fsp@cs.cornell.edu>.
+To use a pre-declared profile supplied by us, start an experiment using the public profile ["pequin-base"](https://www.cloudlab.us/p/pequin/pequin-base). If you face any issues using this profile (or the disk images specified below), please make a post at the [Cloudlab forum](https://groups.google.com/g/cloudlab-users?pli=1) or contact Austin Li <atl63@cornell.edu>.
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490911-8c97d826-caa7-4f04-95a7-8a2c8f3874f7.png) -->
 
 This profile by default starts with 18 server machines and 18 client machines, all of which use m510 hardware on the Utah cluster. 
@@ -24,6 +25,10 @@ This profile includes two disk images "pequin-base.server" (`urn:publicid:IDN+ut
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490922-a99a1287-6ecc-4d50-b05d-dfe7bd0496d9.png) -->
 ![image](https://github.com/user-attachments/assets/87a6c33c-9836-4113-b161-1bcd6847f948)
 
+> :warning: These default values are **NOT** the ones needed to run Sintr experiments. 
+Sintr does not evaluate sharding, and thus requires fewer server machines.
+However, Sintr does require more client machines for its validation protocol.
+Please see [below](#cloudlab-profile-parameters) on the required parameters to reproduce our results.
 
 Click "Next" and name your experiment and project. In the example below, our experiment name is "pequin", and the project name is "pequin" too. All our pre-supplied experiment configurations use these names as default, and you will need to change them accordingly to your chosen names (see section "Running Experiments").
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490940-6c527b08-5def-4158-afd2-bc544e4758ab.png) -->
@@ -35,14 +40,66 @@ Finally, set a duration and start your experiment. Starting all machines may tak
 You may ssh into the machines to test your connection using the ssh commands shown under "List View" or by using `ssh <cloudlab-username>@<node-name>.<experiment-name>.<project-name>-pg0.<cluster-domain-name>`. In the example below it would be: `ssh fs435@us-east-1-0.indicus.morty-pg0.utah.cloudlab.us`.
 ![image](https://user-images.githubusercontent.com/42611410/129490991-035a1865-43c3-4238-a264-e0d43dd0095f.png)
 
-
-Since experiments require a fairly large number of machines, you may have to create a reservation in order to have enough resources. Go to the "Make reservation tab" and make a reservation for 36 m510 machines on the Utah cluster (37 if you plan to use a control machine). 
+Since experiments require a fairly large number of machines, you may have to create a reservation in order to have enough resources. Go to the "Make reservation tab" and make a reservation for the appropriate number of m510 machines on the Utah cluster (+1 if you plan to use a control machine). 
 (The example below was taken for a project named "morty". Replace this with your project name.)
 ![image](https://user-images.githubusercontent.com/42611410/129491361-b13ef31b-707b-4e02-9c0f-800e6d9b4def.png)
 
-Our profile by default allocates 18 servers (36 total machines), enough to run Pesto on TPCC for 3 shards. Most experiments, however, do not need this many machines: if you cannot get access to enough machines, simply use 6 server machines (remove the trailing 12 server names from the profile, i.e. keep only `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`). This suffices to run all but the sharding experiment. 
+<!-- Our profile by default allocates 18 servers (36 total machines), enough to run Pesto on TPCC for 3 shards. Most experiments, however, do not need this many machines: if you cannot get access to enough machines, simply use 6 server machines (remove the trailing 12 server names from the profile, i.e. keep only `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`). This suffices to run all but the sharding experiment.  -->
 
 Note, that the names are just placeholder names and do NOT correspond to real region placement. To emulate WAN latencies our experiment configs allow assigning ping latencies to sever-names.
+
+### Cloudlab profile parameters
+
+For evaluations involving Basil or Pesto, 6 server machines are required.
+For evaluations involving Peloton-SMR or Tx-SMR, 4 server machines are required.
+
+#### Basil
+This is only run for the Smallbank workload.
+It requires the following parameters.
+
+- Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`
+- Number of sites (DCs): 2
+- Number of clients per replica: `11`
+
+This requires 6*11+6=72 nodes (+1 if you are using a control machine).
+
+#### Pesto
+This is run for the TPCC and Seats workloads, as well as all microbenchmarks.
+
+- Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`
+- Number of sites (DCs): 2
+- Number of clients per replica: 
+   - `5` for Seats
+   - `3` for TPCC and the `1-Vary-Policy` microbenchmark
+   - `2` for all other microbenchmarks
+
+This requires up to 6*5+6=36 nodes (+1 if you are using a control machine).
+
+#### Peloton-SMR
+This is run for the TPCC and Seats workloads.
+- Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0']`
+- Number of sites (DCs): 2
+- Number of clients per replica: 
+   - `9` for TPCC
+   - `15` for Seats
+
+This requires up to 4*15+4=64 nodes (+1 if you are using a control machine).
+
+#### Tx-SMR
+This is run for the Smallbank workload.
+- Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0']`
+- Number of sites (DCs): 2
+- Number of clients per replica: `12`
+
+This requires up to 4*12+4=52 nodes (+1 if you are using a control machine).
+
+We recommend changing the parameters as needed as this will reduce the number of Cloudlab machines needed.
+If you wish to try and create a single Cloudlab experiment that will work for every result, modify the following.
+- Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`
+- Number of sites (DCs): 2
+- Number of clients per replica: `15`
+
+This will require 6*15+6=96 nodes, (+1 if you are using a control machine). 
 
 ### Using a control machine (skip if using local machine)
 When using a control machine (and not your local machine) to start experiments, you will need to source setvars.sh and may need to export the LD_LIBRARY_PATH for the Java dependencies (see section "Install Dependencies") before building. You will need to do this everytime you start a new control machine because those are not be persisted across images.
