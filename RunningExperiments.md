@@ -7,7 +7,7 @@ Uploading binaries on high speed connections (e.g at your university) takes a fe
 
 This section is split into 5 subsections: 
 1. [Preparing Benchmarks](#prep)
-2. [Pre-configurations for HotStuff, BFTSmart, and Postgres](#preconfig)
+2. [Pre-configurations for HotStuff and BFTSmart](#preconfig)
 3. [Experiment script instructions](#scripts)
 4. [Parsing outputs](#output)
 5. [Reproducing our experiments 1-by-1](#exp)
@@ -89,13 +89,27 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
 
 ## (3) Using the experiment scripts <a name="scripts"></a>
 
-In this section we detail the steps for running an experiment in our artifact. 
-For convenience, we have scripts which run multiple experiments consecutively and collect the results.
-We list the exact scripts to run for reproducing each experiment in the final [section](#exp).
+Each experiment run depends on a configuration file. 
+We have provided configurations for all experiments claimed by the paper, which you can find under `experiment-configs/Sintr/`.
+In order to use them, there are several fields which need to be modified. 
+We provide a python script `experiment-scripts/update_configs.py` to enable changing configs in bulk.
+It will recursively modify all config files in `<path_to_configs>` with the changes in `<override_file>`.
+We provide a template `experiment-scripts/example_user_override.json` file that lists the required modifications for our experiments.
+In dry run mode no changes are made, and all files that would be changed are printed. 
+In backup mode all existing files that would be changed are backed up to a folder `backup`.
+
+```bash
+python3 experiment-scripts/update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]
+```
+
+> :warning: For configs for BFTSmart, you also need to adjust `"bftsmart_codebase_dir"` to reflect your cloudlab username.
+
+
+### Detailed Manual Instructions
 
 To run an experiment, you simply need to run: `python3 Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote Cloudlab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `Pequin-Artifact/experiment-configs`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
 
- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`.
+ <!-- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`. -->
 
 #### Required Modifications:
 1. `"project_name": "pequin-pg0"`
@@ -117,6 +131,8 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
 8. `"bftsmart_codebase_dir" : "/users/fs435"`
     - change the user name (fs435) to your <cloudlab-username>
     - this is only applicable to BFTSmart configs
+9. `"sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
+    - change this to be the absolute path to the appropriate policy config
 
 #### **Optional** Modifications 
 1. Experiment duration:
@@ -160,6 +176,11 @@ Optional: To monitor experiment progress you can ssh into a server machine (e.g.
   
    
 ## (4) Parsing outputs <a name="output"></a>
+We provide experiment scripts that collect the results across multiple experiments together.
+See the next section for instructions on how to run these scripts.
+Below we detail how to understand the results of a single experiment run.
+
+### Detailed Manual Instructions
 After the experiment is complete, the scripts will generate an output folder at your specified `base_local_exp_directory`. Each folder is timestamped. 
 
 To parse experiment results you have 2 options:
@@ -213,7 +234,8 @@ To parse experiment results you have 2 options:
 
 ## (5) Reproducing experiment claims 1-by-1 <a name="exp"></a>
 
-Next, we will go over each experiment individually to provide some pointers. All of our experiment configurations can be found under `experiment-configs`.
+Next, we will go over each experiment individually to provide some pointers. 
+All of our experiment configurations can be found under `experiment-configs/Sintr/`.
 
 <!-- **TODO CHANGE ** 
 We have included our experiment outputs for easy cross-validation of the claimed througput (and latency) numbers under `/sample-output/ValidatedResults`. 
@@ -252,23 +274,96 @@ Simimlarly, detailed explanations of the Basil and Tx-SMR baselines can be found
 
 All systems were evaluated using a single shard, but use different replication factors. For f=1, Basil/Pesto uses 6 replicas (5f+1), while the SMR based systems use 4 (3f+1).
 
-<!-- All systems using signatures (Pesto, Pesto-unreplicated, Peloton-signed, Peloton-HS, Peloton-Smart) are augmented to make use of the reply batching scheme proposed in Basil: replicas may batch together replies to clients and create a single signature to amortize costs. We defer exact details to Basil. We use a varying reply batch size depending on the load; for low load, it is better to not batch to avoid incurring a batch timeout.  -->
+All systems use signatures and are augmented to make use of the reply batching scheme proposed in Basil: replicas may batch together replies to clients and create a single signature to amortize costs. We defer exact details to Basil. We use a varying reply batch size depending on the load; for low load, it is better to not batch to avoid incurring a batch timeout. 
 <!-- we used very small batch timer by accident because the unit is *microseconds* and not *miliseconds*. However, due to a libevent artifact, timer granularity is only 4ms, so most of the time our timers are implicitly 4ms. -->
 
 <!-- Peak throughput reported in the paper corresponds to maximum attained throughput; latency reported corresponds to latency measured at the "ankle" point, i.e. a bit before latency starts to spike. -->
 
-> :warning: The `stats.json` file contains aggregate throughput and latency statistics, as well as statistics for individual transaction types (e.g. `new-order` in TPC-C). Make sure that you are looking at the `combined` statistics as described in section [Parsing Outputs](#output)!!
+<!-- > :warning: The `stats.json` file contains aggregate throughput and latency statistics, as well as statistics for individual transaction types (e.g. `new-order` in TPC-C). Make sure that you are looking at the `combined` statistics as described in section [Parsing Outputs](#output)!! -->
 
- 
-#### 1. **TPCC**:  
-We evaluate Pesto and the Peloton-SMR systems.
 We denote by `P-x` that a transaction requires `x` endorsements, excluding the initiating client. 
 Baselines correspond to `P-0`. 
 Initiating clients select validation clients uniformly in a round-robin manner.
 
+For each benchmark, run the three steps below, substituting the config path and `-b` value from the table.
+
 ```bash
-./experiment-scripts/run_many_experiment_configs.sh experiment-configs/Sintr/1-Workloads/TPCC-SQL/ --recursive
+# 1. Run the experiment
+./experiment-scripts/run_many_experiment_configs.sh <CONFIG> --recursive
+
+# 2. Collect results into experiment-results/original
+./experiment-scripts/collect_results.sh
+
+# 3. Analyze and plot
+python3 experiment-scripts/analyze_stats_file.py -b "<BENCH>" -o <output-dir> -p <plot-output-dir>
 ```
 
-#### 2. **Seats**:
-    
+| Benchmark | `<BENCH>` | `<CONFIG>` (recursive run) |
+|-----------|-----------|-----------------------------|
+| TPC-C     | `tpcc`      | `experiment-configs/Sintr/1-Workloads/TPCC-SQL`   |
+| SEATS     | `seats`     | `experiment-configs/Sintr/1-Workloads/Seats`      |
+| Smallbank | `smallbank` | `experiment-configs/Sintr/1-Workloads/Smallbank`  |
+
+Our results for each benchmark are located as follows.
+
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| TPC-C | `experiment-results/1-Workloads/TPCC-SQL/Combined/tpcc-sql-combined.pdf` | `experiment-results/1-Workloads/TPCC-SQL/Combined/tpcc-sql-combined.csv` |
+| Smallbank | `experiment-results/1-Workloads/Smallbank/Combined/smallbank-combined.pdf` | `experiment-results/1-Workloads/Smallbank/Combined/smallbank-combined.csv` |
+| SEATS | `experiment-results/1-Workloads/Seats/Combined/seats-combined.pdf` | `experiment-results/1-Workloads/Seats/Combined/seats-combined.csv` |
+
+### **2 - Microbenchmarks**
+
+Same three-step workflow, with a few differences per experiment (see table):
+
+- **`--recursive`** — append it to the step 1 command only where the table says so.
+- **`COLLECT_LOGS`** — where noted, set `COLLECT_LOGS=1` in `collect_results.sh` *before* running step 2.
+- **Analyze flag** — some experiments select the benchmark with `-b`, others select a plot type with `-t`.
+
+```bash
+# 1. Run the experiment (append --recursive only where the table says so)
+./experiment-scripts/run_many_experiment_configs.sh <CONFIG> [--recursive]
+
+# 2. (If required) set COLLECT_LOGS=1 in collect_results.sh, then collect
+./experiment-scripts/collect_results.sh
+
+# 3. Analyze and plot with the flag from the table
+python3 experiment-scripts/analyze_stats_file.py <ANALYZE FLAG> -o <output-dir> -p <plot-output-dir>
+```
+
+| Experiment | `<CONFIG>` | `--recursive`? | `COLLECT_LOGS=1`? | `<ANALYZE FLAG>` |
+|------------|------------|:--------------:|:-----------------:|------------------|
+| Vary policy — uniform    | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Uniform-final` | –   | –   | `-b "rw-sql"`             |
+| Vary policy — Zipfian    | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Zipf-final`    | –   | –   | `-b "rw-sql"`             |
+| Gov txn policy change    | `experiment-configs/Sintr/2-Microbenchmarks/2-Gov-Txn`                          | –   | yes | `-t "throughput_time"`    |
+| Client failures — uniform| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-U`         | yes | yes | `-t "client_failures"`    |
+| Client failures — Zipfian| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z`         | yes | yes | `-t "client_failures"`    |
+| Lifting throughput       | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting`                          | –   | –   | `-t "tput_bar"`           |
+
+Our results for each microbenchmark are located as follows.
+
+#### 2.1 Vary Policy
+
+| Experiment | Config Path | Result Graph (PDF) | Result CSV |
+|---|---|---|---|
+| Uniform workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Uniform-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.csv` |
+| Zipfian workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Zipf-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.csv` |
+
+#### 2.2 Gov Txn (dynamically changing policies)
+
+| Experiment | Config Path | Result Graph (PDF) | Result CSV |
+|---|---|---|---|
+| Gov Txn | `experiment-configs/Sintr/2-Microbenchmarks/2-Gov-Txn` | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.pdf` | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.csv` |
+
+#### 2.3 Client Failures
+
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| Client failures (uniform) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-U/Client-Failures-U.csv` |
+| Client failures (zipfian) | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.pdf` | `experiment-results/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z/Client-Failures-Z.csv` |
+
+#### 2.4 Policy Lifting
+
+| Experiment | Config Path | Result Graph (PDF) | Result CSV |
+|---|---|---|---|
+| Leveraging policy lifting | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
