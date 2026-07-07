@@ -55,9 +55,9 @@ Access is distributed uniformly across customers and flights. The workload is ch
 
 [**Smallbank**](https://github.com/cmu-db/benchbase/wiki/SmallBank) simulates a simple KVS banking application.
 It consists of 5 transaction types, allowing clients to move money between accounts and check their balances.
-We configure to run with 1M accounts, with a 90% skew to 1,000 hot keys.
+We configure it to run with 1M accounts, with a 90% skew to 1,000 hot keys.
 
-**YCSB-Tables**. This is a custom read-modify-write microbenchmark based on [YCSB](https://github.com/brianfrankcooper/YCSB). The database can be instantiated with a configurable amount of tables and rows; each row contains a key-value pair. Keys are unique (primary key), while values can either be random or fall within a configurable number of candidate categories.
+**YCSB-Tables**. This is a custom read-modify-write microbenchmark based on [YCSB](https://github.com/brianfrankcooper/YCSB). The database can be instantiated with a configurable number of tables and rows; each row contains a key-value pair. Keys are unique (primary key), while values can either be random or fall within a configurable number of candidate categories.
 Transactions read and/or write to a configurable number of rows; reads may optionally be conditioned on a secondary condition (e.g. value category). The access pattern to both tables and rows within tables is configurable: it may be uniformly random, or follow a YCSB-based Zipfian (coefficient configurable).
 
 
@@ -93,7 +93,7 @@ The `sync/` subdirectory contains wrappers that call the benchmark code as an in
 
 Networking and cryptography functionality is found in `src/lib/`.
 
-The experiment scripts to run all prototypes on CloudLab are found in `experiment-scripts/`. `src/` and `src/scripts/` contain additional helper scripts used to create/upload benchmark data, and pre-configure HotStuff/BFT-Smart.
+The experiment scripts to run all prototypes on CloudLab are found in `experiment-scripts/`. `src/` and `src/scripts/` contain additional helper scripts used to create/upload benchmark data, and pre-configure HotStuff/BFT-SMaRt.
 Finally, `experiment-configs/` contains the configs we used in our experiments.
 
 
@@ -109,20 +109,20 @@ Finally, `experiment-configs/` contains the configs we used in our experiments.
 
 ## Validation Overview
 
-All our experiments were run using Cloudlab (https://www.cloudlab.us/), specifically the Cloudlab Utah cluster. To reproduce our results and validate our claims, you will need to 1) instantiate a matching Cloudlab experiment, 2) build the prototype binaries, and 3) run the provided experiment scripts with the (supplied) configs we used to generate our results. 
+All our experiments were run using CloudLab (https://www.cloudlab.us/), specifically the CloudLab Utah cluster. To reproduce our results and validate our claims, you will need to 1) instantiate a matching CloudLab experiment, 2) build the prototype binaries, and 3) run the provided experiment scripts with the (supplied) configs we used to generate our results. 
 
-You may go about 2) and 3) in two ways: You can either build and control the experiments from a local machine (easier to parse/record results & troubleshoot, but more initial installs necessary); or, you can build and control the experiments from a dedicated Cloudlab control machine, using pre-supplied disk images (faster setup out of the box, but more overhead to parse/record results and troubleshoot). Both options are outlined in this ReadMe.
+You may go about 2) and 3) in two ways: You can either build and control the experiments from a local machine (easier to parse/record results & troubleshoot, but more initial installs necessary); or, you can build and control the experiments from a dedicated CloudLab control machine, using pre-supplied disk images (faster setup out of the box, but more overhead to parse/record results and troubleshoot). Both options are outlined in this ReadMe.
 
 The ReadMe is organized into the following high level sections. Refer to each link for detailed documentation:
 
 1. [*Installing pre-requisites and building binaries*](Installation.md)
 
-   To build Sintr and baseline source code several dependencies must be installed. Refer to section "Installing Dependencies" for detailed instructions on how to install dependencies and compile the code. You may skip this step if you choose to use a dedicated Cloudlab "control" machine using *our* supplied fully configured disk images. Note that, if you choose to use a control machine but not use our images, you will have to follow the Installation guide too, and additionally create your own disk images. More on disk images can be found in section "Setting up Cloudlab".
+   To build Sintr and baseline source code several dependencies must be installed. Refer to section "Installing Dependencies" for detailed instructions on how to install dependencies and compile the code. You may skip this step if you choose to use a dedicated CloudLab "control" machine using *our* supplied fully configured disk images. Note that, if you choose to use a control machine but not use our images, you will have to follow the Installation guide too, and additionally create your own disk images. More on disk images can be found in section "Setting up CloudLab".
   
 
-2. [*Setting up experiments on Cloudlab* ](CloudlabSetup.md)
+2. [*Setting up experiments on CloudLab* ](CloudlabSetup.md)
 
-   To re-run our experiments, you will need to instantiate a server (and client) cluster using Cloudlab. We have provided a public profile as well as public disk images that capture the configurations we used to produce our results. Section "Setting up Cloudlab" covers the necessary steps in detail. Alternatively, you may create a profile of your own and generate disk images from scratch (more work) - refer to section "Setting up Cloudlab" as well for more information. Note, that you will need to use the same Cluster (Utah) and machine types (m510) to reproduce our results.
+   To re-run our experiments, you will need to instantiate a server (and client) cluster using CloudLab. We have provided a public profile as well as public disk images that capture the configurations we used to produce our results. Section "Setting up CloudLab" covers the necessary steps in detail. Alternatively, you may create a profile of your own and generate disk images from scratch (more work) - refer to section "Setting up CloudLab" as well for more information. Note, that you will need to use the same Cluster (Utah) and machine types (m510) to reproduce our results.
 
 
 3. [*Running experiments*](RunningExperiments.md)
