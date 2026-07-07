@@ -72,12 +72,12 @@ _FAMILY_LINE_STYLES = [
 # ordering (e.g. the rw-sql microbenchmark), cycled in plotting order so each
 # series is visually distinguishable.
 _DISTINCT_LINE_STYLES = [
-    ("--", "o"),  # dashed + circle
-    ("-", "s"),   # solid + square
-    ("-.", "D"),  # dash-dot + diamond
-    (":", "^"),   # dotted + triangle
-    ("--", "v"),  # dashed + down-triangle
-    ("-", "P"),   # solid + plus
+    ("-", "o"),   # solid + circle           : P-0
+    ("--", "s"),  # dashed + square          : P-1-U
+    (":", "^"),   # dotted + triangle        : P-1-Z
+    ("-.", "D"),  # dash-dot + diamond       : P-2-U
+    ("-", "v"),   # solid + down-triangle    : P-3-U
+    ("--", "P"),  # dashed + plus
     ("-.", "X"),  # dash-dot + x
     (":", "*"),   # dotted + star
 ]
@@ -405,8 +405,8 @@ def create_lat_tput_plots(df, output_dir, now_string, benchmark=None):
 
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
-    ax.set_xlabel("Throughput (tx/s)")
-    ax.set_ylabel("Mean Latency (ms)")
+    ax.set_xlabel("Throughput (tx/s)", fontweight="bold")
+    ax.set_ylabel("Mean Latency (ms)", fontweight="bold")
     ax.grid(True)
 
     order = config["order"] if config else None
@@ -484,10 +484,10 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     # ax.set_ylabel(y_label)
-    ax.set_ylabel(y_label, fontsize=24)
+    ax.set_ylabel(y_label, fontsize=24, fontweight="bold")
     ax.set_xticks(x + width, x_labels)
     # ax.set_xlabel(x_axis_label)
-    ax.set_xlabel(x_axis_label, fontsize=24)
+    ax.set_xlabel(x_axis_label, fontsize=24, fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
     ylims = ax.get_ylim()
@@ -721,8 +721,8 @@ def create_overheads_lat_grouped_bar_plot(df, output_dir, now_string):
 def create_tput_time_plot(tput_time_df, policy_change_time_s, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Throughput (tx/s)")
+    ax.set_xlabel("Time (s)", fontweight="bold")
+    ax.set_ylabel("Throughput (tx/s)", fontweight="bold")
     ax.grid(True)
 
     for experiment_name, group in tput_time_df.groupby("experiment_name"):
@@ -814,10 +814,16 @@ def create_client_failures_bar_plot(client_failures_df, byz_client_df, output_di
 def create_client_failures_line_plot(client_failures_df, output_dir, now_string):
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
-    ax.set_xlabel("Num Byzantine Clients")
-    ax.set_ylabel("Throughput / Correct Client (tx/s)")
+    ax.set_xlabel("Num Byzantine Clients", fontweight="bold")
+    ax.set_ylabel("Throughput / Correct Client (tx/s)", fontweight="bold")
     ax.grid(True)
 
+    # Give each experiment family (e.g. "ddos", "ignore-val") a distinct line
+    # style + marker so the two families are visually separable, matching the
+    # reference figure: dotted/triangle for the first family, solid/square for
+    # the second. Colors still cycle per series via matplotlib's default cycle.
+    family_line_styles = [(":", "^"), ("-", "s")]
+    family_styles = {}
     for experiment_name, group in client_failures_df.groupby("experiment_name"):
         client_groups = group.groupby("num_byz_clients")
         num_byz_clients = client_groups["num_byz_clients"].mean()
@@ -825,7 +831,12 @@ def create_client_failures_line_plot(client_failures_df, output_dir, now_string)
         # technically should not take mean of std devs but assume only 1 data point per num_byz_clients
         std_dev_per_correct_client = client_groups["tput_std_dev"].mean()
 
-        ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt="-o", capsize=4, label=experiment_name)
+        family = experiment_name.rsplit("-delay", 1)[0]
+        if family not in family_styles:
+            family_styles[family] = family_line_styles[len(family_styles) % len(family_line_styles)]
+        linestyle, marker = family_styles[family]
+
+        ax.errorbar(num_byz_clients, tput_per_correct_client, yerr=std_dev_per_correct_client, fmt=f"{linestyle}{marker}", capsize=4, label=experiment_name)
     
     ax.legend(loc="upper center", ncol=2, fontsize=16, framealpha=0.5)
     ax.set_ylim(0, 300)
@@ -931,9 +942,9 @@ def _plot_norm_bar(values, labels, y_label, analysis_suffix, output_dir, now_str
     rects = ax.bar(x, values, width, color=colors)
     ax.bar_label(rects, fmt="%.3f", padding=3)
 
-    ax.set_ylabel(y_label)
+    ax.set_ylabel(y_label, fontweight="bold")
     ax.set_xticks(x, labels)
-    ax.set_xlabel("")
+    ax.set_xlabel("", fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
 
@@ -996,7 +1007,7 @@ def create_tput_bar_plot(df, output_dir, now_string, benchmark=None):
     fig, ax = plt.subplots(layout="constrained")
     fig.set_size_inches(8, 6)
     # ax.set_xlabel("Experiment")
-    ax.set_ylabel("Throughput (tx/s)")
+    ax.set_ylabel("Throughput (tx/s)", fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
 
