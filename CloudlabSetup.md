@@ -22,13 +22,12 @@ To use a pre-declared profile supplied by us, start an experiment using the publ
 
 This profile by default starts with 18 server machines and 18 client machines, all of which use m510 hardware on the Utah cluster. 
 This profile includes two disk images "pequin-base.server" (`urn:publicid:IDN+utah.cloudlab.us+image+pequin-PG0:pequin-base.server`) and "pequin-base.client" (`urn:publicid:IDN+utah.cloudlab.us+image+pequin-PG0:pequin-base.client`) that already include all dependencies and additional setup necessary to run experiments. Check the box "Use Control Machine" if you want to build binaries and run all experiments from one of the Cloudlab machines.
-<!--- ![image](https://user-images.githubusercontent.com/42611410/129490922-a99a1287-6ecc-4d50-b05d-dfe7bd0496d9.png) -->
-![image](https://github.com/user-attachments/assets/87a6c33c-9836-4113-b161-1bcd6847f948)
-
 > :warning: These default values are **NOT** the ones needed to run Sintr experiments. 
 Sintr does not evaluate sharding, and thus requires fewer server machines.
 However, Sintr does require more client machines for its validation protocol.
 Please see [below](#cloudlab-profile-parameters) on the required parameters to reproduce our results.
+<!--- ![image](https://user-images.githubusercontent.com/42611410/129490922-a99a1287-6ecc-4d50-b05d-dfe7bd0496d9.png) -->
+![image](https://github.com/user-attachments/assets/87a6c33c-9836-4113-b161-1bcd6847f948)
 
 Click "Next" and name your experiment and project. In the example below, our experiment name is "pequin", and the project name is "pequin" too. All our pre-supplied experiment configurations use these names as default, and you will need to change them accordingly to your chosen names (see section "Running Experiments").
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490940-6c527b08-5def-4158-afd2-bc544e4758ab.png) -->
