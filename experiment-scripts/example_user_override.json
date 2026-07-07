@@ -9,30 +9,5 @@
   "bftsmart_codebase_dir": "/users/dhl001",
   "sintr_protocol_settings": {
     "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs"
-  },
-  
-  "server_names": [
-    [
-      "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ]
-  ],
-  "server_regions": [
-    {
-      "us-east-1": [
-        "us-east-1-0",
-        "us-east-1-1",
-        "us-east-1-2"
-      ],
-      "eu-west-1": [
-        "eu-west-1-0",
-        "eu-west-1-1",
-        "eu-west-1-2"
-      ]
-    }
-  ]
+  }
 }
