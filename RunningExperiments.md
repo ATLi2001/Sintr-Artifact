@@ -1,6 +1,6 @@
 # Running experiments <a name="experiments"></a>
 Hurray! You have completed the tedious process of installing the binaries and setting up CloudLab. 
-Next, we will cover how to run experiments in order to re-produce all results. This is a straightforward but time-consuming process.
+Next, we will cover how to run experiments in order to reproduce all results. This is a straightforward but time-consuming process.
 
 Ideally you have good network connectivity to quickly upload binaries to the remote machines and download experiment results. 
 Uploading binaries on high speed connections (e.g at your university) takes a few minutes and needs to be done only once per instantiated CloudLab experiment -- however, if your uplink speed is low it may take (as I have painstakingly experienced in preparing this documentation for you) several hours. Downloading experiment outputs requires a moderate amount of download bandwidth and is usually quite fast.
@@ -64,7 +64,7 @@ Note: Benchmark data, by default, is uploaded to `/users/<cloudlab-user>/benchma
 When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to complete the following pre-configuration steps before running an experiment script:
 
 ### **HotStuff**
-   1. Navigate to `Pequin-Artifact/src/scripts`
+   1. Navigate to `src/scripts/`
    2. [**OPTIONAL**] Run `./batch_size.sh <batch_size>` to configure the internal batch size used by the HotStuff consensus module. See sub-section "1-by-1 experiment guide" for what settings to use. The default value is an *upper* cap of 200. Since we modified HotStuff to use more efficient, dynamic batch sizes, changing the default batch cap is not necessary.
    3. Run `./pghs_config_remote.sh <cloudlab-user>` (e.g. `atli`). This will upload the necessary configurations for the HotStuff Consensus module.
       - You may need to adjust the experiment name and project name within this script depending on your experiment/project name.
@@ -78,14 +78,14 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
    5. This will upload the necessary configurations for the Hotstuff Consensus module to the CloudLab machines. -->
 
 ### **BFT-SMaRt**
-   1. Navigate to `Pequin-Artifact/src/scripts`
+   1. Navigate to `src/scripts/`
    2. Build BFT-SMaRt using `./build_bftsmart.sh`. You only need to do this *once*.
-   3. Navigate to `Pequin-Artifact/src/scripts/bftsmart-configs` 
-   4. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
+   3. Navigate to `src/scripts/bftsmart-configs/` 
+   4. Run `./one_step_config.sh <Local Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
    5. For example: `scripts/bftsmart-configs/one_step_config.sh ../../.. atli sintr pequin-pg0 utah.cloudlab.us`
    6. This will upload the necessary configurations for the BFT-SMaRt Consensus module to the CloudLab machines.
-      - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/bftsmart-configs/` do not contain empty lines at the end
-      - You may need to modify the `client-hosts` in `/src/scripts/bftsmart-configs/` depending on how many clients you are using.
+      - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `src/scripts/bftsmart-configs/` do not contain empty lines at the end
+      - You may need to modify the `client-hosts` in `src/scripts/bftsmart-configs/` depending on how many clients you are using.
 
 > :warning: Do NOT use `src/scripts/one_step_config.sh` -- specifically use `src/scripts/bftsmart-configs/one_step_config.sh`. The scripts are identical, but for convenience reference different host file configurations.
 
@@ -115,7 +115,7 @@ python3 experiment-scripts/update_configs.py <path_to_configs> <override_file> [
 
 ### Detailed Manual Instructions
 
-To run an experiment, you simply need to run: `python3 Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote CloudLab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `Pequin-Artifact/experiment-configs`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
+To run an experiment, you simply need to run: `python3 experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote CloudLab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `experiment-configs/`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
 
  <!-- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`. -->
 
@@ -124,12 +124,12 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
    - change the value field to the name of your CloudLab project `<project-name>`. On cloudlab.us (utah cluster) you will generally need to add "-pg0" to your project_name in order to ssh into the machines. To confirm which is the case for you, try to ssh into a machine directly using `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`.  
 2. `"experiment_name": "sintr"`
    - change the value field to the name of your CloudLab experiment `<experiment-name>`.
-3. `"base_local_exp_directory": "/home/atl63/Pequin-Artifact/output"`
+3. `"base_local_exp_directory": "/home/atl63/Sintr-Artifact/output"`
    - :warning: Some of our helper scripts assume that this directory is named `output` and directly under the root of the artifact.
    - Set the value field to be the local path (on your machine or the control machine) where experiment output files will be downloaded to and aggregated. 
 4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/indicus"` 
    - Set the field `<cloudlab-user>`. This is the directory on the CloudLab machines where the binaries will be uploaded
-5. `"src_directory" : "/home/atl63/Pequin-Artifact/src"` 
+5. `"src_directory" : "/home/atl63/Sintr-Artifact/src"` 
    - Set the value field to your local path (on your machine or the control machine) to the source directory 
 6. `"emulab_user": "<cloudlab-user>"`
    - Set the field `<cloudlab-user>`. 
@@ -141,6 +141,7 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
     - this is only applicable to BFT-SMaRt configs
 9. `"sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
     - change this to be the absolute path to the appropriate policy config
+    - NOTE: in the override json for `update_configs.py`, this should be the path to the where the policy configs, as the script will change this prefix and leave the config filenames unchanged
 
 #### **Optional** Modifications 
 1. Experiment duration:
@@ -176,9 +177,9 @@ To run an experiment, you simply need to run: `python3 Pequin-Artifact/experimen
    - If you change the default names, you must also adjust the `server_regions` and `region_rtt_latencies` parameters. Group server names into the region you want to assign them to. The `region_rtt_latencies` values do not matter for LAN deployments; they are placeholders for WAN simulation---see [WAN instructions](#wan-instructions).
   
 #### Starting an experiment:
-You are ready to start an experiment. The JSON configs we used can be found under `Pequin-Artifact/experiment-configs/<PATH>/<config>.json`. **Note that** all microbenchmark configs are Pesto (Pequin) exclusive.
+You are ready to start an experiment. The JSON configs we used can be found under `experiment-configs/Sintr/<PATH>/<config>.json`. **Note that** all microbenchmark configs are Pesto (Pequin) exclusive.
 
-Run: `python3 <PATH>/Pequin-Artifact/experiment-scripts/run_multiple_experiments.py <PATH>/Pequin-Artifact/experiment-configs/<PATH>/<config>.json` and wait!
+Run: `python3 <PATH>/experiment-scripts/run_multiple_experiments.py <PATH>/experiment-configs/Sintr/<PATH>/<config>.json` and wait!
 
 Optional: To monitor experiment progress you can ssh into a server machine (e.g., us-east-1-0) and run htop. During the experiment run-time the CPUs will be loaded (to different degrees depending on contention and client count).
   
@@ -202,7 +203,7 @@ To parse experiment results you have 2 options:
 
 > :warning: The `stats.json` file contains aggregate throughput and latency statistics, as well as statistics for individual transaction types (e.g. `new-order` in TPC-C). Make sure that you are looking at the `combined` statistics as described above!!
    
- Find below, some example screenshots from looking at a provided experiment output from `Pequin-Artifact/sample-output/Pesto/1-Workloads/TPCC`:
+ Find below, some example screenshots from looking at a provided experiment output from `sample-output/Pesto/1-Workloads/TPCC`:
 
  > **NOTE**: We've included a few sample results as illustrative examples. These are *not* the full experiment results. Please refer to section 5 *Running Experiments* to reproduce our results.
 
@@ -289,14 +290,15 @@ All systems use signatures and are augmented to make use of the reply batching s
 
 <!-- > :warning: The `stats.json` file contains aggregate throughput and latency statistics, as well as statistics for individual transaction types (e.g. `new-order` in TPC-C). Make sure that you are looking at the `combined` statistics as described in section [Parsing Outputs](#output)!! -->
 
-We denote by `P-x` that a transaction requires `x` endorsements, excluding the initiating client. 
-Baselines correspond to `P-0`. 
+We denote by P-x that a transaction requires `x` endorsements, excluding the initiating client. 
+Baselines correspond to P-0. 
 Initiating clients select validation clients uniformly in a round-robin manner.
 
 For each benchmark, run the three steps below, substituting the config path and `-b` value from the table.
 
 ```bash
 # 1. Run the experiment
+# can add a --dry-run flag to only print out the configs which will be run
 ./experiment-scripts/run_many_experiment_configs.sh <CONFIG> --recursive
 
 # 2. Collect results into experiment-results/original
@@ -315,6 +317,9 @@ python3 experiment-scripts/analyze_stats_file.py -b "<BENCH>" -o <output-dir> -p
 Our results for each benchmark are located as follows.
 Note that the label names produced from the scripts may not exactly match the naming used in the final result graph/csv (e.g., the final graph/csv has Pesto-P-1 but the script by default produces sintr-policy1).
 The labels with Sintr in them correspond to Basil/Pesto with Sintr on top of it.
+
+We find that in both SQL and KVS workloads, Sintr incurs modest
+overhead, with higher costs primarily in CPU-bound systems.
 
 | Experiment | Result Graph (PDF) | Result CSV |
 |---|---|---|
@@ -356,38 +361,38 @@ python3 experiment-scripts/analyze_stats_file.py <ANALYZE FLAG> -o <output-dir> 
 
 We study how performance scales with policy strength using a YCSB-based microbenchmark (10 tables, 1M keys each; transactions read and update five rows).
 We consider two workloads: an uncontended uniform access pattern and a contended Zipfian access pattern with coefficient 0.99. 
-For each workload, we instantiate Sintr under a family of policies `P-x-[U/Z]`, where all keys share a static policy, `x` is the number of required client endorsements, and `U` and `Z` indicate uniform and Zipfian distributions (also coefficient 0.99) of validation load, respectively. 
+For each workload, we instantiate Sintr under a family of policies P-x-[U/Z], where all keys share a static policy, `x` is the number of required client endorsements, and `U` and `Z` indicate uniform and Zipfian distributions (also coefficient 0.99) of validation load, respectively. 
 The Zipfian case models scenarios where certain clients are preferred as validators, e.g., because of reputation or proximity.
 
 We find that Sintr’s overhead is primarily determined by where the system bottlenecks: it is more pronounced in CPU-bound settings with short transactions, but modest when contention dominates. 
 Even under skewed or stronger policies, endorsement costs scale predictably.
 
-| Experiment | Config Path | Result Graph (PDF) | Result CSV |
-|---|---|---|---|
-| Uniform workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Uniform-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.csv` |
-| Zipfian workload | `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Zipf-final` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.csv` |
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| Uniform workload | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-U/RW-SQL-U.csv` |
+| Zipfian workload | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.pdf` | `experiment-results/2-Microbenchmarks/1-Vary-Policy/RW-SQL-Z/RW-SQL-Z.csv` |
 
 #### 2.2 Governance Transactions
 
 We evaluate dynamic policy updates in Sintr using a YCSB-based microbenchmark with a uniform access pattern.
 The experiment runs for 90 s with 20 clients, including 15 s warm-up and cool-down periods. 
 Initially, all keys are assigned P-1. 
-We then inject a governance transaction that upgrades `x%` of keys (`Gov-x`) from P-1 to P-5, followed 30 s later by a second governance transaction that reverts the change. 
+We then inject a governance transaction that upgrades `x%` of keys (Gov-x) from P-1 to P-5, followed 30 s later by a second governance transaction that reverts the change. 
 For reference, we also report steady-state performance with all keys fixed at P-1 or P-5.
 
 We find that Sintr supports fast, minimally disruptive policy changes at runtime. 
 Governance transactions take effect immediately, with throughput adapting smoothly and without pausing execution.
 
-| Experiment | Config Path | Result Graph (PDF) | Result CSV |
-|---|---|---|---|
-| Gov Txn | `experiment-configs/Sintr/2-Microbenchmarks/2-Gov-Txn` | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.pdf` | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.csv` |
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| Gov Txn | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.pdf` | `experiment-results/2-Microbenchmarks/2-Gov-Txn/Gov-Txn.csv` |
 
 #### 2.3 Client Failures
 
 We study two representative Byzantine client failures: `ignore-val`, where Byzantine clients ignore validation requests, and `ddos`, where they request endorsements from all clients.
 We use a YCSB-based microbenchmark with uniform and Zipfian access patterns. 
-We deploy 20 clients and configure the system to tolerate up to five Byzantine clients by assigning `P-5` to all keys. 
-Validation cost is varied using an artificial `x` ms busy-wait (`delay-x`). 
+We deploy 20 clients and configure the system to tolerate up to five Byzantine clients by assigning P-5 to all keys. 
+Validation cost is varied using an artificial `x` ms busy-wait (delay-x). 
 Correct clients optimistically contact five validators per transaction; in `ignore-val`, ignored requests trigger contacting additional validators, both immediately and in subsequent transactions.
 
 We find that Byzantine clients in Sintr cannot compromise correctness and have limited performance impact unless validation is computationally expensive.
@@ -403,13 +408,13 @@ We evaluate the impact of lifting and heterogeneous policies in Sintr.
 To do so, we take the TPCC benchmark as a starting point.
 In the `Delivery` transaction, we add a lift function that checks order amounts do not exceed available credit; upon success, the order data is lifted and the transaction proceeds safely. 
 In addition, each delivery transaction delivers 5 orders instead of the 1 order in the original TPC-C implementation.
-We also move latest-order tracking out of the district table into a new latest-order table (assigned `P-1`).
-Financial tables (warehouse, district, customer, history) are assigned `P-5`, while record-keeping tables (orders, stock, item) are assigned `P-1`. 
-We compare this configuration against uniform `P-5` and uniform `P-1` deployments.
+We also move latest-order tracking out of the district table into a new latest-order table (assigned P-1).
+Financial tables (warehouse, district, customer, history) are assigned P-5, while record-keeping tables (orders, stock, item) are assigned P-1. 
+We compare this configuration against uniform P-5 and uniform P-1 deployments.
 
 We find that lifting enables heterogeneous policies that
 substantially improve performance without sacrificing safety.
 
-| Experiment | Config Path | Result Graph (PDF) | Result CSV |
-|---|---|---|---|
-| Leveraging policy lifting | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| Leveraging policy lifting | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |

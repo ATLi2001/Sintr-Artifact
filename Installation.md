@@ -385,7 +385,7 @@ For any Troubleshooting consult: https://www.cockroachlabs.com/docs/stable/insta
    
 Once you have completed all required installation steps you can build the binaries:
 
-Navigate to `Pequin-Artifact/src` and build:
+Navigate to `src/` and build:
 - `make -j $(nproc)`
 
 If you run into issues, consult the troubleshooting section below, or contact us directly.
@@ -393,7 +393,7 @@ If you run into issues, consult the troubleshooting section below, or contact us
 ### Confirming that binaries work locally (optional sanity check)
 You may want to run a simple toy single server/single client experiment using Pesto to validate that the binaries you built do not have an obvious error.
 
-Navigate to `Pequin-Artifact/src`. Run `./keygen.sh` to generate local priv/pub key-pairs. 
+Navigate to `src/`. Run `./keygen.sh` to generate local priv/pub key-pairs. 
 
 Run server:
 
@@ -403,7 +403,7 @@ Then run client:
 
 `./client-tester.sh`
 
-The client should finish within 10 seconds and the output file `client-0.out` should include a summary of the transactions committed at the end.
+The client should finish within 10 seconds and the output file `src/0_local_test_outputs/client-0.out` should include a summary of the transactions committed at the end.
 
 
 ### Troubleshooting:
@@ -436,10 +436,10 @@ The client should finish within 10 seconds and the output file `client-0.out` sh
    1. `git clone https://github.com/google/googletest.git`
    2. `cd googletest`
    3. `git checkout release-1.10.0`
-   4. `rm -rf <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
-   5. `mkdir <Relative-Path>/Pequin-Artifact/src/.obj`
-   6. `cp -r googletest <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
-   7. `cd <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
+   4. `rm -rf <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
+   5. `mkdir <Relative-Path>/Sintr-Artifact/src/.obj`
+   6. `cp -r googletest <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
+   7. `cd <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
    8. `cmake CMakeLists.txt`
    9. `make -j $(nproc)`
    10. `g++ -isystem ./include -I . -pthread -c ./src/gtest-all.cc`

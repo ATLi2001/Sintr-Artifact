@@ -22,14 +22,16 @@ To use a pre-declared profile supplied by us, start an experiment using the publ
 
 This profile by default starts with 18 server machines and 18 client machines, all of which use m510 hardware on the Utah cluster. 
 This profile includes two disk images "pequin-base.server" (`urn:publicid:IDN+utah.cloudlab.us+image+pequin-PG0:pequin-base.server`) and "pequin-base.client" (`urn:publicid:IDN+utah.cloudlab.us+image+pequin-PG0:pequin-base.client`) that already include all dependencies and additional setup necessary to run experiments. Check the box "Use Control Machine" if you want to build binaries and run all experiments from one of the CloudLab machines.
-> :warning: These default values are **NOT** the ones needed to run Sintr experiments. 
+> :warning: The default values for number of servers/clients are **NOT** the ones needed to run Sintr experiments. 
 Sintr does not evaluate sharding, and thus requires fewer server machines.
 However, Sintr does require more client machines for its validation protocol.
 Please see [below](#cloudlab-profile-parameters) on the required parameters to reproduce our results.
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490922-a99a1287-6ecc-4d50-b05d-dfe7bd0496d9.png) -->
 ![image](https://github.com/user-attachments/assets/87a6c33c-9836-4113-b161-1bcd6847f948)
 
-Click "Next" and name your experiment and project. In the example below, our experiment name is "pequin", and the project name is "pequin" too. All our pre-supplied experiment configurations use these names as default, and you will need to change them accordingly to your chosen names (see section ["Running Experiments"](RunningExperiments.md)).
+Click "Next" and name your experiment and project. In the example below, the experiment name is "pequin", and the project name is "pequin" too. 
+You will need to adjust these in our pre-supplied experiment configurations to your chosen names (see section [Running Experiments](RunningExperiments.md)).
+<!-- Our pre-supplied experiment configurations use these names as default, and you will need to change them accordingly to your chosen names (see section ["Running Experiments"](RunningExperiments.md)). -->
 <!--- ![image](https://user-images.githubusercontent.com/42611410/129490940-6c527b08-5def-4158-afd2-bc544e4758ab.png) -->
 ![image](https://github.com/user-attachments/assets/af46ad1f-908a-48e1-85b1-5cf024ccc0fe)
 
@@ -93,7 +95,7 @@ This is run for the Smallbank workload.
 This requires up to 4*12+4=52 nodes (+1 if you are using a control machine).
 
 We recommend changing the parameters as needed as this will reduce the number of CloudLab machines needed.
-If you wish to try and create a single CloudLab experiment that will work for every result, modify the following.
+If you wish to try and create a single CloudLab experiment with enough nodes for every result, modify the following.
 - Number of Replicas: `['us-east-1-0', 'us-east-1-1', 'us-east-1-2', 'eu-west-1-0', 'eu-west-1-1', 'eu-west-1-2']`
 - Number of sites (DCs): 2
 - Number of clients per replica: `15`
@@ -162,13 +164,13 @@ Additionally, you will have to install the following requisites:
    
 2. **Public Keys**: Generate Pub/Priv key-pairs, move them to /usr/local/etc/donna/
 
-    - Navigate to `Pequin-Artifact/src` and run `keygen.sh`
+    - Navigate to `src/` and run `keygen.sh`
     - By default keygen.sh uses type 4 = Ed25519 (this is what we evaluated the systems with); it can be modified to secp256k1 (type 3), but this requires editing the config files as well. (do not do this when trying to reproduce our experiments)
     - Move the key-pairs in the `/keys` folder to `/usr/local/etc/indicus-keys/donna/` (or to `/usr/local/etc/indicus-keys/secp256k1/` depending on what type used)
 
 3. **Helper scripts**: 
 
-    Navigate to Pequin-Artifact/helper-scripts. Copy all three scripts (with the exact name) and place them in `/usr/local/etc` on the CloudLab machine. Add execution permissions: `chmod +x disable_HT.sh; chmod +x turn_off_turbo.sh; chmod +x set_env.sh` The scripts are used at runtime by the experiments to disable hyperthreading and turbo respectively, as well as to set environment variables for jemalloc and Java (for BFT-SMaRt).
+    Navigate to `helper-scripts/`. Copy all three scripts (with the exact name) and place them in `/usr/local/etc` on the CloudLab machine. Add execution permissions: `chmod +x disable_HT.sh; chmod +x turn_off_turbo.sh; chmod +x set_env.sh` The scripts are used at runtime by the experiments to disable hyperthreading and turbo respectively, as well as to set environment variables for jemalloc and Java (for BFT-SMaRt).
     
 4. **Pre-Troubleshooting**:
 

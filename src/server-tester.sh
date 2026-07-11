@@ -3,8 +3,8 @@
 F=0
 NUM_GROUPS=1
 CONFIG="0_local_test_outputs/configs/shard-r1.config"
-POLICY_CONFIG="0_local_test_outputs/configs/policy-tpcc-wh.config"
-POLICY_FUNCTION="tpcc_sql_wh"
+POLICY_CONFIG="0_local_test_outputs/configs/policy-weight1.config"
+POLICY_FUNCTION="basic_id"
 PROTOCOL="sintr"
 STORE=${PROTOCOL}store
 ZIPF=0.0
@@ -15,8 +15,8 @@ STORE_MODE="true"
 SQL_BENCH="true"
 
 # FILE_PATH="/usr/local/etc/tpcc-1-warehouse"
-# FILE_PATH="0_local_test_outputs/rw-sql/rw-sql.json"
-FILE_PATH="store/benchmark/async/sql/tpcc/sql-tpcc-tables-schema.json"
+FILE_PATH="0_local_test_outputs/rw-sql/rw-sql.json"
+# FILE_PATH="store/benchmark/async/sql/tpcc/sql-tpcc-tables-schema.json"
 #FILE_PATH="store/benchmark/async/sql/seats/sql-seats-tables-schema.json"
 #FILE_PATH="store/benchmark/async/sql/auctionmark/sql-auctionmark-tables-schema.json"
 DEBUG_FILES="store/$STORE/server.cc"
@@ -57,13 +57,12 @@ for j in `seq 0 $((NUM_GROUPS-1))`; do
 			--debug_stats --indicus_key_path $KEY_PATH \
 			--value_size -1 \
 			--indicus_sig_batch 1 \
-			--tpcc_num_warehouses 2 \
 			--store_mode=$STORE_MODE --indicus_hash_digest=true --indicus_verify_deps=false \
 			--indicus_parallel_CCC=false \
     		--pequin_query_cache_read_set=false \
 			--sintr_policy_config_path $POLICY_CONFIG --sintr_policy_function_name $POLICY_FUNCTION \
 			--indicus_no_fallback=false --sintr_parallel_endorsement_check=false \
-			--sintr_hash_endorsements=true --sintr_hide_timestamps=false \
-			--optimize_tpool_for_dev_machine &> ./0_local_test_outputs/server$(($i+$j*$N)).out &
+			--sintr_hash_endorsements=true \
+			--sintr_hide_timestamps=false &> ./0_local_test_outputs/server$(($i+$j*$N)).out &
 	done;
 done;
