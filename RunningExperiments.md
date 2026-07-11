@@ -256,6 +256,9 @@ To directly compare against the numbers reported in our paper please refer to th
 
 > **Notice**: When running experiments with low load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
 
+> :warning: Sometimes CloudLab nodes can be finnicky and will hang or fail silently when trying to run an experiment. 
+Take a look at the [troubleshooting](#troubleshooting) section below for help.
+
 <!-- > **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes or experienced miscellaneous changes to debug logging). This should have very little impact on performance, but we acknowledge it nonetheless for completeness. The main claims remain consistent. -->
 
 **Helper Experiment Scripts:** The following helper experiment scripts should help in automating many of the evaluation runs. 
@@ -418,3 +421,23 @@ substantially improve performance without sacrificing safety.
 | Experiment | Result Graph (PDF) | Result CSV |
 |---|---|---|
 | Leveraging policy lifting | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
+
+### Troubleshooting
+Sometimes CloudLab nodes can be finnicky and will hang or fail to initialize properly when trying to run an experiment.
+If this happens (either experiment takes too long to start, or output numbers are drastically too low), you may need to reboot some of the CloudLab nodes. 
+
+For example, if you notice the experiment is not starting for a long time, stop the current run and perform the following steps to identify which node is the problem.
+
+1. In `experiment-scripts/utils/experiment_util.py`, modify the function `copy_binaries_to_nfs()` to wait on uploading to each set of replica and its clients. 
+That is, at the end of the for loop on line 559, add in `concurrent.futures.wait(futures)`.
+2. Rerun an experiment. 
+You will notice that the script copies binaries to the CloudLab nodes and waits after each replica, rather than doing all in parallel. 
+At some point, one of these will hang.
+3. You can then check the hanging replica and its clients individually by attempting to ssh into them.
+Either you will be unable to ssh into it, or the node will not appear to have bash as its shell (we have seen both happen).
+Reboot the node that has the problem from the CloudLab web interface. 
+
+Other times, if a node fails to initialize during an experiment, you may notice the numbers are drastically lower than expected.
+You can then go and check the logs for the run (located in the timestamped output folder).
+You may notice that a particular node does not have a `stats.json` output.
+This node likely experienced an issue and may need to be rebooted.
