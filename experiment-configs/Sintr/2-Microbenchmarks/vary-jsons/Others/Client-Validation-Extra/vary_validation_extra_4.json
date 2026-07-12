@@ -7,7 +7,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 4
     },
@@ -24,7 +24,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 4
     },
@@ -41,7 +41,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight5.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 4
     },

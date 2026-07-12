@@ -3,7 +3,7 @@
     "analysis_name": "sintr-TPCC-U-policy2R",
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 1,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_max_clients_connect": 1
     }
   },
@@ -11,7 +11,7 @@
     "analysis_name": "sintr-TPCC-U-policy3R",
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 2,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_max_clients_connect": 2
     }
   },
@@ -19,7 +19,7 @@
     "analysis_name": "sintr-TPCC-U-policy4R",
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 3,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
       "sintr_max_clients_connect": 3
     }
   }

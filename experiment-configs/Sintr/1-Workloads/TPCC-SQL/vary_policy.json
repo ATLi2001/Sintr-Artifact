@@ -8,7 +8,7 @@
     ],
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 1,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[4, 8, 12, 16, 20, 24]],
@@ -25,7 +25,7 @@
     ],
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 1,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[28, 32, 36]],
@@ -42,7 +42,7 @@
     ],
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 2,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[4, 8, 12, 16, 20, 24]],
@@ -59,7 +59,7 @@
     ],
     "sintr_protocol_settings": {
       "sintr_max_val_threads": 2,
-      "sintr_policy_config_path": "/home/atl63/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_policy_config_path": "/home/atl63/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[28, 32, 36]],

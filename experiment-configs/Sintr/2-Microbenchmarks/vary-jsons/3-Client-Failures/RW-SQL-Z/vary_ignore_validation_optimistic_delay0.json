@@ -8,7 +8,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 0
     },
@@ -26,7 +26,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 1,
       "sintr_failure_type": "ignore-validation-request",
@@ -46,7 +46,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 2,
       "sintr_failure_type": "ignore-validation-request",
@@ -66,7 +66,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 3,
       "sintr_failure_type": "ignore-validation-request",
@@ -86,7 +86,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 4,
       "sintr_failure_type": "ignore-validation-request",
@@ -106,7 +106,7 @@
       }
     ],
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight6.config",
       "sintr_val_client_selector": "ring",
       "sintr_client_validation_heuristic": 5,
       "sintr_failure_type": "ignore-validation-request",

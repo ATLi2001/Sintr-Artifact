@@ -2,7 +2,7 @@
   "policy2R": {
     "analysis_name": "sintr-rw-sync-U-policy2R",
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight2.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[56,66,76,86,96]],
@@ -13,7 +13,7 @@
   "policy3R": {
     "analysis_name": "sintr-rw-sync-U-policy3R",
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight3.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[56,66,76,86,96]],
@@ -24,7 +24,7 @@
     "policy4R": {
     "analysis_name": "sintr-rw-sync-U-policy4R",
     "sintr_protocol_settings": {
-      "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
+      "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-weight4.config",
       "sintr_val_client_selector": "ring"
     },
     "client_total": [[56,66,76,86,96]],
