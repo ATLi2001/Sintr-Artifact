@@ -29,17 +29,21 @@
 #define SQL_NEW_ORDER_H
 
 #include "store/benchmark/async/sql/tpcc/tpcc_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
 
 class SQLNewOrder : public TPCCSQLTransaction {
  public:
-  SQLNewOrder(uint32_t timeout, uint32_t w_id, uint32_t C,
-      uint32_t num_warehouses, std::mt19937 &gen);
+  SQLNewOrder(uint32_t w_id, uint32_t C,
+      uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts);
+  SQLNewOrder() {};
   virtual ~SQLNewOrder();
-  virtual transaction_status_t Execute(SyncClient &client);
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side = false);
+  virtual void SerializeTxnState(std::string &txnState) override;
+  std::vector<TPCC_Table> HeuristicFunction();
 
- private:
+ protected:
   uint32_t w_id;
   uint32_t d_id;
   uint32_t c_id;
@@ -51,17 +55,19 @@ class SQLNewOrder : public TPCCSQLTransaction {
   std::vector<uint8_t> o_ol_quantities;
   uint32_t o_entry_d;
   bool all_local;
+  TPCCLifts tpcc_lifts;
 };
 
 //TODO: Create a shared super class...
 class SQLNewOrderSequential : public TPCCSQLTransaction {
  public:
-  SQLNewOrderSequential(uint32_t timeout, uint32_t w_id, uint32_t C,
+  SQLNewOrderSequential(uint32_t w_id, uint32_t C,
       uint32_t num_warehouses, std::mt19937 &gen);
+  SQLNewOrderSequential() {};
   virtual ~SQLNewOrderSequential();
-  virtual transaction_status_t Execute(SyncClient &client);
+  virtual void SerializeTxnState(std::string &txnState) override;
 
- private:
+protected:
   uint32_t w_id;
   uint32_t d_id;
   uint32_t c_id;

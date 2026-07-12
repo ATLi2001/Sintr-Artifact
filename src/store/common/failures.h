@@ -27,6 +27,10 @@
 #ifndef _FAILURES_H_
 #define _FAILURES_H_
 
+#include <cstdint>
+#include <set>
+
+
 enum InjectFailureType {
   CLIENT_EQUIVOCATE = 0,
   CLIENT_CRASH = 1,
@@ -44,6 +48,36 @@ struct InjectFailure {
   uint32_t timeMs;
   bool enabled;
   uint32_t frequency;
+};
+
+enum SintrFailureType {
+  IGNORE_VALIDATION_REQUEST = 0,
+  REQUEST_EXTRA_VALIDATION = 1
+};
+
+struct SintrFailure {
+  SintrFailure() { }
+  SintrFailure(SintrFailureType type, uint32_t n, uint32_t f, uint64_t client_id) : type(type),
+      enabled(false), client_id(client_id) {
+    if (f == 0) return;
+
+    // evenly space out byzantine clients
+    for (uint32_t i = 0; i < f; i++) {
+      int idx = (i * n) / f;
+      byz_client_ids.insert(idx);
+    }
+
+    if (byz_client_ids.find(client_id) != byz_client_ids.end()) {
+      enabled = true;
+    }
+  }
+  SintrFailure(const SintrFailure &failure) : type(failure.type), enabled(failure.enabled),
+    client_id(failure.client_id), byz_client_ids(failure.byz_client_ids) { }
+
+  SintrFailureType type;
+  bool enabled;
+  uint64_t client_id; // id of this client
+  std::set<int> byz_client_ids; // ids of byzantine clients
 };
 
 #endif /* _FAILURES_H_ */

@@ -25,7 +25,7 @@
  *
  **********************************************************************/
 #include "store/hotstuffstore/client.h"
-
+#include "store/common/util.h"
 #include "store/hotstuffstore/common.h"
 
 namespace hotstuffstore {
@@ -36,14 +36,15 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
       const std::vector<int> &closestReplicas,
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, KeyManager *keyManager,
+      bool validateProofs, bool signClientProposals, KeyManager *keyManager, SintrParameters sintr_params,
+      transport::Configuration *clients_config, ClientSelector *valClientSelector,
       bool order_commit, bool validate_abort,
-      TrueTime timeserver) : config(config), nshards(nShards),
+      TrueTime timeserver, const std::vector<std::string> &keys) : config(config), nshards(nShards),
     ngroups(nGroups), transport(transport), part(part), readMessages(readMessages), readQuorumSize(readQuorumSize),
-    signMessages(signMessages),
-    validateProofs(validateProofs), keyManager(keyManager),
-    order_commit(order_commit), validate_abort(validate_abort),
-    timeServer(timeserver) {
+    signMessages(signMessages), sintr_params(sintr_params), clients_config(clients_config),valClientSelector(valClientSelector),
+    rand(id), validateProofs(validateProofs), signClientProposals(signClientProposals), keyManager(keyManager),
+    order_commit(order_commit), validate_abort(validate_abort), 
+    timeServer(timeserver), keys(keys) {
   // just an invariant for now for everything to work ok
   assert(nGroups == nShards);
 
@@ -65,8 +66,19 @@ Client::Client(const transport::Configuration& config, uint64_t id, int nShards,
   /* Start a client for each shard. */
   for (uint64_t i = 0; i < ngroups; i++) {
     bclient[i] = new ShardClient(config, transport, client_id, i, closestReplicas,
-        signMessages, validateProofs, keyManager, &stats, order_commit, validate_abort);
+        signMessages, validateProofs, signClientProposals, keyManager, &stats, order_commit, validate_abort);
   }
+
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
+  policyCache = policyParseClient.ParseConfigFile(sintr_params.policyConfigPath);
+
+  endorseClient = new EndorsementClient(client_id);
+  // endorseClient->SetDebugCheckFunction(DebugCheck); TODO: make debugcheck function
+
+  c2client = new Client2Client(clients_config, transport, client_id, nshards, ngroups, part, 0,
+    signMessages, validateProofs, sintr_params, keyManager, endorseClient, valClientSelector, rand, keys);
+  c2client->Init();
+  waitingForEndorsementsTimeout = nullptr;
 
   Debug("HotStuff client [%lu] created! %lu %lu", client_id, ngroups,
       bclient.size());
@@ -82,15 +94,26 @@ Client::~Client()
 /* Begins a transaction. All subsequent operations before a commit() or
  * abort() are part of this transaction.
  */
-void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t timeout, bool retry) {
-  transport->Timer(0, [this, bcb, btcb, timeout]() {
+void Client::Begin(begin_callback bcb, begin_timeout_callback btcb, uint32_t timeout, bool retry, const std::string &txnState) {
+  transport->Timer(0, [this, bcb, btcb, timeout, txnState]() {
     Debug("BEGIN tx");
 
     client_seq_num++;
     currentTxn = proto::Transaction();
+    TxnState protoTxnState;
+    PolicyClient *policyClient = nullptr;
+    if (sintr_params.clientEstimatePolicy) {
+      policyClient = new PolicyClient();
+      protoTxnState.ParseFromString(txnState);
+      EstimateTxnPolicy(protoTxnState, policyClient, *policyCache, sintr_params);
+    }
+    perTxnPolicyIds.clear();
     // Optimistically choose a read timestamp for all reads in this transaction
     currentTxn.mutable_timestamp()->set_timestamp(timeServer.GetTime());
     currentTxn.mutable_timestamp()->set_id(client_id);
+    if(!sintr_params.ignorePolicyUpdate) {
+      c2client->SendBeginValidateTxnMessage(client_seq_num, protoTxnState, currentTxn.timestamp().timestamp(), std::move(policyClient));
+    }
     bcb(client_seq_num);
   });
 }
@@ -110,11 +133,18 @@ void Client::Get(const std::string &key, get_callback gcb,
     }
 
     read_callback rcb = [gcb, this](int status, const std::string &key,
-        const std::string &val, const Timestamp &ts) {
+        const std::string &val, const Timestamp &ts,
+        const proto::SignedMessage &signedMsg, const proto::CommitProof &proof) {
       if (status == REPLY_OK) {
         ReadMessage *read = currentTxn.add_readset();
         read->set_key(key);
         ts.serialize(read->mutable_readtime());
+        if (!sintr_params.ignorePolicyUpdate && sintr_params.includeReadsetForTxnPolicy) {
+          handlePolicyUpdateOnKey(key);
+        }
+      }
+      if(!sintr_params.ignorePolicyUpdate) {
+        c2client->SendForwardReadResultMessage(key, val, proof, ts, signedMsg);
       }
       gcb(status, key, val, ts);
     };
@@ -141,6 +171,9 @@ void Client::Put(const std::string &key, const std::string &value,
     WriteMessage *write = currentTxn.add_writeset();
     write->set_key(key);
     write->set_value(value);
+    if (!sintr_params.ignorePolicyUpdate) {
+      handlePolicyUpdateOnKey(key);
+    }
     // Buffering, so no need to wait.
     pcb(REPLY_OK, key, value);
   });
@@ -150,37 +183,26 @@ void Client::Commit(commit_callback ccb, commit_timeout_callback ctcb,
     uint32_t timeout) {
   transport->Timer(0, [this, ccb, ctcb, timeout]() {
     std::string digest = TransactionDigest(currentTxn);
-    if (pendingPrepares.find(digest) == pendingPrepares.end()) {
-      PendingPrepare pendingPrepare;
-      pendingPrepare.ccb = ccb;
-      pendingPrepare.ctcb = ctcb;
-      pendingPrepare.timeout = timeout;
-      // should do a copy
-      pendingPrepare.txn = currentTxn;
-      pendingPrepares[digest] = pendingPrepare;
-
-      if (currentTxn.participating_shards_size() == 0) {
-        fprintf(stderr, "0 participating shards\n");
-      }
-      stats.Increment("called_commit",1);
-      stats.IncrementList("txn_groups", currentTxn.participating_shards_size());
-
-      for (const auto& shard_id : currentTxn.participating_shards()) {
-
-        prepare_timeout_callback pcbt = [](int s) {
-          Debug("prepare timeout called");
-        };
-        if (signMessages) {
-          signed_prepare_callback pcb = std::bind(&Client::HandleSignedPrepareReply,
-            this, digest, shard_id, std::placeholders::_1, std::placeholders::_2);
-
-          bclient[shard_id]->SignedPrepare(currentTxn, pcb, pcbt, timeout);
-        } else {
-          prepare_callback pcb = std::bind(&Client::HandlePrepareReply,
-            this, digest, shard_id, std::placeholders::_1, std::placeholders::_2);
-
-          bclient[shard_id]->Prepare(currentTxn, pcb, pcbt, timeout);
-        }
+    auto current_seq_num = client_seq_num;
+    if(!sintr_params.ignorePolicyUpdate) {
+      endorseClient->SetExpectedTxnDigest(digest, current_seq_num);
+    }
+    if(pendingPrepares.find(digest) == pendingPrepares.end()) {
+      if(sintr_params.ignorePolicyUpdate || endorseClient->IsSatisfied(current_seq_num)) {
+        Debug("Endorsement client is already satisfied for client %d seq num %d", client_id, client_seq_num);
+        getEndorsementsAndCommit(ccb, ctcb, timeout, current_seq_num, digest);
+      } else {
+        waitingForEndorsementsTimeout = new Timeout(transport, 5000, [this, current_seq_num]() {
+          Debug("WAITING FOR ENDORSEMENTS TIMEOUT TRIGGERED for client %d seq num %d", client_id, current_seq_num);
+          if (endorsementsReceived[current_seq_num]) {
+            // check size == 0 for workload finishing edge case
+            endorsementsReceived.erase(current_seq_num);
+            return;
+          }
+          Panic("Waiting for endorsements timed out for client %d seq num %d", client_id, current_seq_num);
+        });
+        waitingForEndorsementsTimeout->Reset();
+        getEndorsementsAndCommit(ccb, ctcb, timeout, current_seq_num, digest);
       }
     } else {
       fprintf(stderr, "already committed\n");
@@ -373,6 +395,7 @@ void Client::Abort(abort_callback acb, abort_timeout_callback atcb,
     uint32_t timeout) {
   transport->Timer(0, [this, acb, atcb, timeout]() {
     AbortTxn(currentTxn);
+    Debug("Aborted current txn %lu", client_seq_num);
     // immediately invoke callback
     acb();
   });
@@ -412,5 +435,104 @@ bool Client::IsParticipant(int g) {
   return false;
 }
 
+
+void Client::getEndorsementsAndCommit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num, const std::string &digest) {
+  if (!sintr_params.ignorePolicyUpdate && !endorseClient->IsSatisfied(seq_num)) {
+    Debug("WAITING FOR ENDORSEMENTS HERE");
+    transport->Timer(0, [this, ccb, ctcb, timeout, seq_num, digest]() {
+      getEndorsementsAndCommit(ccb, ctcb, timeout, seq_num, digest);
+    });
+    return;
+  }
+  if(waitingForEndorsementsTimeout != nullptr) {
+    delete waitingForEndorsementsTimeout;
+    waitingForEndorsementsTimeout = nullptr;
+  }
+  UW_ASSERT(seq_num == client_seq_num);
+  const auto &endorsements = sintr_params.ignorePolicyUpdate ? std::vector<std::shared_ptr<::google::protobuf::Message>>() : endorseClient->GetEndorsements(seq_num);
+  if(!sintr_params.ignorePolicyUpdate) {
+    endorsementsReceived[seq_num] = true;
+    endorseClient->SetEndorsementsUsed(seq_num);
+    currentTxn.set_client_id(client_id);
+  }
+  // add endorsements to the txn
+  if (endorsements.size() > 0) {
+    for (auto &endorsement : endorsements) {
+      proto::SignedMessage *signedEndorsement = dynamic_cast<proto::SignedMessage*>(endorsement.get());
+      if(signedEndorsement && signedEndorsement->packed_msg() != digest) {
+        Warning("Endorsements not the same, %s vs original %s for sequence number %lu", BytesToHex(signedEndorsement->packed_msg(), 16).c_str(), BytesToHex(digest, 16).c_str(), seq_num);
+        for (const auto &read : currentTxn.readset()) {
+          Warning("Original read key: %s", BytesToHex(read.key(), 16).c_str());
+        }
+        for (const auto &write : currentTxn.writeset()) {
+          Warning("Original write key: %s", BytesToHex(write.key(), 16).c_str());
+          Warning("Original write value: %s", BytesToHex(write.value(), 16).c_str());
+        }
+      } else if (!signedEndorsement) {
+        Panic("endorsement pointer is null");
+      }
+      *currentTxn.mutable_endorsements()->add_sig_msgs() = *signedEndorsement;
+    }
+  }
+  if (false) {
+    Debug("Trying to send txn: [%lu:%lu] %s", client_id, seq_num, BytesToHex(digest, 16).c_str());
+    for (const auto &read : currentTxn.readset()) {
+      Debug("Validation read key: %s", read.key().c_str());
+    }
+    for (const auto &write : currentTxn.writeset()) {
+      Debug("Validation write key: %s", write.key().c_str());
+      Debug("Validation write value: %s", write.value().c_str());
+    }
+  }
+
+  Debug("Committing txn with seq num %lu", client_seq_num);
+  PendingPrepare pendingPrepare;
+  pendingPrepare.ccb = ccb;
+  pendingPrepare.ctcb = ctcb;
+  pendingPrepare.timeout = timeout;
+  // should do a copy
+  pendingPrepare.txn = currentTxn;
+  pendingPrepares[digest] = pendingPrepare;
+
+  if (currentTxn.participating_shards_size() == 0) {
+    fprintf(stderr, "0 participating shards\n");
+  }
+  stats.Increment("called_commit",1);
+  stats.IncrementList("txn_groups", currentTxn.participating_shards_size());
+
+  for (const auto& shard_id : currentTxn.participating_shards()) {
+
+    prepare_timeout_callback pcbt = [](int s) {
+      Debug("prepare timeout called");
+    };
+    if (signMessages) {
+      signed_prepare_callback pcb = std::bind(&Client::HandleSignedPrepareReply,
+        this, digest, shard_id, std::placeholders::_1, std::placeholders::_2);
+
+      bclient[shard_id]->SignedPrepare(currentTxn, pcb, pcbt, timeout);
+    } else {
+      prepare_callback pcb = std::bind(&Client::HandlePrepareReply,
+        this, digest, shard_id, std::placeholders::_1, std::placeholders::_2);
+
+      bclient[shard_id]->Prepare(currentTxn, pcb, pcbt, timeout);
+    }
+  }
+}
+
+void Client::handlePolicyUpdateOnKey(const std::string &key) {
+  if(!sintr_params.ignorePolicyUpdate) {
+    // TODO: need to also handle policy change functions
+    std::string policyId = policyIdFunction(key, "");
+    if (perTxnPolicyIds.find(policyId) == perTxnPolicyIds.end()) {
+      perTxnPolicyIds.insert(policyId);
+      const Policy *policy = policyCache->Get(policyId);
+      if(policy == nullptr) {
+        Panic("Policy for policy id %s not found in policy cache", policyId.c_str());
+      }
+      Debug("handle policy update for policy id %s in write", policyId.c_str());
+      c2client->HandlePolicyUpdate(policy);
+    }
+  }
+}
 
 }

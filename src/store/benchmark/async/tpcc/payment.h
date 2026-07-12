@@ -41,7 +41,10 @@ class Payment : public TPCCTransaction {
  public:
   Payment(uint32_t w_id, uint32_t c_c_last, uint32_t c_c_id,
       uint32_t num_warehouses, std::mt19937 &gen);
+  Payment() {};
   virtual ~Payment();
+
+  virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:
   uint32_t w_id;
@@ -54,6 +57,8 @@ class Payment : public TPCCTransaction {
   uint32_t h_date;
   bool c_by_last_name;
   std::string c_last;
+  std::vector<Tables> HeuristicFunction();
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
 };
 
 } // namespace tpcc

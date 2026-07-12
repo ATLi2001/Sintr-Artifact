@@ -1,0 +1,8 @@
+d := $(dir $(lastword $(MAKEFILE_LIST)))
+
+SRCS += $(addprefix $(d), validation_parse_client.cc estimate_policy.cc endorsement_client.cc validation_client_common.cc \
+	client2client_common.cc client_common.cc)
+
+LIB-common-sintring := $(LIB-store-common) $(OBJS-all-bench-clients) $(LIB-policy) \
+	$(o)validation_parse_client.o $(o)estimate_policy.o $(o)endorsement_client.o $(o)validation_client_common.o \
+	$(o)client2client_common.o $(o)client_common.o

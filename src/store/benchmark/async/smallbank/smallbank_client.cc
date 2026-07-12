@@ -40,12 +40,12 @@
 #include "lib/tcptransport.h"
 #include "lib/timeval.h"
 #include "store/benchmark/async/bench_client.h"
-#include "store/benchmark/async/smallbank/amalgamate.h"
-#include "store/benchmark/async/smallbank/bal.h"
-#include "store/benchmark/async/smallbank/deposit.h"
+#include "store/benchmark/async/smallbank/sync/amalgamate.h"
+#include "store/benchmark/async/smallbank/sync/bal.h"
+#include "store/benchmark/async/smallbank/sync/deposit.h"
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
-#include "store/benchmark/async/smallbank/transact.h"
-#include "store/benchmark/async/smallbank/write_check.h"
+#include "store/benchmark/async/smallbank/sync/transact.h"
+#include "store/benchmark/async/smallbank/sync/write_check.h"
 #include "store/common/frontend/sync_client.h"
 #include "store/common/truetime.h"
 #include "store/tapirstore/client.h"
@@ -61,7 +61,7 @@ SmallbankClient::SmallbankClient(
     const uint32_t deposit_checking_ratio, const uint32_t transact_saving_ratio,
     const uint32_t amalgamate_ratio, const uint32_t num_hotspot_keys,
     const uint32_t num_non_hotspot_keys, const double hotspot_probability,
-    const std::string &customer_name_file_path,
+    const std::string &customer_name_file_path, bool bftsmart_exec_txn_server_side,
     const std::string &latencyFilename)
     : SyncTransactionBenchClient(client, transport, id, numRequests,
                                  expDuration, delay, warmupSec, cooldownSec,
@@ -75,7 +75,8 @@ SmallbankClient::SmallbankClient(
       num_hotspot_keys_(num_hotspot_keys),  // first `num_hotpost_keys_` in
                                             // `all_keys_` is the hotspot
       num_non_hotspot_keys_(num_non_hotspot_keys),
-      hotspot_probability_(hotspot_probability) {
+      hotspot_probability_(hotspot_probability),
+      bftsmart_exec_txn_server_side_(bftsmart_exec_txn_server_side) {
   std::string str;
   std::ifstream file(customer_name_file_path);
   while (getline(file, str, ',')) {
@@ -100,31 +101,31 @@ SyncTransaction *SmallbankClient::GetNextTransaction() {
   // https://github.com/microsoft/CCF/blob/master/samples/apps/smallbank/clients/small_bank_client.cpp
   if (ttype < balanceThreshold) {
     last_op_ = "balance";
-    return new Bal(GetCustomerKey(),
-                   timeout_);
+    return new SyncBal(GetCustomerKey(),
+                   timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < depositThreshold) {
     last_op_ = "deposit";
-    return new DepositChecking(
+    return new SyncDepositChecking(
         GetCustomerKey(),
-        GetRand()() % 50 + 1, timeout_);
+        GetRand()() % 50 + 1, timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < transactThreshold) {
     last_op_ = "transact";
-    return new TransactSaving(
+    return new SyncTransactSaving(
         GetCustomerKey(),
-        GetRand()() % 101 - 50, timeout_);
+        GetRand()() % 101 - 50, timeout_, bftsmart_exec_txn_server_side_);
   }
   if (ttype < amalgamateThreshold) {
     last_op_ = "amalgamate";
     std::pair<string, string> keyPair =
         GetCustomerKeyPair();
-    return new Amalgamate(keyPair.first, keyPair.second, timeout_);
+    return new SyncAmalgamate(keyPair.first, keyPair.second, timeout_, bftsmart_exec_txn_server_side_);
   }
   last_op_ = "write_check";
-  return new WriteCheck(
+  return new SyncWriteCheck(
       GetCustomerKey(),
-      GetRand()() % 50, timeout_);
+      GetRand()() % 50, timeout_, bftsmart_exec_txn_server_side_);
 }
 
 std::string SmallbankClient::GetLastOp() const { return last_op_; }

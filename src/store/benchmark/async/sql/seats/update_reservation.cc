@@ -1,5 +1,7 @@
 #include "store/benchmark/async/sql/seats/update_reservation.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
+#include "store/benchmark/async/sql/seats/seats_common.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 
 #include <fmt/core.h>
 
@@ -29,9 +31,22 @@ SQLUpdateReservation::SQLUpdateReservation(uint32_t timeout, std::mt19937 &gen, 
 
     }
 
+SQLUpdateReservation::SQLUpdateReservation(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::UpdateReservation &msg)
+    : SEATSSQLTransaction(timeout),
+    gen_(&gen),
+    profile(profile),
+    r_id(msg.r_id()),
+    c_id(msg.c_id()),
+    flight(ProtoToCachedFlight(msg.flight())),
+    f_id(msg.f_id()),
+    curr_seat(msg.curr_seat()),
+    seatnum(msg.seatnum()),
+    attr_idx(msg.attr_idx()),
+    attr_val(msg.attr_val()) {}
+
 SQLUpdateReservation::~SQLUpdateReservation() {}
 
-transaction_status_t SQLUpdateReservation::Execute(SyncClient &client) {
+transaction_status_t SQLUpdateReservation::BaseExecute(SyncClient &client, bool serialize) {
 
     if(c_id == NULL_ID) return ABORTED_USER;
 
@@ -41,7 +56,11 @@ transaction_status_t SQLUpdateReservation::Execute(SyncClient &client) {
     std::vector<std::unique_ptr<const query_result::QueryResult>> results; 
     std::string query;
 
-    client.Begin(timeout);
+    std::string txnState;
+    if(serialize) {
+        SQLUpdateReservation::SerializeTxnState(txnState);
+    }
+    client.Begin(timeout, txnState);
 
     // (1) Check if Seat is taken (CheckSeat)
     query = fmt::format("SELECT r_id FROM {} WHERE r_f_id = {} AND r_seat = {}", RESERVATION_TABLE, f_id, seatnum);
@@ -79,6 +98,9 @@ transaction_status_t SQLUpdateReservation::Execute(SyncClient &client) {
     auto result = client.Commit(timeout);
     if(result != transaction_status_t::COMMITTED) return result;
 
+    // skip updating profile if validating client
+    if(!serialize) return result;
+
      //////////////// UPDATE PROFILE /////////////////////
 
     auto &seats = profile.getSeatsBitSet(f_id);
@@ -96,5 +118,31 @@ transaction_status_t SQLUpdateReservation::Execute(SyncClient &client) {
 
     return result;
 }
+
+void SQLUpdateReservation::SerializeTxnState(std::string &txnState) {
+    TxnState currTxnState = TxnState();
+    std::string txn_name;
+    txn_name.append(BENCHMARK_NAME);
+    txn_name.push_back('_');
+    txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_UPDATE_RESERVATION));
+    currTxnState.set_txn_name(txn_name);
+    validation::proto::UpdateReservation curr_txn = validation::proto::UpdateReservation();
+    validation::proto::CachedFlightMessage flightMsg = CachedFlightToProto(flight);
+    *curr_txn.mutable_flight() = std::move(flightMsg);
+    curr_txn.set_r_id(r_id);
+    curr_txn.set_c_id(c_id);
+    curr_txn.set_f_id(f_id);
+    curr_txn.set_curr_seat(curr_seat);
+    curr_txn.set_seatnum(seatnum);
+    curr_txn.set_attr_idx(attr_idx);
+    curr_txn.set_attr_val(attr_val);
+
+    std::string txn_data;
+    curr_txn.SerializeToString(&txn_data);
+    currTxnState.set_txn_data(txn_data);
+
+    currTxnState.SerializeToString(&txnState);
+}
+
 }
 

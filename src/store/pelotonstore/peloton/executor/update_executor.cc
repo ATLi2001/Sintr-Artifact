@@ -67,6 +67,20 @@ bool UpdateExecutor::PerformUpdatePrimaryKey(
 
   auto current_txn = executor_context_->GetTransaction();
 
+  ///////////////////// sintr specific ///////////////////////////////////
+  std::shared_ptr<index::Index> primary_key_index = nullptr;
+  int index_count = target_table_->GetIndexCount();
+  for (int index_itr = index_count - 1; index_itr >= 0; --index_itr) {
+    auto index = target_table_->GetIndex(index_itr);
+    if (index == nullptr) continue;
+    if (index->GetIndexType() == IndexConstraintType::PRIMARY_KEY) {
+      primary_key_index = index;
+      break;
+    }
+  }
+  auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
+  ////////////////////////////////////////////////////////////////////////
+
   ///////////////////////////////////////
   // Delete tuple/version chain
   ///////////////////////////////////////
@@ -103,6 +117,30 @@ bool UpdateExecutor::PerformUpdatePrimaryKey(
   ContainerTuple<storage::TileGroup> old_tuple(tile_group, physical_tuple_id);
 
   project_info_->Evaluate(&new_tuple, &old_tuple, nullptr, executor_context_);
+
+  ///////////////////// sintr specific ///////////////////////////////////
+  if (current_txn->GetHasReadSetMgr()) {
+    // for sintr need the primary key cols
+    std::vector<std::string> primary_key_cols_old;
+    std::vector<std::string> primary_key_cols_new;
+    auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+    for (auto col : primary_index_columns_) {
+      Debug("Primary key column: %d", col);
+      auto val_old = old_tuple.GetValue(col);
+      primary_key_cols_old.push_back(val_old.ToString());
+      auto val_new = new_tuple.GetValue(col);
+      primary_key_cols_new.push_back(val_new.ToString());
+    }
+
+    std::string &&encoded_old = EncodeTableRow(target_table_->GetName(), primary_key_cols_old);
+    Debug("encoded write set key is: %s.", encoded_old.c_str());
+    query_read_set_mgr->AddToWriteSet(std::move(encoded_old));
+
+    std::string &&encoded_new = EncodeTableRow(target_table_->GetName(), primary_key_cols_new);
+    Debug("encoded write set key is: %s.", encoded_new.c_str());
+    query_read_set_mgr->AddToWriteSet(std::move(encoded_new));
+  }
+  ////////////////////////////////////////////////////////////////////////
 
   // insert tuple into the table.
   ItemPointer *index_entry_ptr = nullptr;
@@ -166,6 +204,20 @@ bool UpdateExecutor::DExecute() {
       concurrency::TransactionManagerFactory::GetInstance();
 
   auto current_txn = executor_context_->GetTransaction();
+
+  ///////////////////// sintr specific ///////////////////////////////////
+  std::shared_ptr<index::Index> primary_key_index = nullptr;
+  int index_count = target_table_->GetIndexCount();
+  for (int index_itr = index_count - 1; index_itr >= 0; --index_itr) {
+    auto index = target_table_->GetIndex(index_itr);
+    if (index == nullptr) continue;
+    if (index->GetIndexType() == IndexConstraintType::PRIMARY_KEY) {
+      primary_key_index = index;
+      break;
+    }
+  }
+  auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
+  ////////////////////////////////////////////////////////////////////////
 
   auto executor_pool = executor_context_->GetPool();
   auto target_table_schema = target_table_->GetSchema();
@@ -269,6 +321,23 @@ bool UpdateExecutor::DExecute() {
         project_info_->Evaluate(&old_tuple, &old_tuple, nullptr,
                                 executor_context_);
 
+        ///////////////////// sintr specific ///////////////////////////////////
+        if (current_txn->GetHasReadSetMgr()) {
+          // for sintr need the primary key cols
+          std::vector<std::string> primary_key_cols;
+          auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+          for (auto col : primary_index_columns_) {
+            Debug("Primary key column: %d", col);
+            auto val = old_tuple.GetValue(col);
+            primary_key_cols.push_back(val.ToString());
+          }
+
+          std::string &&encoded = EncodeTableRow(target_table_->GetName(), primary_key_cols);
+          Debug("encoded write set key is: %s.", encoded.c_str());
+          query_read_set_mgr->AddToWriteSet(std::move(encoded));
+        }
+        ////////////////////////////////////////////////////////////////////////
+
         transaction_manager.PerformUpdate(current_txn, old_location);
         // we do not need to add any item pointer to statement-level write set
         // here, because we do not generate any new version
@@ -362,6 +431,22 @@ bool UpdateExecutor::DExecute() {
                                                      ResultType::FAILURE);
             return false;
           }
+
+          ///////////////////// sintr specific ///////////////////////////////////
+          if (current_txn->GetHasReadSetMgr()) {
+            std::vector<std::string> primary_key_cols;
+            auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+            for (auto col : primary_index_columns_) {
+              Debug("Primary key column: %d", col);
+              auto val = new_tuple.GetValue(col);
+              primary_key_cols.push_back(val.ToString());
+            }
+
+            std::string &&encoded = EncodeTableRow(target_table_->GetName(), primary_key_cols);
+            Debug("encoded write set key is: %s.", encoded.c_str());
+            query_read_set_mgr->AddToWriteSet(std::move(encoded));
+          }
+          ////////////////////////////////////////////////////////////////////////
 
           LOG_TRACE("perform update old location: %u, %u", old_location.block,
                     old_location.offset);

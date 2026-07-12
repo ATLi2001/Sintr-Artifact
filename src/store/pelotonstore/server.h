@@ -45,9 +45,18 @@
 #include "lib/transport.h"
 #include "store/common/query_result/query_result_proto_builder.h"
 #include "tbb/concurrent_hash_map.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/backend/versionstore_generic_safe.h"
+#include "store/common/sintring/params.h"
+#include "store/common/timestamp.h"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+
+class SyncClient;
 
 namespace pelotonstore {
 
@@ -59,11 +68,18 @@ typedef struct ColRegistry {
 } ColRegistry;
 typedef std::map<std::string, ColRegistry> TableRegistry_t;
 
+// Forward-declared to avoid circular includes (serverclient.h includes server.h)
+class ServerClient;
+
 class Server : public App, public ::Server {
 public:
   Server(const transport::Configuration& config, KeyManager *keyManager, std::string &table_registry_path, 
     int groupIdx, int idx, int numShards, int numGroups, bool signMessages, bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp,
-    bool localConfig, int SMR_mode, TrueTime timeServer = TrueTime(0, 0));
+    bool localConfig, int SMR_mode, SintrParameters sintr_params,
+    bool execTxnServerSide = false,
+    uint32_t simDelay = 0,
+    bool fake_SMR = true,
+    TrueTime timeServer = TrueTime(0, 0));
   ~Server();
 
   void RegisterTables(std::string &table_registry);
@@ -101,6 +117,27 @@ public:
   inline Stats &GetStats() {return stats;};
 
   inline Stats* mutableStats() {return &stats;};
+
+  // Public wrappers for ServerClient to call directly (bypasses network).
+  // Begin a transaction for the given client_id / tx_id.
+  void DirectBegin(uint64_t client_id, uint64_t tx_id);
+
+  // Execute a SQL statement within the client's current transaction.
+  // Returns the serialised result string and sets status to REPLY_OK or REPLY_FAIL.
+  std::string DirectExecSQL(const std::string &query, uint64_t client_id,
+      uint64_t tx_id, int &status);
+
+  // Commit the client's current transaction. Returns REPLY_OK or REPLY_FAIL.
+  int DirectCommit(uint64_t client_id, uint64_t tx_id);
+
+  // Abort the client's current transaction.
+  void DirectAbort(uint64_t client_id, uint64_t tx_id);
+
+  // Execute a TxnExecRequest by running the embedded transaction server-side
+  // via ServerClient + SyncClient + ValidationParseClient.
+  // thread_id selects which per-thread ServerClient/SyncClient pair to use.
+  std::vector<::google::protobuf::Message*> ExecuteTxnServerSide(
+      const proto::TxnExecRequest &req, uint64_t thread_id);
 
 private:  
   struct ClientState {
@@ -158,10 +195,12 @@ private:
   int numGroups;
   bool signMessages;
   bool validateProofs;
+  bool fake_SMR = true;
   uint64_t timeDelta;
   Partitioner *part;
   bool localConfig;
   TrueTime timeServer;
+  uint32_t simDelay = 0;
 
   proto::SQL_RPC sql_rpc_template;
   proto::TryCommit try_commit_template;
@@ -169,6 +208,14 @@ private:
 
   std::shared_mutex atomicMutex;
   pelotonstore::TableStore *table_store;
+  VersionedKVStoreGeneric<std::string, Timestamp, const Policy*> policyStore;
+  // not sure if VersionedKvStoreGeneric will actually free the policy pointers, so store separately and free on destruction
+  std::vector<std::unique_ptr<Policy>> policiesToFree;
+  // policy_function policyFunction;
+  policy_id_function policyIdFunction;
+
+  PolicyParseClient policyParseClient;
+  SintrParameters sintr_params;
 
      /////////////////// HELPER FUNCTIONS ///////////////////
   ::google::protobuf::Message* ParseMsg(const string& type, const string& msg, uint64_t &req_id, uint64_t &client_id, uint64_t &tx_id);
@@ -180,7 +227,7 @@ private:
   ::google::protobuf::Message* HandleUserAbort(clientConnectionMap::accessor &c, std::shared_ptr<tao::pq::transaction> tx);*/
 
   ::google::protobuf::Message* HandleSQL_RPC(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id, const std::string &query);
-  ::google::protobuf::Message* HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id);
+  ::google::protobuf::Message* HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id, const proto::TryCommit &try_commit);
   ::google::protobuf::Message* HandleUserAbort(ClientStateMap::accessor &c, uint64_t client_id, uint64_t tx_id);
   
   std::string GenerateLoadStatement(const std::string &table_name, const std::vector<std::vector<std::string>> &row_segment, int segment_no);  
@@ -191,6 +238,19 @@ private:
     return static_cast<int>((*part)(key, numShards, groupIdx, txnGroups) % numGroups) == groupIdx;
   }
 
+  // policy stuff (for sintr)
+  void LoadPolicyStore(const std::string &policyStorePath);
+  bool EndorsementCheck(const std::string &txnDigest, const proto::TryCommit *try_commit);
+  void ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyClient);
+  bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, uint64_t client_id, const std::string &txnDigest);
+  bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
+
+  // Server-side transaction execution via per-thread ServerClient + SyncClient pairs.
+  // One pair per indexed thread so that multiple transactions can execute in parallel.
+  bool execTxnServerSide;
+  std::vector<ServerClient*> serverClientsForExec;
+  std::vector<SyncClient*>   syncClientsForExec;
+  void InitExecClients();
 };
 
 }

@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+message WeightPolicyMessage {
+  required uint64 weight = 1;
+}
+
+message ANDPolicyMessage {
+  repeated uint64 client_ids = 1;
+}
+
+message ORPolicyMessage {
+  repeated uint64 client_ids = 1;
+}

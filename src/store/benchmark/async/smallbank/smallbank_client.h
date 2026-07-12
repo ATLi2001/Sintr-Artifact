@@ -66,6 +66,7 @@ class SmallbankClient : public SyncTransactionBenchClient {
                   const uint32_t num_non_hotspot_keys,
                   const double hotspot_probability,
                   const std::string &customer_name_file_path,
+                  bool bftsmart_exec_txn_server_side = false,
                   const std::string &latencyFilename = "");
   virtual ~SmallbankClient();
   virtual SyncTransaction *GetNextTransaction();
@@ -86,6 +87,7 @@ class SmallbankClient : public SyncTransactionBenchClient {
   double hotspot_probability_;
   std::vector<std::string> all_keys_;
   std::string last_op_;
+  bool bftsmart_exec_txn_server_side_;
 };
 
 }  // namespace smallbank

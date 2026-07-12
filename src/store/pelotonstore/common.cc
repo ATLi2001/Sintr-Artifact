@@ -39,10 +39,41 @@ namespace pelotonstore {
 
 using namespace CryptoPP;
 
+std::string SQLGenId(const std::string &statement, uint64_t client_id, uint64_t client_seq_num, bool hashDigest) {
+  if (hashDigest) {
+    std::string toHash = statement + std::to_string(client_id) + std::to_string(client_seq_num);
+    return crypto::Hash(toHash);
+  }
+  else {
+    return statement;
+  }
+}
+
+std::string TransactionDigest(const TransactionMessage &txn_msg) {
+  CryptoPP::SHA256 hash;
+  std::string digest;
+
+  // hash read set
+  for (const auto &read : txn_msg.readset()) {
+    hash.Update((CryptoPP::byte*) &read.key()[0], read.key().length());
+  }
+
+  // hash write set
+  for (const auto &write : txn_msg.writeset()) {
+    hash.Update((CryptoPP::byte*) &write.key()[0], write.key().length());
+    hash.Update((CryptoPP::byte*) &write.value()[0], write.value().length());
+  }
+
+  digest.resize(hash.DigestSize());
+  hash.Final((CryptoPP::byte*) &digest[0]);
+
+  return digest;
+}
+
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg) {
+    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client) {
   proto::PackedMessage packedMessage;
-  if (!__PreValidateSignedMessage(signedMessage, keyManager, packedMessage)) {
+  if (!__PreValidateSignedMessage(signedMessage, keyManager, packedMessage, client)) {
     return false;
   }
 
@@ -55,9 +86,9 @@ bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
 }
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, std::string &data, std::string &type) {
+    KeyManager *keyManager, std::string &data, std::string &type, bool client) {
   proto::PackedMessage packedMessage;
-  if (!__PreValidateSignedMessage(signedMessage, keyManager, packedMessage)) {
+  if (!__PreValidateSignedMessage(signedMessage, keyManager, packedMessage, client)) {
     return false;
   }
 
@@ -67,8 +98,8 @@ bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
 }
 
 bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, proto::PackedMessage &packedMessage) {
-  if (!CheckSignature(signedMessage, keyManager)) {
+    KeyManager *keyManager, proto::PackedMessage &packedMessage, bool client) {
+  if (!CheckSignature(signedMessage, keyManager, client)) {
     return false;
   }
 
@@ -76,13 +107,29 @@ bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
 }
 
 bool CheckSignature(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager) {
-    crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(
-        signedMessage.replica_id());
+    KeyManager *keyManager, bool client) {
+    
+    uint64_t replica_id;
+    if (client) {
+      replica_id = keyManager->GetClientKeyId(signedMessage.replica_id());
+    } else {
+      replica_id = signedMessage.replica_id();
+    }
+
+    crypto::PubKey* replicaPublicKey = keyManager->GetPublicKey(replica_id);
     // verify that the replica actually sent this reply and that we are expecting
     // this reply
     return crypto::IsMessageValid(replicaPublicKey, signedMessage.packed_msg(),
           &signedMessage);
+}
+
+void SignBytes(const std::string &data, 
+    crypto::PrivKey* privateKey, uint64_t processId, 
+    proto::SignedMessage &signedMessage) {
+  signedMessage.set_replica_id(processId);
+  signedMessage.set_packed_msg(data);
+  *signedMessage.mutable_signature() = crypto::Sign(privateKey,
+      signedMessage.packed_msg());
 }
 
 void SignMessage(const ::google::protobuf::Message &msg,

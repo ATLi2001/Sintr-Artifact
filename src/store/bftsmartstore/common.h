@@ -24,8 +24,8 @@
  * SOFTWARE.
  *
  **********************************************************************/
-#ifndef HOTSTUFF_COMMON_H
-#define HOTSTUFF_COMMON_H
+#ifndef BFTSMART_COMMON_H
+#define BFTSMART_COMMON_H
 
 #include "lib/configuration.h"
 #include "lib/keymanager.h"
@@ -72,16 +72,16 @@ namespace bftsmartstore {
   };
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg);
+    KeyManager *keyManager, ::google::protobuf::Message &plaintextMsg, bool client=false);
 
 bool ValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, std::string &data, std::string &type);
+    KeyManager *keyManager, std::string &data, std::string &type, bool client=false);
 
 bool __PreValidateSignedMessage(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager, proto::PackedMessage &packedMessage);
+    KeyManager *keyManager, proto::PackedMessage &packedMessage, bool client=false);
 
 bool CheckSignature(const proto::SignedMessage &signedMessage,
-    KeyManager *keyManager);
+    KeyManager *keyManager, bool client = false);
 
 void SignMessage(const ::google::protobuf::Message &msg,
     crypto::PrivKey* privateKey, uint64_t processId,
@@ -110,6 +110,10 @@ bool verifyGDecision_Abort_parallel(const proto::GroupedDecision& gdecision,
 
 std::string BytesToHex(const std::string &bytes, size_t maxLength);
 
+void SignBytes(const std::string &data, 
+  crypto::PrivKey* privateKey, uint64_t processId, 
+  proto::SignedMessage &signedMessage);
+
 } // namespace bftsmartstore
 
-#endif /* HOTSTUFF_COMMON_H */
+#endif /* BFTSMART_COMMON_H */

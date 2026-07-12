@@ -219,7 +219,9 @@ include store/pelotonstore/Rules.mk
 include store/pequinstore/query-engine/Rules.mk
 include store/pequinstore/Rules.mk
 
-include store/Rules.mk
+include store/sintrstore/query-engine/Rules.mk
+include store/sintrstore/Rules.mk
+
 include store/benchmark/Rules.mk
 include store/benchmark/async/common/Rules.mk
 include store/benchmark/async/rw/Rules.mk
@@ -228,9 +230,11 @@ include store/benchmark/async/smallbank/Rules.mk
 include store/benchmark/async/tpcc/Rules.mk
 include store/benchmark/async/toy/Rules.mk
 include store/benchmark/async/rw-sql/Rules.mk
+include store/benchmark/async/rw-sync/Rules.mk
 include store/benchmark/async/sql/tpcc/Rules.mk
 include store/benchmark/async/sql/seats/Rules.mk
 include store/benchmark/async/sql/tpcch/Rules.mk
+include store/benchmark/async/sql/tpcc-lifting/Rules.mk
 include store/benchmark/async/sql/auctionmark/utils/Rules.mk
 include store/benchmark/async/sql/auctionmark/transactions/Rules.mk
 include store/benchmark/async/sql/auctionmark/Rules.mk
@@ -240,6 +244,7 @@ include lockserver/Rules.mk
 include timeserver/Rules.mk
 #include libtapir/Rules.mk # removed because .so file is incompatible with static linking for compression libs. 
 include create_keys/Rules.mk
+include store/Rules.mk
 #include simple_app/Rules.mk 
 ##################################################################
 # General rules

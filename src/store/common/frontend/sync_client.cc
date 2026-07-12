@@ -34,7 +34,7 @@ SyncClient::SyncClient(Client *client) : client(client) {
 SyncClient::~SyncClient() {
 }
 
-void SyncClient::Begin(uint32_t timeout) {
+void SyncClient::Begin(uint32_t timeout, const std::string &txnState) {
 
   try{
     std::vector<std::unique_ptr<const query_result::QueryResult>> throw_away_values;
@@ -52,7 +52,7 @@ void SyncClient::Begin(uint32_t timeout) {
 
   Promise promise(timeout);
   client->Begin([promisePtr = &promise](uint64_t id){ promisePtr->Reply(0); },
-      [](){}, timeout);
+      [](){}, timeout, false, txnState);
   promise.GetReply();
 }
 
@@ -272,6 +272,18 @@ void SyncClient::asyncWait() {
     Wait(throw_away_values); //wait for any possibly outstanding requests to return before throwing exception.
     throw std::exception(); //Propagate Abort exception
   }
+}
+
+const PolicyCache& SyncClient::GetPolicyCache() const {
+  return client->GetPolicyCache();
+}
+
+void SyncClient::LiftTransaction(std::vector<std::string> &lift_keys) {
+  client->LiftTransaction(lift_keys);
+}
+
+const std::map<std::string, std::string> &SyncClient::GetReadset() {
+  return client->GetReadset();
 }
 
 ///////// Callbacks

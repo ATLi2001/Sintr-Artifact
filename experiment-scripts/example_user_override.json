@@ -1,0 +1,13 @@
+{
+  "project_name": "pequin-pg0",
+  "experiment_name": "sintr",
+  "emulab_user": "dhl001",
+  "base_local_exp_directory": "home/dhl93/Pequin-Artifact/output",
+  "base_remote_bin_directory_nfs": "users/dhl001/sintr",
+  "src_directory": "/home/dhl93/Pequin-Artifact/src",
+  "benchmark_schema_file_path": "/users/dhl001/benchmark_data/sql-tpcc-tables-schema.json",
+  "bftsmart_codebase_dir": "/users/dhl001",
+  "sintr_protocol_settings": {
+    "sintr_policy_config_path": "/home/dhl93/Pequin-Artifact/src/0_local_test_outputs/configs"
+  }
+}

@@ -39,7 +39,10 @@ class OrderStatus : public TPCCTransaction {
  public:
   OrderStatus(uint32_t w_id, uint32_t c_c_last, uint32_t c_c_id,
       std::mt19937 &gen);
+  OrderStatus() {};
   virtual ~OrderStatus();
+
+  virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:
   uint32_t w_id;
@@ -50,6 +53,8 @@ class OrderStatus : public TPCCTransaction {
   uint32_t o_id;
   bool c_by_last_name;
   std::string c_last;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 } // namespace tpcc

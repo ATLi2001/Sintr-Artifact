@@ -2,6 +2,7 @@
 #define SEATS_SQL_SEATS_PROFILE_H 
 #include "store/benchmark/async/sql/seats/seats_constants.h"
 #include "store/benchmark/async/sql/seats/seats_util.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include <cstdint>
 #include <vector>
 #include <random>
@@ -55,6 +56,7 @@ class SeatsProfile {
         num_customers = seats_sql::NUM_CUSTOMERS * scale_factor;
         max_future_day = seats_sql::TODAY + seats_sql::MS_IN_DAY * seats_sql::FLIGHTS_DAYS_FUTURES * scale_factor; 
     }
+    SeatsProfile(std::mt19937 &gen): seats_id(0), num_res_made(0), scale_factor(0), gen(gen){}
    ~SeatsProfile(){}
 
     void LoadProfile(const std::string &profile_file_path);
@@ -184,6 +186,8 @@ class SeatsProfile {
     // std::ifstream ft_hist (FLIGHTS_TIME_HISTO_FN);
     // histogram flight_time_hist = createFPTHistogram(ft_hist);
 
+  validation::proto::CachedFlightMessage CachedFlightToProto(const CachedFlight &flight);
 
+  CachedFlight ProtoToCachedFlight(const validation::proto::CachedFlightMessage &msg);
 }
 #endif

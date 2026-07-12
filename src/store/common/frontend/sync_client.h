@@ -53,7 +53,7 @@ class SyncClient {
   virtual ~SyncClient();
 
   // Begin a transaction.
-  virtual void Begin(uint32_t timeout);
+  virtual void Begin(uint32_t timeout, const std::string &txnState = std::string());
 
   // Get the value corresponding to key.
   virtual void Get(const std::string &key, std::string &value,
@@ -97,6 +97,15 @@ class SyncClient {
   // Wait for all outstanding Queries/Writes to finish in FIFO order -- but do not consume any results (Use this for async Updates/Deletes that have no future dependents)
   void asyncWait();
 
+  const PolicyCache& GetPolicyCache() const;
+
+  void LiftTransaction(std::vector<std::string> &lift_keys);
+  const std::map<std::string, std::string> &GetReadset();
+
+  // Expose the underlying raw Client* for callers that need to issue async
+  // (callback-based) Begin/Commit calls directly (e.g. open-loop bench client).
+  Client *GetRawClient() const { return client; }
+  
  private:
   void GetCallback(Promise *promise, int status, const std::string &key, const std::string &value,
       Timestamp ts);

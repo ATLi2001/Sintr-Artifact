@@ -36,12 +36,15 @@ static bool use_earliest_new_order_table = true; //Use this if backend executor 
 
 class SQLDelivery : public TPCCSQLTransaction {
  public:
-  SQLDelivery(uint32_t timeout, uint32_t w_id, uint32_t d_id,
+  SQLDelivery(uint32_t w_id, uint32_t d_id,
       std::mt19937 &gen);
+  SQLDelivery() {};
   virtual ~SQLDelivery();
-  virtual transaction_status_t Execute(SyncClient &client);
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side = false);
+  virtual void SerializeTxnState(std::string &txnState) override;
+  std::vector<TPCC_Table> HeuristicFunction();
 
- private:
+protected:
   uint32_t w_id;
   uint32_t d_id;
   uint32_t o_carrier_id;
@@ -50,12 +53,13 @@ class SQLDelivery : public TPCCSQLTransaction {
 
 class SQLDeliverySequential : public TPCCSQLTransaction {
  public:
-  SQLDeliverySequential(uint32_t timeout, uint32_t w_id, uint32_t d_id,
+  SQLDeliverySequential(uint32_t w_id, uint32_t d_id,
       std::mt19937 &gen);
+  SQLDeliverySequential() {};
   virtual ~SQLDeliverySequential();
-  virtual transaction_status_t Execute(SyncClient &client);
+  virtual void SerializeTxnState(std::string &txnState) override;
 
- private:
+ protected:
   uint32_t w_id;
   uint32_t d_id;
   uint32_t o_carrier_id;

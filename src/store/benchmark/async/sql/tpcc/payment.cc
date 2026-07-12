@@ -29,13 +29,16 @@
 #include <sstream>
 #include <fmt/core.h>
 
+#include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_utils.h"
   
 namespace tpcc_sql {
 
-SQLPayment::SQLPayment(uint32_t timeout, uint32_t w_id, uint32_t c_c_last,
-    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen) :
-    TPCCSQLTransaction(timeout), w_id(w_id), gen(gen) {
+SQLPayment::SQLPayment(uint32_t w_id, uint32_t c_c_last,
+    uint32_t c_c_id, uint32_t num_warehouses, std::mt19937 &gen,
+    const TPCCLifts &tpcc_lifts) : w_id(w_id), gen(gen), tpcc_lifts(tpcc_lifts) {
   d_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen); 
   d_w_id = w_id;
   int x = std::uniform_int_distribution<int>(1, 100)(gen);
@@ -65,14 +68,14 @@ SQLPayment::SQLPayment(uint32_t timeout, uint32_t w_id, uint32_t c_c_last,
   }
   h_amount = std::uniform_int_distribution<uint32_t>(100, 500000)(gen);
   h_date = std::time(0);
-
+  // TODO: random row ID is set per transaction not per attempt of transaction
   std::cerr << "PAYMENT (parallel)" << std::endl;
 }
 
 SQLPayment::~SQLPayment() {
 }
 
-transaction_status_t SQLPayment::Execute(SyncClient &client) {
+transaction_status_t SQLPayment::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -84,7 +87,16 @@ transaction_status_t SQLPayment::Execute(SyncClient &client) {
   Debug("Warehouse: %u", w_id);
   //std::cerr << "warehouse: " << w_id << std::endl;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if (serialize) {
+    SQLPayment::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Retrieve WAREHOUSE row. Update year to date balance. 
   statement = fmt::format("SELECT * FROM {} WHERE w_id = {}", WAREHOUSE_TABLE, w_id);
@@ -192,7 +204,6 @@ transaction_status_t SQLPayment::Execute(SyncClient &client) {
    // (5) Create History entry.
   // statement = fmt::format("INSERT INTO {} (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data) "  
   //           "VALUES ({}, {}, {}, {}, {}, {}, {}, '{}')", HISTORY_TABLE, c_id, c_d_id, c_w_id, d_id, w_id, h_date, h_amount, w_row.get_name() + "    " + d_row.get_name());
-  uint32_t random_row_id = std::uniform_int_distribution<uint32_t>(1, UINT32_MAX)(gen);
   statement = fmt::format("INSERT INTO {} (row_id, h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data) " 
             "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, '{}')", HISTORY_TABLE, random_row_id, c_id, c_d_id, c_w_id, d_id, w_id, h_date, h_amount, w_row.get_name() + "    " + d_row.get_name());
   //Notice("History insert: %s", statement.c_str());
@@ -210,10 +221,52 @@ transaction_status_t SQLPayment::Execute(SyncClient &client) {
   //Writes to history are blind, it technically doesn't matter if they are duplicate. But should ideally make it unique (or no primary key at all)
   if(!results[3]->has_rows_affected()){Warning("History row not unique. Might want to investigate");} 
   //UW_ASSERT(results[3]->has_rows_affected());
-  
+
+  // determine if we should lift this transaction
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    Debug("LIFTING PAYMENT TRANSACTION for w_id=%u, c_w_id=%u, h_amount=%u", w_id, c_w_id, h_amount);
+    std::vector<std::string> lifts = tpcc_lifts.PaymentLiftFunction(client.GetPolicyCache(), w_id, c_w_id, h_amount, client.GetReadset());
+    client.LiftTransaction(lifts);
+  }
 
   Debug("COMMIT");
   return client.Commit(timeout);
+}
+
+void SQLPayment::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_PAYMENT));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Payment curr_txn = validation::proto::Payment();
+  curr_txn.set_w_id(w_id);
+  curr_txn.set_d_id(d_id);
+  curr_txn.set_d_w_id(d_w_id);
+  curr_txn.set_c_w_id(c_w_id);
+  curr_txn.set_c_d_id(c_d_id);
+  curr_txn.set_c_id(c_id);
+  curr_txn.set_h_amount(h_amount);
+  curr_txn.set_h_date(h_date);
+  curr_txn.set_sequential(false);
+  curr_txn.set_random_row_id(random_row_id);
+  curr_txn.set_c_by_last_name(c_by_last_name);
+  curr_txn.set_c_last(c_last);
+  std::vector<TPCC_Table> est_tables = SQLPayment::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
+}
+
+std::vector<TPCC_Table> SQLPayment::HeuristicFunction() {
+  return {WAREHOUSE, DISTRICT, CUSTOMER, HISTORY};
 }
 
 } // namespace tpcc_sql

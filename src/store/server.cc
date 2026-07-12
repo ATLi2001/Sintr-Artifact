@@ -48,10 +48,13 @@
 
 #include "store/common/partitioner.h"
 #include "store/common/failures.h"
+#include "store/common/sintring/params.h"
 #include "store/server.h"
 #include "store/strongstore/server.h"
 #include "store/tapirstore/server.h"
 #include "store/weakstore/server.h"
+// Sintr
+#include "store/sintrstore/server.h"
 //Pesto
 #include "store/pequinstore/server.h"
 //Basil
@@ -100,6 +103,7 @@ enum protocol_t {
 	PROTO_TAPIR,
 	PROTO_WEAK,
 	PROTO_STRONG,
+  PROTO_SINTR,
   PROTO_PEQUIN,
   PROTO_INDICUS,
 	PROTO_PBFT,
@@ -160,6 +164,7 @@ const std::string protocol_args[] = {
   "tapir",
   "weak",
   "strong",
+  "sintr",
   "pequin",
   "indicus",
   "pbft",
@@ -176,6 +181,7 @@ const protocol_t protos[] {
   PROTO_TAPIR,
   PROTO_WEAK,
   PROTO_STRONG,
+  PROTO_SINTR,
   PROTO_PEQUIN,
   PROTO_INDICUS,
   PROTO_PBFT,
@@ -416,11 +422,15 @@ DEFINE_uint64(pbft_esig_batch_timeout, 10, "signature batch timeout ms"
 
 DEFINE_bool(pbft_order_commit, true, "order commit writebacks as well");
 DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
+DEFINE_bool(bftsmart_exec_txn_server_side, false,
+    "When true, the BFTSmart server executes full transactions server-side "
+    "(via ServerClient) instead of waiting for client-driven two-phase commit");
 
 //PG-SMR / Peloton-SMR settings.
 DEFINE_bool(pg_fake_SMR, true, "Indicate if server is asynchronous or not. If so, will return leader's results for consistency");
 DEFINE_uint64(pg_SMR_mode, 0, "Indicate with SMR protocol to use: 0 = off, 1 = Hotstuff, 2 = BFTSmart");
 DEFINE_uint64(hs_dummy_to, 5, "hotstuff dummy timeout ms (to fill pipeline)");
+DEFINE_uint32(rw_sql_sim_delay, 0, "simulation delay for rw sql transactions in ms");
 
 const std::string occ_type_args[] = {
 	"tapir",
@@ -466,6 +476,22 @@ static bool ValidateReadDep(const char* flagname,
 DEFINE_string(indicus_read_dep, read_dep_args[0], "number of identical prepared"
     " to claim dependency (for Indicus)");
 DEFINE_validator(indicus_read_dep, &ValidateReadDep);
+
+// Sintr specific args
+DEFINE_bool(sintr_sign_finish_validation, true, "sintr sign finish validation message");
+DEFINE_string(sintr_policy_function_name, "basic_id", "sintr policy function to use");
+DEFINE_string(sintr_policy_config_path, "", "path to sintr policy configuration file");
+DEFINE_bool(sintr_check_policy_leak, true, "check for policy information leak (readset policy must imply writeset policy)");
+DEFINE_bool(sintr_parallel_endorsement_check, false, "parallelize endorsement check");
+DEFINE_bool(sintr_use_occ_for_policies, false, "Use OCC instead of MVTSO for policies");
+DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
+DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
+DEFINE_bool(sintr_server_skip_endorsement_check, false, "server skip endorsement check completely");
+DEFINE_bool(sintr_policy_CCC, true, "perform CCC for policies");
+DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
+DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
+DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
+
 
 /**
  * Experiment settings.
@@ -573,7 +599,7 @@ int main(int argc, char **argv) {
   int threadpool_mode = 0; //default for Basil.   //|| proto == PROTO_PELOTON_SMR
   if(proto == PROTO_HOTSTUFF || proto == PROTO_AUGUSTUS) threadpool_mode = 1;
   if(proto == PROTO_BFTSMART || proto == PROTO_AUGUSTUS_SMART) threadpool_mode = 2;
-  if(proto == PROTO_PEQUIN && FLAGS_sql_bench) threadpool_mode = 0;
+  if((proto == PROTO_PEQUIN || proto == PROTO_SINTR) && FLAGS_sql_bench) threadpool_mode = 0;
   // if(proto == PROTO_PG_SMR) threadpool_mode = 3;
 
   switch (trans) {
@@ -652,7 +678,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if ((proto == PROTO_INDICUS || proto == PROTO_PEQUIN) && occ_type == OCC_TYPE_UNKNOWN) {
+  if ((proto == PROTO_INDICUS || proto == PROTO_PEQUIN || proto == PROTO_SINTR) && occ_type == OCC_TYPE_UNKNOWN) {
     std::cerr << "Unknown occ type." << std::endl;
     return 1;
   }
@@ -666,7 +692,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if ((proto == PROTO_INDICUS || proto == PROTO_PEQUIN) && read_dep == READ_DEP_UNKNOWN) {
+  if ((proto == PROTO_INDICUS || proto == PROTO_PEQUIN || proto == PROTO_SINTR) && read_dep == READ_DEP_UNKNOWN) {
     std::cerr << "Unknown read dep." << std::endl;
     return 1;
   }
@@ -747,6 +773,7 @@ int main(int argc, char **argv) {
       case PROTO_STRONG:
       case PROTO_PG:
         break;
+      case PROTO_SINTR:
       case PROTO_PEQUIN:
       case PROTO_INDICUS:
         switch (read_dep) {
@@ -789,6 +816,32 @@ int main(int argc, char **argv) {
 // Declare Protocol Servers
   Notice("Start protocol server");
 
+  // non flag parameters are client only
+  ::SintrParameters sintr_params(
+    0, false,
+    FLAGS_sintr_sign_finish_validation,
+    false, false,
+    FLAGS_sintr_policy_function_name,
+    FLAGS_sintr_policy_config_path,
+    0, 0,
+    FLAGS_sintr_check_policy_leak,
+    false, 0, false, false,
+    FLAGS_sintr_parallel_endorsement_check,
+    FLAGS_sintr_use_occ_for_policies,
+    FLAGS_sintr_hash_endorsements,
+    false, false, true,
+    FLAGS_sintr_hide_timestamps,
+    1,
+    FLAGS_sintr_server_skip_endorsement_check,
+    FLAGS_sintr_policy_CCC,
+    false, false, true,
+    FLAGS_sintr_hash_query_gen_id,
+    false, 0, false, SintrFailure(),
+    FLAGS_sintr_include_readset_for_txn_policy,
+    FLAGS_sintr_enable_lifting,
+    false
+  );
+
   switch (proto) {
   case PROTO_TAPIR: {
       server = new tapirstore::Server(FLAGS_tapir_linearizable);
@@ -805,6 +858,80 @@ int main(int argc, char **argv) {
                                        FLAGS_clock_error);
       replica = new replication::vr::VRReplica(config, FLAGS_group_idx, FLAGS_replica_idx,
                                                tport, 1, dynamic_cast<replication::AppReplica *>(server));
+      break;
+  }
+  case PROTO_SINTR: {
+      
+      sintrstore::OCCType sintrOCCType;  //TODO: Extend this later with Semantic OCC check options.
+      switch (occ_type) {
+      case OCC_TYPE_TAPIR:
+          sintrOCCType = sintrstore::TAPIR;
+          break;
+      case OCC_TYPE_MVTSO:
+          sintrOCCType = sintrstore::MVTSO;
+          break;
+      default:
+          NOT_REACHABLE();
+      }
+
+      sintrstore::QueryParameters query_params(FLAGS_store_mode,
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 -1,
+                                                 FLAGS_pequin_snapshot_prepared_k,
+                                                 FLAGS_pequin_query_eager_exec,
+                                                 FLAGS_pequin_query_point_eager_exec,
+                                                 FLAGS_pequin_eager_plus_snapshot,
+                                                 false, //simulateFailEagerPlusSnapshot is a client only flag.
+                                                 FLAGS_pequin_force_read_from_snapshot,
+                                                 FLAGS_pequin_query_read_prepared,
+                                                 FLAGS_pequin_query_cache_read_set,
+                                                 FLAGS_pequin_query_optimistic_txid,
+                                                 FLAGS_pequin_query_compress_optimistic_txid, 
+                                                 FLAGS_pequin_query_merge_active_at_client,
+                                                 FLAGS_pequin_sign_client_queries,
+                                                 FLAGS_pequin_sign_replica_to_replica_sync,
+                                                 FLAGS_pequin_parallel_queries,
+                                                 FLAGS_pequin_use_semantic_cc,
+                                                 FLAGS_pequin_use_active_read_set,
+                                                 FLAGS_pequin_monotonicity_grace,
+                                                 FLAGS_pequin_non_monotonicity_grace);
+
+      sintrstore::Parameters params(FLAGS_indicus_sign_messages,
+                                      FLAGS_indicus_validate_proofs, FLAGS_indicus_hash_digest,
+                                      FLAGS_indicus_verify_deps, FLAGS_indicus_sig_batch,
+                                      FLAGS_indicus_max_dep_depth, readDepSize,
+                                      FLAGS_indicus_read_reply_batch, FLAGS_indicus_adjust_batch_size,
+                                      FLAGS_indicus_shared_mem_batch, FLAGS_indicus_shared_mem_verify,
+                                      FLAGS_indicus_merkle_branch_factor, InjectFailure(),
+                                      FLAGS_indicus_multi_threading, FLAGS_indicus_batch_verification,
+																			FLAGS_indicus_batch_verification_size,
+																			FLAGS_indicus_mainThreadDispatching,
+																			FLAGS_indicus_dispatchMessageReceive,
+																			FLAGS_indicus_parallel_reads,
+																			FLAGS_indicus_parallel_CCC,
+																			FLAGS_indicus_dispatchCallbacks,
+																			FLAGS_indicus_all_to_all_fb,
+																		  FLAGS_indicus_no_fallback, FLAGS_indicus_relayP1_timeout,
+																		  FLAGS_indicus_replica_gossip,
+                                      FLAGS_indicus_sign_client_proposals,
+                                      FLAGS_indicus_rts_mode,
+                                      query_params,
+                                      sintr_params);
+
+      Debug("Starting new server object");
+      Notice("FILE PATH: %s", FLAGS_data_file_path.c_str());
+      if(FLAGS_pequin_simulate_replica_failure && config.n == 0) Panic("Cannot simulate inconsitency without replication");
+      bool simulate_fault = FLAGS_pequin_simulate_replica_failure && (FLAGS_replica_idx == 0);
+      Notice("Simulating Fault at this Replica? %d", simulate_fault);
+      server = new sintrstore::Server(config, FLAGS_group_idx,
+                                        FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups, tport,
+                                        &keyManager, params, FLAGS_data_file_path, timeDelta, sintrOCCType, part,
+                                        FLAGS_indicus_sig_batch_timeout, FLAGS_sql_bench, 
+                                        FLAGS_rw_simulate_point_kv, simulate_fault, FLAGS_pequin_simulate_inconsistency, FLAGS_pequin_disable_prepare_visibility); //TODO: Move to params.
       break;
   }
   case PROTO_PEQUIN: {
@@ -936,16 +1063,17 @@ int main(int argc, char **argv) {
 
       // HotStuff
   case PROTO_HOTSTUFF: {
-      
+      Notice("Using [%s] server config", FLAGS_local_config ? "LOCAL" : "REMOTE");
       server = new hotstuffstore::Server(config, &keyManager,
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
-                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+                                     FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
                                      FLAGS_indicus_watermark_time_delta, part, tport,
 																	   FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
 
       replica = new hotstuffstore::Replica(config, &keyManager,
-                                       dynamic_cast<hotstuffstore::App *>(server),
+                                       dynamic_cast<hotstuffstore::App *>(server), FLAGS_local_config,
                                        FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
                                        FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx,
@@ -982,11 +1110,13 @@ int main(int argc, char **argv) {
       server = new pelotonstore::Server(config, &keyManager, FLAGS_data_file_path, 
                                      FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
                                      FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-                                     FLAGS_indicus_watermark_time_delta, part, tport, FLAGS_local_config, FLAGS_pg_SMR_mode);
+                                     FLAGS_indicus_watermark_time_delta, part, tport, FLAGS_local_config, FLAGS_pg_SMR_mode,
+                                     sintr_params, FLAGS_bftsmart_exec_txn_server_side, FLAGS_rw_sql_sim_delay, FLAGS_pg_fake_SMR);
 
       replica = new pelotonstore::Replica(config, &keyManager,
                                        dynamic_cast<pelotonstore::App *>(server),
                                        FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
                                        FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
                                        FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
                                        FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx, protocol_cpu, FLAGS_local_config, FLAGS_num_shards, tport, 
@@ -1017,13 +1147,15 @@ int main(int argc, char **argv) {
 	case PROTO_BFTSMART: {
 			server = new bftsmartstore::Server(config, &keyManager,
 																		 FLAGS_group_idx, FLAGS_replica_idx, FLAGS_num_shards, FLAGS_num_groups,
-																		 FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
+																		 FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, sintr_params,
 																		 FLAGS_indicus_watermark_time_delta, part, tport,
-																		 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort);
+																		 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
+                                     FLAGS_bftsmart_exec_txn_server_side);
       std::cerr << "FLAGS: bftsmart config path: " << FLAGS_bftsmart_codebase_dir << std::endl;
 			replica = new bftsmartstore::Replica(config, &keyManager,
 																			 dynamic_cast<bftsmartstore::App *>(server),
 																			 FLAGS_group_idx, FLAGS_replica_idx, FLAGS_indicus_sign_messages,
+                                       FLAGS_indicus_sign_client_proposals,
 																			 FLAGS_indicus_sig_batch, FLAGS_indicus_sig_batch_timeout,
 																			 FLAGS_pbft_esig_batch, FLAGS_pbft_esig_batch_timeout,
 																			 FLAGS_indicus_use_coordinator, FLAGS_indicus_request_tx,
@@ -1070,7 +1202,7 @@ int main(int argc, char **argv) {
 
   //SET THREAD AFFINITY if running multi_threading:
 	//if(FLAGS_indicus_multi_threading){
-  bool pinned_protocol = proto == PROTO_PEQUIN || proto == PROTO_INDICUS || proto == PROTO_PBFT;
+  bool pinned_protocol = proto == PROTO_SINTR || proto == PROTO_PEQUIN || proto == PROTO_INDICUS || proto == PROTO_PBFT;
   //if(proto == PROTO_PEQUIN && FLAGS_sql_bench) pinned_protocol = false; //Only pin in KV-mode. In SQL mode don't pin so peloton can go wherever. (in this case, pick threadpool_mode = 2) NOTE: obsolete, since we don't use Peloton Tpool anymore.
      // || proto == PROTO_HOTSTUFF || proto == PROTO_AUGUSTUS || proto == PROTO_BFTSMART || proto == PROTO_AUGUSTUS_SMART;   
      //For Hotstuff and Augustus store it's likely best to not pin the main Process in order to allow their internal threadpools to use more cores
@@ -1146,7 +1278,7 @@ int main(int argc, char **argv) {
   //SQL Benchmarks -- they all require a schema file!
   else if(FLAGS_sql_bench && FLAGS_data_file_path.length() > 0 && FLAGS_keys_path.empty()) {
 
-    UW_ASSERT(FLAGS_num_shards == 1 || proto == PROTO_PEQUIN); // Currently only Pequin supports more than 1 shard.
+    UW_ASSERT(FLAGS_num_shards == 1 || proto == PROTO_PEQUIN || proto == PROTO_SINTR); // Currently only Pequin supports more than 1 shard.
     Notice("Benchmark: SQL with Loaded Table Registry. File path: %s", FLAGS_data_file_path.c_str());
     
     std::ifstream generated_tables(FLAGS_data_file_path);
@@ -1175,7 +1307,7 @@ int main(int argc, char **argv) {
     }
       
     //Create a Peloton cache...
-    if(proto == PROTO_PEQUIN){
+    if(proto == PROTO_PEQUIN || proto == PROTO_SINTR){
       for(auto &[table_name, table_args]: tables_to_load.items()){ 
         const std::vector<std::pair<std::string, std::string>> &column_names_and_types = table_args["column_names_and_types"];
         const std::vector<uint32_t> &primary_key_col_idx = table_args["primary_key_col_idx"];

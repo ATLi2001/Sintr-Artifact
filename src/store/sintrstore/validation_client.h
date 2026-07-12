@@ -1,0 +1,312 @@
+/***********************************************************************
+ *
+ * Copyright 2024 Austin Li <atl63@cornell.edu>
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use, copy,
+ * modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ **********************************************************************/
+
+#ifndef _SINTR_VALIDATION_CLIENT_H_
+#define _SINTR_VALIDATION_CLIENT_H_
+
+#include "lib/transport.h"
+#include "store/common/promise.h"
+#include "store/common/timestamp.h"
+#include "store/common/partitioner.h"
+#include "store/common/sintring/validation_client_common.h"
+#include "store/sintrstore/sintr-proto.pb.h"
+#include "store/sintrstore/common.h"
+
+#include "store/sintrstore/sql_interpreter.h"
+#include "store/common/policy/policy_function.h"
+
+#include <string>
+#include <vector>
+#include <thread>
+#include <deque>
+
+#include "tbb/concurrent_hash_map.h"
+
+namespace sintrstore {
+
+typedef std::function<void(int, uint64_t, uint64_t, const std::string &,
+  const std::string &, const Timestamp &)> validation_read_callback;
+typedef std::function<void(int, const std::string &)> validation_read_timeout_callback;
+
+// this acts as a dummy workload client for validation of one transaction at a time
+// validation transactions will invoke this through a SyncClient interface
+// note that this class is shared memory between threads
+// in particular, each thread where a validation transaction is being validated (client2client::ValidationThreadFunction)
+// will call Begin, Get, Put, Commit, Abort (these through SyncClient interface), 
+// SetThreadValTxnId, SetTxnTimestamp, GetCompletedTxn
+// on a different thread, client2client will call ProcessForwardReadResult upon receiving forwarded read results
+class ValidationClient : public ::ValidationClientCommon {
+ public:
+  ValidationClient(Transport *transport, uint64_t client_id, uint64_t nclients, uint64_t nshards, uint64_t ngroups, Partitioner *part,
+    std::string &table_registry, Parameters params, const PolicyCache *policyCache);
+  virtual ~ValidationClient();
+
+  // Begin a transaction.
+  virtual void Begin(begin_callback bcb, begin_timeout_callback btcb,
+    uint32_t timeout, bool retry = false, const std::string &txnState = std::string()) override;
+
+  // Get the value corresponding to key.
+  virtual void Get(const std::string &key, get_callback gcb,
+    get_timeout_callback gtcb, uint32_t timeout) override;
+
+  // Set the value for the given key.
+  virtual void Put(const std::string &key, const std::string &value,
+    put_callback pcb, put_timeout_callback ptcb, uint32_t timeout) override;
+
+  virtual void SQLRequest(std::string &statement, sql_callback scb,
+    sql_timeout_callback stcb, uint32_t timeout) override;
+  
+  virtual void Write(std::string &write_statement, write_callback wcb,
+      write_timeout_callback wtcb, uint32_t timeout, bool blind_write = false) override;
+  
+  virtual void Query(const std::string &query, query_callback qcb,
+    query_timeout_callback qtcb, uint32_t timeout, bool cache_result = false, bool skip_query_interpretation = false) override;
+  
+  // Commit all Get(s) and Put(s) since Begin().
+  virtual void Commit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t timeout) override;
+
+  // Abort all Get(s) and Put(s) since Begin().
+  virtual void Abort(abort_callback acb, abort_timeout_callback atcb, uint32_t timeout) override;
+
+  virtual const PolicyCache& GetPolicyCache() const override;
+
+  virtual void LiftTransaction(std::vector<std::string> &lift_keys) override;
+  
+  virtual const std::map<std::string, std::string> &GetReadset() override;
+  
+  // Associate the current validation thread id with an SQL Interpreter
+  void SetThreadValSQLInterpreter();
+
+  // Set the timestamp for the txn
+  // timestamp was chosen by initiating client
+  // this is expected to be called before the validation transaction begins
+  void SetTxnTimestamp(uint64_t txn_client_id, uint64_t txn_client_seq_num, const Timestamp &ts, bool isPolicyTransaction,
+    const std::string &hashed_ts);
+
+  // either fill one of the pending validation gets or put into readset for future validation get
+  void ProcessForwardReadResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
+    const proto::ForwardReadResult &fwdReadResult, const proto::Dependency &dep, bool hasDep, bool addReadset);
+
+  // either fill one of the pending validation queries or put into readset for future validation query
+  void ProcessForwardPointQueryResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
+    const proto::ForwardReadResult &fwdPointQueryResult, const proto::Dependency &dep, bool hasDep, bool addReadset);
+  void ProcessForwardQueryResult(uint64_t txn_client_id, uint64_t txn_client_seq_num, 
+    const proto::ForwardQueryResult &fwdQueryResult, bool addReadset);
+  // for the parallel query sig check case, should be later notified of validity
+  void NotifyForwardQueryResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+  // for parallel reads/point queries
+  void NotifyForwardReadResultValid(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+
+  void ProcessBlindWrite(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+
+  // return completed transaction for requested id
+  proto::Transaction *GetCompletedTxn(uint64_t txn_client_id, uint64_t txn_client_seq_num);
+
+ private:
+  struct PendingValidationGet {
+    PendingValidationGet(uint64_t txn_client_id, uint64_t txn_client_seq_num) : 
+        txn_client_id(txn_client_id), txn_client_seq_num(txn_client_seq_num) {
+      struct timespec ts_start;
+      clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      start_time = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    }
+    ~PendingValidationGet() {
+      if (timeout != nullptr) {
+        delete timeout;
+      }
+    }
+    uint64_t txn_client_id;
+    uint64_t txn_client_seq_num;
+    std::string key;
+    std::string value;
+    Timestamp ts;
+    validation_read_callback vrcb;
+    validation_read_timeout_callback vrtcb;
+    Timeout *timeout;
+    uint64_t start_time;
+  };
+
+  struct PendingValidationQuery {
+    // difference between query seq num and client seq num?
+    PendingValidationQuery(const Timestamp &ts,
+        const std::string &query_cmd, const query_callback &qcb, bool cache_result,
+        const std::string &hashed_ts, bool hashQueryGenId) :
+        vqcb(qcb), cache_result(cache_result), query_cmd(query_cmd), timeout(nullptr) {
+      query_gen_id = QueryGenId(query_cmd, ts, hashed_ts, hashQueryGenId);
+
+      struct timespec ts_start;
+      clock_gettime(CLOCK_MONOTONIC, &ts_start);
+      start_time = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    }
+    ~PendingValidationQuery(){
+      if (timeout != nullptr) {
+        delete timeout;
+      }
+    }
+    bool cache_result;
+    query_callback vqcb;
+    query_timeout_callback vqcb_timeout;
+
+    std::string query_gen_id;
+    Timeout *timeout;
+    std::string query_cmd;
+    
+    uint64_t start_time;
+    Timestamp ts;
+
+    bool is_point;
+    std::string key;
+    std::string table_name;
+    std::vector<std::string> p_col_values; //if point read: this contains primary_key_col_vaues (in order) ==> Together with table_name can be used to compute encoding.
+  };
+
+
+  // for a (txn_client_id, txn_client_seq_num) pair, keep track of all relevant transaction state
+  struct AllValidationTxnState {
+    AllValidationTxnState() {}
+    AllValidationTxnState(uint64_t txn_client_id, uint64_t txn_client_seq_num, proto::Transaction *txn) : 
+      txn_client_id(txn_client_id), txn_client_seq_num(txn_client_seq_num), txn(txn) {}
+    ~AllValidationTxnState() {
+      // do not delete txn, since it is returned from GetCompletedTxn
+      // delete all pendingGets
+      for (auto &pendingGet : pendingGets) {
+        delete pendingGet;
+      }
+      ClearTxnQueries();
+    }
+    void ClearTxnQueries(){
+      for(auto &pendingQuery: pendingQueries){
+        delete pendingQuery;
+      }
+      pendingQueries.clear();
+
+      for(auto &pendingWrite: pendingBlindWrites){
+        delete pendingWrite;
+      }
+    }
+    uint64_t txn_client_id;
+    uint64_t txn_client_seq_num;
+    // this tracks the readset/writeset etc. of the transaction
+    proto::Transaction *txn;
+    // this tracks the locally buffered key-value pairs
+    std::map<std::string, std::string> readValues;
+    // this tracks the pending validation gets
+    std::vector<PendingValidationGet *> pendingGets;
+    std::vector<PendingValidationQuery *> pendingQueries;
+
+    std::vector<std::string> pendingWriteStatements; //Just a temp cache to keep Translated Write statements in scope during a TX.
+    std::unordered_set<std::string> added_query_results; // keeps track of query results added to txn
+
+    // vector of keys to ensure that only readset keys in transaction are added
+    std::vector<std::pair<std::string, std::pair<std::string, Timestamp>>> pendingForwardedRead;
+    // vector of query pointread keys to ensure that only readset keys from query in transaction are added
+    std::vector<std::pair<std::string, std::string>> pendingForwardedPointQuery;
+    // vector of query IDs to ensure that only readset keys from query in transaction are added
+    std::vector<std::pair<std::string, std::string>> pendingForwardedQuery;
+
+    // track pending buffered blind writes
+    std::deque<std::function<void(void)>*> pendingBlindWrites;
+    // for tracking blind write messages that arrive before registering pending blind writes
+    uint64_t blind_write_message_count = 0;
+
+    // prevent initiating client from hiding reads by telling validating client to ignore them
+    // track all reads that should have been seen by the transaction
+    std::set<std::string> seenReads;
+    // queriesAddedToReadset should match seenQueries
+    std::set<std::string> seenQueries; //TODO: maybe change to just set if more efficient to compare ordered sets
+    std::set<std::string> queriesAddedToReadset;
+
+    // map to keep track of written values for cache
+    std::unordered_map<std::string, std::vector<std::string>> write_values;
+
+    // check if these ignored reads are in readset/writeset of txn
+    std::unordered_map<std::string, std::vector<std::string>> ignore_readset_kv;
+
+    // set of policyIds used in validation transaction
+    std::set<std::string> policyIDs;
+
+    uint64_t numProcessedForwardQuery = 0;
+    uint64_t numPendingReads = 0;
+    uint64_t numValidReads = 0;
+    uint64_t numValidForwardQuery = 0;
+    bool commitWaitOnValidForwardQuery = false;
+    bool aborted = false;
+    commit_callback ccb;
+    commit_timeout_callback ctcb;
+  };
+
+  bool BufferGet(const AllValidationTxnState *allValTxnState, const std::string &key, 
+    validation_read_callback vrcb);
+  // add (key, ts) to the readset of transaction txn_id
+  // if is_get is true, then this is from a get so we should add to readValues
+  // otherwise it is from a query, so look at cache_point to decide whether to add to point_read_cache
+  void AddReadset(AllValidationTxnState *allValTxnState, const std::string &key, 
+    const std::string &value, const Timestamp &ts, bool is_get = true, bool cache_point = false, std::string hashedTS = "");
+  void AddQueryReadset(AllValidationTxnState *allValTxnState,
+    const proto::ForwardQueryResult &fwdQueryResult);
+  // add dep to the dependencies of transaction 
+  void AddDep(AllValidationTxnState *allValTxnState, const proto::Dependency &dep);
+  // is group g involved in txn
+  bool IsTxnParticipant(proto::Transaction *txn, int g);
+
+  // transport for timeout functionality
+  Transport *transport;
+  // My own client ID
+  const uint64_t client_id;
+  // Number of shards.
+  uint64_t nshards;
+  // Number of replica groups.
+  uint64_t ngroups;
+  // for computing txn involved groups
+  Partitioner *part;
+  Parameters params;
+  // we only need a read only view of the policy cache in this class
+  const PolicyCache *policyCache;
+  
+  // we need policy ID function to map keys to policies
+  policy_id_function policyIdFunction;
+
+  std::string table_registry;
+
+  // map from (txn_client_id, txn_client_seq_num) to all relevant validation txn state
+  typedef tbb::concurrent_hash_map<std::string, AllValidationTxnState *> allValTxnStatesMap;
+  allValTxnStatesMap allValTxnStates;
+  // map from thread id to (SQL Transformer) that stores a sql interpreter for each validation thread
+  typedef tbb::concurrent_hash_map<std::thread::id, SQLTransformer*> threadValtoSQLMap;
+  threadValtoSQLMap threadValtoSQL;
+
+  uint64_t query_fin_us;
+  uint64_t get_fin_us;
+
+  mean_tracker pending_get_us;
+  mean_tracker pending_query_init_us;
+  mean_tracker query_to_commit_us;
+  mean_tracker get_to_commit_us;
+};
+
+} // namespace sintrstore
+
+#endif /* _SINTR_VALIDATION_CLIENT_H_ */

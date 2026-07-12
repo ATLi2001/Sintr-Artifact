@@ -58,6 +58,7 @@
 
 
 #include "store/common/query_result/query_result_proto_builder.h"
+#include "store/pelotonstore/common.h"
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -77,7 +78,9 @@ class TableStore {
         void ExecSingle(const std::string &sql_statement, bool skip_cache = false);
 
         // Execute a statement that is part of the clients ongoing transaction
-        std::string ExecTransactional(const std::string &sql_statement, uint64_t client_id, uint64_t tx_id, peloton_peloton::ResultType &result_status, std::string &error_msg, bool skip_cache = true);
+        std::string ExecTransactional(const std::string &sql_statement, uint64_t client_id, uint64_t tx_id,
+            peloton_peloton::ResultType &result_status, std::string &error_msg,
+            QueryReadSetMgr &query_read_set_mgr, bool skip_cache = true);
 
         void Begin(uint64_t client_id, uint64_t tx_id);
 

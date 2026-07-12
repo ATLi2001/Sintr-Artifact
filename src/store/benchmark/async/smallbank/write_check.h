@@ -36,8 +36,11 @@ class WriteCheck : public SmallbankTransaction {
   WriteCheck(const std::string &cust, const int32_t value, const uint32_t timeout);
   virtual ~WriteCheck();
 
-  transaction_status_t Execute(SyncClient &client);
- private:
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side = false);
+
+  virtual void SerializeTxnState(std::string &txnState) override;
+
+ protected:
   std::string cust;
   int32_t value;
   uint32_t timeout;

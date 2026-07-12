@@ -1,8 +1,8 @@
 d := $(dir $(lastword $(MAKEFILE_LIST)))
 
-SRCS += $(addprefix $(d), app.cc replica.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc)
+SRCS += $(addprefix $(d), app.cc replica.cc slots.cc common.cc server.cc shardclient.cc client.cc testreplica.cc testclient.cc pbft_batched_sigs.cc validation_client.cc client2client.cc)
 
-PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto)
+PROTOS += $(addprefix $(d), pbft-proto.proto server-proto.proto hotstuff-sintr-proto.proto)
 
 # HotStuff static libraries
 LIB-hotstuff-interface := store/hotstuffstore/libhotstuff/examples/libindicus_interface.a store/hotstuffstore/libhotstuff/salticidae/libsalticidae.a store/hotstuffstore/libhotstuff/libhotstuff.a store/hotstuffstore/libhotstuff/secp256k1/.libs/libsecp256k1.a
@@ -10,9 +10,15 @@ LIB-hotstuff-interface := store/hotstuffstore/libhotstuff/examples/libindicus_in
 
 LIB-pbft-batched-sigs := $(LIB-crypto) $(o)pbft_batched_sigs.o 
 
+LIB-hotstuff-client := $(o)common.o $(o)slots.o \
+    $(o)pbft-proto.o $(o)server-proto.o $(o)shardclient.o $(o)app.o $(o)replica.o \
+    $(o)hotstuff-sintr-proto.o $(o)validation_client.o $(o)client2client.o \
+    $(o)client.o $(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
+    $(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface) $(LIB-common-sintring)
+
 LIB-hotstuff-store := $(o)common.o $(o)slots.o $(o)replica.o $(o)server.o \
 	$(o)pbft-proto.o $(o)server-proto.o $(o)app.o $(o)shardclient.o \
-	$(o)client.o $(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
+	$(LIB-crypto) $(LIB-pbft-batched-sigs) $(LIB-configuration) $(LIB-store-common) \
 	$(LIB-transport) $(LIB-store-backend) $(LIB-hotstuff-interface)
 
 # LIB-pbft-client := $(LIB-udptransport) \

@@ -36,12 +36,17 @@ namespace tpcc {
 class StockLevel : public TPCCTransaction {
  public:
   StockLevel(uint32_t w_id, uint32_t d_id, std::mt19937 &gen);
+  StockLevel() {};
   virtual ~StockLevel();
+
+  virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:
   uint32_t w_id;
   uint32_t d_id;
   uint8_t min_quantity;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 } // namespace tpcc

@@ -32,6 +32,8 @@
 #include <unordered_map>
 #include <mutex>
 #include <shared_mutex>
+#include "tbb/concurrent_unordered_map.h"
+#include "tbb/concurrent_unordered_set.h"
 
 #include "lib/message.h"
 #include "store/bftsmartstore/app.h"
@@ -40,17 +42,30 @@
 #include "lib/keymanager.h"
 #include "lib/configuration.h"
 #include "store/common/backend/versionstore.h"
+#include "store/common/policy/policy.h"
+#include "store/common/policy/policy_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/backend/versionstore_generic_safe.h"
+#include "store/common/sintring/params.h"
+#include "store/common/util.h"
 #include "store/common/partitioner.h"
 #include "store/common/truetime.h"
 #include "lib/transport.h"
+#include "store/common/frontend/client.h"
+
+// Forward-declared to avoid circular includes (serverclient.h includes server.h)
+namespace bftsmartstore { class ServerClient; }
+class SyncClient;
 
 namespace bftsmartstore {
 
 class Server : public App, public ::Server {
 public:
   Server(const transport::Configuration& config, KeyManager *keyManager, int groupIdx, int idx, int numShards,
-    int numGroups, bool signMessages, bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp,
-    bool order_commit = false, bool validate_abort = false,
+    int numGroups, bool signMessages, bool validateProofs, SintrParameters sintr_params, uint64_t timeDelta,
+    Partitioner *part, Transport* tp, bool order_commit = false, bool validate_abort = false,
+    bool execTxnServerSide = false,
     TrueTime timeServer = TrueTime(0, 0));
   ~Server();
 
@@ -64,6 +79,20 @@ public:
 
   Stats* mutableStats();
 
+  // Public wrappers for ServerClient to call directly (bypasses network)
+  // Read a key at the given timestamp; invokes gcb with the result synchronously
+  void DirectRead(const std::string &key, const Timestamp &ts, uint64_t req_id,
+      std::function<void(int, const std::string&, const std::string&, const Timestamp&)> gcb);
+
+  // Execute a transaction directly; returns COMMITTED or ABORTED_SYSTEM
+  transaction_status_t DirectCommit(const proto::Transaction &txn);
+
+  // Execute a TxnExecRequest by running the embedded transaction server-side
+  // via ServerClient + SyncClient + ValidationParseClient.  Returns a
+  // heap-allocated TxnExecReply (caller takes ownership).
+  std::vector<::google::protobuf::Message*> ExecuteTxnServerSide(
+      const proto::TxnExecRequest &req);
+
 private:
   Transport* tp;
   Stats stats;
@@ -76,6 +105,7 @@ private:
   int numGroups;
   bool signMessages;
   bool validateProofs;
+  bool execTxnServerSide;
   uint64_t timeDelta;
   Partitioner *part;
   TrueTime timeServer;
@@ -134,6 +164,33 @@ private:
     std::vector<int> txnGroups;
     return static_cast<int>((*part)(key, numShards, groupIdx, txnGroups) % numGroups) == groupIdx;
   }
+
+  //Testing:
+  std::unordered_set<std::string> executed_tx;
+
+  // policy stuff (for sintr)
+
+  VersionedKVStoreGeneric<std::string, Timestamp, const Policy*> policyStore;
+  // not sure if VersionedKvStoreGeneric will actually free the policy pointers, so store separately and free on destruction
+  std::vector<std::unique_ptr<Policy>> policiesToFree;
+  // policy_function policyFunction;
+  policy_id_function policyIdFunction;
+
+  PolicyParseClient policyParseClient;
+  SintrParameters sintr_params;
+
+  void LoadPolicyStore(const std::string &policyStorePath);
+  bool EndorsementCheck(const proto::Transaction &txn);
+  void ExtractPolicy(const proto::Transaction &txn, PolicyClient &policyClient);
+  bool ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, uint64_t client_id, const std::string &txnDigest);
+  bool ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest);
+
+  // Server-side transaction execution via ServerClient + SyncClient.
+  // Lazily allocated on first TxnExecRequest.
+  ServerClient *serverClientForExec{nullptr};
+  SyncClient   *syncClientForExec{nullptr};
+  // next client_id for server-side executions (monotonically increasing)
+  uint64_t serverExecClientIdCounter{0};
 };
 
 }

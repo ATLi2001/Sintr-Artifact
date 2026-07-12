@@ -36,12 +36,15 @@ static bool join_free_version = false;
 
 class SQLStockLevel : public TPCCSQLTransaction {
  public:
-  SQLStockLevel(uint32_t timeout, uint32_t w_id, uint32_t d_id,
+  SQLStockLevel(uint32_t w_id, uint32_t d_id,
       std::mt19937 &gen);
   virtual ~SQLStockLevel();
-  virtual transaction_status_t Execute(SyncClient &client);
+  SQLStockLevel() {};
+  transaction_status_t BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side = false);
+  virtual void SerializeTxnState(std::string &txnState) override;
+  std::vector<TPCC_Table> HeuristicFunction();
 
- private:
+ protected:
   uint32_t w_id;
   uint32_t d_id;
   uint8_t min_quantity;

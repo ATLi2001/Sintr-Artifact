@@ -80,7 +80,7 @@ class IndexUtil {
    * @param index
    * @return
    */
-  static std::string Debug(Index *index);
+  static std::string DebugPeloton(Index *index);
 
   /**
    * Return a string representation of an ItemPointer.

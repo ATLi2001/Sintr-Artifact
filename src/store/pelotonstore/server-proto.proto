@@ -17,6 +17,13 @@ message TryCommit {
   required uint64 req_id = 1;
   required uint64 client_id = 3;
   required uint64 txn_seq_num = 4;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 5;
+  optional SignedMessages endorsements = 6;
+}
+
+message SignedMessages {
+  repeated SignedMessage sig_msgs = 1;
 }
 
 message UserAbort {
@@ -28,9 +35,29 @@ message SQL_RPCReply {
   required uint64 req_id = 1;
   required int32 status = 2;
   optional bytes sql_res = 3;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 4;
+  // for sintr, a general sql id is needed
+  optional bytes sql_gen_id = 5;
 }
 
 message TryCommitReply {
   required uint64 req_id = 1;
   required int32 status = 2;
+}
+
+// Server-side execution: client sends serialised TxnState so the server
+// can execute the whole transaction on its behalf.
+message TxnExecRequest {
+  required bytes txn_state = 1;   // serialized TxnState proto
+  required uint64 client_id = 2;
+  required uint64 client_seq_num = 3;
+}
+
+// Reply sent back after the server executes the transaction.
+message TxnExecReply {
+  required uint64 client_id = 1;
+  required uint64 client_seq_num = 2;
+  // Maps to transaction_status_t: 0=COMMITTED, 1=ABORTED_USER, 2=ABORTED_SYSTEM
+  required int32 status = 3;
 }

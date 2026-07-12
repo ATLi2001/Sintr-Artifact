@@ -1,7 +1,7 @@
 /***********************************************************************
  *
  * Copyright 2021 Florian Suri-Payer <fsp@cs.cornell.edu>
- *                Zheng Wang <zw494@cornell.edu>
+ *                Yunhao Zhang <yz2327@cornell.edu>
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -38,6 +38,15 @@
 #include "store/common/frontend/client.h"
 #include "store/bftsmartstore/pbft-proto.pb.h"
 #include "store/bftsmartstore/shardclient.h"
+#include "store/bftsmartstore/client2client.h"
+#include "store/common/sintring/endorsement_client.h"
+#include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/policy_cache.h"
+#include "store/common/sintring/params.h"
+#include "store/common/sintring/client_common.h"
 
 #include <unordered_map>
 
@@ -49,14 +58,16 @@ class Client : public ::Client {
       const std::vector<int> &closestReplicas,
       Transport *transport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, KeyManager *keyManager, const std::string& bftsmart_config_path,
+      bool validateProofs, bool signClientProposals, KeyManager *keyManager, const std::string& bftsmart_config_path, SintrParameters sintr_params,
+      transport::Configuration *clients_config = nullptr, ClientSelector *valClientSelector = nullptr,
       bool order_commit = false, bool validate_abort = false,
-      TrueTime timeserver = TrueTime(0,0));
+      TrueTime timeserver = TrueTime(0,0), const std::vector<std::string> &keys = std::vector<std::string>(),
+      bool execTxnServerSide = false);
   ~Client();
 
   // Begin a transaction.
   virtual void Begin(begin_callback bcb, begin_timeout_callback btcb,
-      uint32_t timeout, bool retry = false) override;
+      uint32_t timeout, bool retry = false, const std::string &txnState = std::string()) override;
 
   // Get the value corresponding to key.
   virtual void Get(const std::string &key, get_callback gcb,
@@ -81,6 +92,8 @@ class Client : public ::Client {
   uint64_t client_id;
   /* Configuration State */
   transport::Configuration config;
+  // client to client transport configuration state
+  transport::Configuration *clients_config;
   // Number of replica groups.
   uint64_t nshards;
   // Number of replica groups.
@@ -94,6 +107,7 @@ class Client : public ::Client {
   uint64_t readQuorumSize;
   bool signMessages;
   bool validateProofs;
+  bool signClientProposals;
   KeyManager *keyManager;
   // TrueTime server.
   TrueTime timeServer;
@@ -103,6 +117,13 @@ class Client : public ::Client {
   //addtional knobs: 1) order commit, 2) validate abort
   bool order_commit = false;
   bool validate_abort = false;
+
+  // When true, Begin() serialises the TxnState and forwards it to the server
+  // via a TxnExecRequest; Get/Put become no-ops and Commit waits for the reply.
+  bool execTxnServerSide = false;
+  // Per-seq_num commit callbacks and early-arriving results (open-loop safe).
+  std::unordered_map<uint64_t, commit_callback> pending_exec_ccbs;
+  std::unordered_map<uint64_t, transaction_status_t> pending_exec_results;
 
   struct PendingPrepare {
     proto::Transaction txn;
@@ -129,6 +150,9 @@ class Client : public ::Client {
 
   void HandleWritebackReply(std::string digest, uint64_t shard_id, int status);
 
+  // Handles a TxnExecReply from the server (server-side execution mode).
+  void HandleTxnExecReply(uint64_t seq_num, transaction_status_t status);
+
   // Current transaction.
   proto::Transaction currentTxn;
 
@@ -154,6 +178,27 @@ class Client : public ::Client {
   void AbortTxn(const proto::Transaction& txn);
 
   bool IsParticipant(int g);
+
+  //SINTR STUFF
+
+  void getEndorsementsAndCommit(commit_callback ccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num, const std::string &digest);
+
+  void handlePolicyUpdateOnKey(const std::string &key);
+
+  // client for other clients
+  Client2Client *c2client;
+  const std::vector<std::string> &keys;
+  EndorsementClient *endorseClient;
+  PolicyParseClient policyParseClient;
+  policy_id_function policyIdFunction;
+  std::unique_ptr<PolicyCache> policyCache;
+  std::mt19937 rand;
+
+  ClientSelector *valClientSelector;
+  SintrParameters sintr_params;
+  std::unordered_map<uint64_t, bool> endorsementsReceived;
+  Timeout *waitingForEndorsementsTimeout;
+  std::unordered_set<std::string> perTxnPolicyIds;
 };
 
 } // namespace bftsmartstore

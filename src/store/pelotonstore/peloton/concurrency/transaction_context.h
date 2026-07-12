@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../../store/pelotonstore/common.h"
 #include "../catalog/catalog_cache.h"
 #include "../common/exception.h"
 #include "../common/item_pointer.h"
@@ -286,6 +287,24 @@ class TransactionContext : public Printable {
   /** cache for table catalog objects */
   catalog::CatalogCache catalog_cache;
 
+  ///////////////////// sintr specific ///////////////////////////////////
+
+  pelotonstore::QueryReadSetMgr* GetQueryReadSetMgr() {
+    return query_read_set_mgr_;
+  }
+
+  void SetQueryReadSetMgr(pelotonstore::QueryReadSetMgr *query_read_set_mgr) {
+    query_read_set_mgr_ = query_read_set_mgr;
+  }
+
+  bool GetHasReadSetMgr() { return has_read_set_mgr_; }
+
+  void SetHasReadSetMgr(bool has_read_set_mgr) {
+    has_read_set_mgr_ = has_read_set_mgr;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+
  private:
   //===--------------------------------------------------------------------===//
   // Data members
@@ -345,6 +364,14 @@ class TransactionContext : public Printable {
 
   /** one default transaction is NOT 'read only' unless it is marked 'read only' explicitly*/
   bool read_only_ = false;
+
+  ///////////////////// sintr specific ///////////////////////////////////
+  
+  /** Query read set manager */
+  pelotonstore::QueryReadSetMgr *query_read_set_mgr_ = nullptr;
+
+  /** Whether read set manager was passed in */
+  bool has_read_set_mgr_ = false;
 };
 
 }  // namespace concurrency

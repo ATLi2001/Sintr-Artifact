@@ -29,11 +29,12 @@
 
 #include <random>
 
-#include "store/benchmark/async/sql/tpcc/new_order.h"
-#include "store/benchmark/async/sql/tpcc/payment.h"
-#include "store/benchmark/async/sql/tpcc/order_status.h"
-#include "store/benchmark/async/sql/tpcc/stock_level.h"
-#include "store/benchmark/async/sql/tpcc/delivery.h"
+#include "store/benchmark/async/sql/tpcc/sync/new_order.h"
+#include "store/benchmark/async/sql/tpcc/sync/payment.h"
+#include "store/benchmark/async/sql/tpcc/sync/order_status.h"
+#include "store/benchmark/async/sql/tpcc/sync/stock_level.h"
+#include "store/benchmark/async/sql/tpcc/sync/policy_change.h"
+#include "store/benchmark/async/sql/tpcc/sync/delivery.h"
 
 namespace tpcc_sql {
 
@@ -44,16 +45,19 @@ TPCCSQLClient::TPCCSQLClient(bool run_sequential, SyncClient &client, Transport 
     uint32_t delivery_ratio, uint32_t payment_ratio, uint32_t order_status_ratio,
     uint32_t stock_level_ratio, bool static_w_id,
     uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts, uint32_t timeout,
-    const std::string &latencyFilename) :
+    const std::string &policy_function_name,
+    bool bftsmart_exec_txn_server_side,
+    const std::string &latencyFilename, const std::string &govTxnConfigPath) :
       SyncTransactionBenchClient(client, transport, seed, numRequests,
         expDuration, delay, warmupSec, cooldownSec, tputInterval, abortBackoff,
-        retryAborted, maxBackoff, maxAttempts, timeout, latencyFilename), 
+        retryAborted, maxBackoff, maxAttempts, timeout, latencyFilename, govTxnConfigPath), 
       run_sequential(run_sequential),
       num_warehouses(num_warehouses), w_id(w_id), C_c_id(C_c_id),
       C_c_last(C_c_last), new_order_ratio(new_order_ratio),
       delivery_ratio(delivery_ratio), payment_ratio(payment_ratio),
       order_status_ratio(order_status_ratio), stock_level_ratio(stock_level_ratio),
-      static_w_id(static_w_id), delivery(false) {
+      static_w_id(static_w_id), delivery(false), count(0), id(seed), tpcc_lifts(policy_function_name),
+      bftsmart_exec_txn_server_side(bftsmart_exec_txn_server_side) {
   stockLevelDId = std::uniform_int_distribution<uint32_t>(1, 10)(GetRand());
 }
 
@@ -61,6 +65,21 @@ TPCCSQLClient::~TPCCSQLClient() {
 }
 
 SyncTransaction* TPCCSQLClient::GetNextTransaction() {
+  count++;
+  //if (id == 0 && count >= 100 && (count % 100) == 0 && count < 300) {
+  //  std::cerr << "RUNNING POLICY CHANGE" << std::endl;
+  //  return new SyncSQLPolicyChange(GetTimeout(), 1, (count/100)+1);
+  //}
+
+  if (IsNextPolicyChange()) {
+    SetNextPolicyChange(false);
+    uint64_t policyId = govTxnConfig.policyChangeIds[policyChangeCount];
+    uint32_t newPolicyWeight = govTxnConfig.newPolicyWeights[policyChangeCount];
+    policyChangeCount++;
+    Notice("Changing transaction policy for policyId %lu to weight %u", policyId, newPolicyWeight);
+    lastOp = "policy_change";
+    return new tpcc_sql::SyncSQLPolicyChange(GetTimeout(), policyId, newPolicyWeight);
+  }
   uint32_t wid, did;
   std::mt19937 &gen = GetRand();
   if (delivery && deliveryDId < 10) {
@@ -68,8 +87,8 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
     wid = deliveryWId;
     did = deliveryDId;
     lastOp = "delivery";
-    if(run_sequential) return new SQLDeliverySequential(GetTimeout(), wid, did, GetRand());
-    return new SQLDelivery(GetTimeout(), wid, did, GetRand());
+    if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, GetRand());
+    return new SyncSQLDelivery(GetTimeout(), wid, did, GetRand(), bftsmart_exec_txn_server_side);
   } else {
     delivery = false;
   }
@@ -93,15 +112,15 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
   }
   if (ttype < (freq = new_order_ratio)) {
     lastOp = "new_order";
-    if(run_sequential) return new SQLNewOrderSequential(GetTimeout(), wid, C_c_id, num_warehouses, gen);
-    return new SQLNewOrder(GetTimeout(), wid, C_c_id, num_warehouses, gen);
+    if(run_sequential) return new SyncSQLNewOrderSequential(GetTimeout(), wid, C_c_id, num_warehouses, gen);
+    return new SyncSQLNewOrder(GetTimeout(), wid, C_c_id, num_warehouses, gen, tpcc_lifts, bftsmart_exec_txn_server_side);
   } else if (ttype < (freq += payment_ratio)) {
     lastOp = "payment";
-    if(run_sequential) return new SQLPaymentSequential(GetTimeout(), wid, C_c_last, C_c_id, num_warehouses, gen);
-    return new SQLPayment(GetTimeout(), wid, C_c_last, C_c_id, num_warehouses, gen);
+    if(run_sequential) return new SyncSQLPaymentSequential(GetTimeout(), wid, C_c_last, C_c_id, num_warehouses, gen);
+    return new SyncSQLPayment(GetTimeout(), wid, C_c_last, C_c_id, num_warehouses, gen, tpcc_lifts, bftsmart_exec_txn_server_side);
   } else if (ttype < (freq += order_status_ratio)) {
     lastOp = "order_status";
-    return new SQLOrderStatus(GetTimeout(), wid, C_c_last, C_c_id, gen);
+    return new SyncSQLOrderStatus(GetTimeout(), wid, C_c_last, C_c_id, gen, bftsmart_exec_txn_server_side);
   } else if (ttype < (freq += stock_level_ratio)) {
     if (static_w_id) {
       did = stockLevelDId;
@@ -109,15 +128,15 @@ SyncTransaction* TPCCSQLClient::GetNextTransaction() {
       did = std::uniform_int_distribution<uint32_t>(1, 10)(gen);
     }
     lastOp = "stock_level";
-    return new SQLStockLevel(GetTimeout(), wid, did, gen);
+    return new SyncSQLStockLevel(GetTimeout(), wid, did, gen, bftsmart_exec_txn_server_side);
   } else {
     deliveryDId = 1;
     deliveryWId = wid;
     did = deliveryDId;
     delivery = true;
     lastOp = "delivery";
-    if(run_sequential) return new SQLDeliverySequential(GetTimeout(), wid, did, gen);
-    return new SQLDelivery(GetTimeout(), wid, did, gen);
+    if(run_sequential) return new SyncSQLDeliverySequential(GetTimeout(), wid, did, gen);
+    return new SyncSQLDelivery(GetTimeout(), wid, did, gen, bftsmart_exec_txn_server_side);
   }
 }
 

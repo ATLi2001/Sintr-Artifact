@@ -37,9 +37,11 @@ class Bal : public SmallbankTransaction {
 
   virtual ~Bal();
 
-  transaction_status_t Execute(SyncClient &client);
+  transaction_status_t BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side = false);
 
- private:
+  virtual void SerializeTxnState(std::string &txnState) override;
+
+ protected:
   std::string cust;
   uint32_t timeout;
 };

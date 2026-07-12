@@ -1,0 +1,27 @@
+syntax = "proto2";
+
+package smallbank.validation.proto;
+
+message Amalgamate {
+  required string cust1 = 1;
+  required string cust2 = 2;
+}
+
+message Bal {
+  required string cust = 1;
+}
+
+message Deposit {
+  required string cust = 1;
+  required uint32 value = 2;
+}
+
+message Transact {
+  required string cust = 1;
+  required uint32 value = 2;
+}
+
+message WriteCheck {
+  required string cust = 1;
+  required uint32 value = 2;
+}

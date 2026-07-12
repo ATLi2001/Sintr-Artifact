@@ -1,0 +1,63 @@
+syntax = "proto2";
+
+package seats_sql.validation.proto;
+
+message CachedFlightMessage {
+    optional uint64 flight_id = 1;
+    optional uint64 airline_id = 2;
+    optional uint64 depart_ap_id = 3;
+    optional uint64 arrive_ap_id = 4;
+    optional uint64 depart_time = 5;
+}
+
+message DeleteReservation {
+    required CachedFlightMessage flight = 1;
+    required int64 f_id = 2;
+    required int64 c_id = 3;
+    required int64 ff_al_id = 4;
+    required string c_id_str = 5;
+    required string ff_c_id_str = 6;
+}
+
+message FindFlights {
+    required int64 depart_aid = 1;
+    required int64 arrive_aid = 3;
+    required int64 start_time = 4;
+    required int64 end_time = 5;
+    required int64 distance = 6;
+}
+
+message FindOpenSeats {
+    required CachedFlightMessage f_id = 1;
+}
+
+message NewReservation {
+    required int64 r_id = 1;
+    required int64 c_id = 2;
+    required int64 f_id = 3;
+    required CachedFlightMessage flight = 4;
+    required int64 seatnum = 5;
+    required double price = 6;
+    required uint64 time = 7;
+    required bool has_reservation = 8;
+    repeated int64 attributes = 9;
+}
+
+message UpdateCustomer {
+    required int64 c_id = 1;
+    required string c_id_str = 2;
+    required int64 update_ff = 3;
+    required int64 attr0 = 4;
+    required int64 attr1 = 5;
+}
+
+message UpdateReservation {
+    required int64 r_id = 1;
+    required int64 c_id = 2;
+    required CachedFlightMessage flight = 3;
+    required int64 f_id = 4;
+    required int64 curr_seat = 5;
+    required int64 seatnum = 6;
+    required int64 attr_idx = 7;
+    required int64 attr_val = 8;
+}

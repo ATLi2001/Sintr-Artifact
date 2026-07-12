@@ -31,8 +31,23 @@
 #include <random>
 
 #include "store/benchmark/async/sync_transaction_bench_client.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_lifts.h"
 
 namespace tpcc_sql {
+  
+enum SQLTPCCTransactionType {
+  SQL_TXN_NEW_ORDER = 0,
+  SQL_TXN_NEW_ORDER_SEQUENTIAL,
+  SQL_TXN_PAYMENT,
+  SQL_TXN_PAYMENT_SEQUENTIAL,
+  SQL_TXN_ORDER_STATUS,
+  SQL_TXN_STOCK_LEVEL,
+  SQL_TXN_DELIVERY,
+  SQL_TXN_DELIVERY_SEQUENTIAL,
+  SQL_TXN_POLICY_CHANGE,
+  NUM_TXN_TYPES
+};
+  
 
 class TPCCSQLClient : public SyncTransactionBenchClient {
  public:
@@ -43,8 +58,9 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
       uint32_t delivery_ratio, uint32_t payment_ratio, uint32_t order_status_ratio,
       uint32_t stock_level_ratio, bool static_w_id,
       uint32_t abortBackoff, bool retryAborted, uint32_t maxBackoff, uint32_t maxAttempts,
-      uint32_t timeout,
-      const std::string &latencyFilename = "");
+      uint32_t timeout, const std::string &policy_function_name,
+      bool bftsmart_exec_txn_server_side = false,
+      const std::string &latencyFilename = "", const std::string &govTxnConfigPath = "");
 
   virtual ~TPCCSQLClient();
 
@@ -68,10 +84,14 @@ class TPCCSQLClient : public SyncTransactionBenchClient {
   std::string lastOp;
 
  private:
+  bool bftsmart_exec_txn_server_side;
   bool delivery;
   uint32_t deliveryWId;
   uint32_t deliveryDId;
-
+  int count;
+  uint64_t id;
+  TPCCLifts tpcc_lifts;
+  size_t policyChangeCount = 0;
 };
 
 } //namespace tpcc_sql

@@ -38,7 +38,6 @@ class SyncDelivery : public SyncTPCCTransaction, public Delivery {
       std::mt19937 &gen);
   virtual ~SyncDelivery();
   virtual transaction_status_t Execute(SyncClient &client);
-
 };
 
 } // namespace tpcc

@@ -30,12 +30,15 @@
 #include <map>
 #include <fmt/core.h>
 
+#include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_utils.h"
 
 namespace tpcc_sql {
 
-SQLStockLevel::SQLStockLevel(uint32_t timeout, uint32_t w_id, uint32_t d_id,
-    std::mt19937 &gen) : TPCCSQLTransaction(timeout), w_id(w_id), d_id(d_id) {
+SQLStockLevel::SQLStockLevel(uint32_t w_id, uint32_t d_id,
+    std::mt19937 &gen) : w_id(w_id), d_id(d_id) {
   min_quantity = std::uniform_int_distribution<uint8_t>(10, 20)(gen);
 
   std::cerr << "STOCK_LEVEL (parallel)" << std::endl;
@@ -44,7 +47,7 @@ SQLStockLevel::SQLStockLevel(uint32_t timeout, uint32_t w_id, uint32_t d_id,
 SQLStockLevel::~SQLStockLevel() {
 }
 
-transaction_status_t SQLStockLevel::Execute(SyncClient &client) {
+transaction_status_t SQLStockLevel::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string query;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -56,7 +59,16 @@ transaction_status_t SQLStockLevel::Execute(SyncClient &client) {
   Debug("District: %u", d_id);
   //std::cerr << "warehouse: " << w_id << std::endl;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if (serialize) {
+    SQLStockLevel::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Select the specified row from District and extract the Next Order Id
   query = fmt::format("SELECT d_next_o_id FROM {} WHERE d_id = {} AND d_w_id = {}", DISTRICT_TABLE, d_id, w_id);
@@ -112,6 +124,34 @@ transaction_status_t SQLStockLevel::Execute(SyncClient &client) {
 
   Debug("COMMIT");
   return client.Commit(timeout);
+}
+
+void SQLStockLevel::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_STOCK_LEVEL));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::StockLevel curr_txn = validation::proto::StockLevel();
+  curr_txn.set_w_id(w_id);
+  curr_txn.set_d_id(d_id);
+  curr_txn.set_min_quantity(min_quantity);
+  std::vector<TPCC_Table> est_tables = SQLStockLevel::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
+}
+
+std::vector<TPCC_Table> SQLStockLevel::HeuristicFunction() {
+  return {DISTRICT, ORDER_LINE, STOCK};
 }
 
 } // namespace tpcc_sql

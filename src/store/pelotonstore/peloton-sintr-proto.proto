@@ -1,0 +1,53 @@
+syntax = "proto2";
+
+import "store/common/common-proto.proto";
+import "store/pelotonstore/pbft-proto.proto";
+
+package pelotonstore.proto;
+
+
+// Sintr specific messages
+
+message BeginValidateTxn {
+  required uint64 client_id = 1;
+  required uint64 client_seq_num = 2;
+  required TxnState txn_state = 3;
+}
+
+message BeginValidateTxnMessage {
+  oneof begin_one_of {
+    BeginValidateTxn begin_validate_txn = 1;
+    SignedMessage signed_begin_validate_txn = 2;
+  }
+}
+
+message ForwardSQLResult {
+  optional uint64 client_id = 1;
+  optional uint64 client_seq_num = 2;
+  required bytes sql_gen_id = 3;
+  required bytes sql_result = 4;
+  // holds readset and writeset
+  optional TransactionMessage txn_msg = 5;
+}
+
+message ForwardSQLResultMessage {
+  oneof forward_one_of {
+    ForwardSQLResult fwd_sql_result = 1;
+    SignedMessage signed_fwd_sql_result = 2;
+  }
+  // server signature on sql result
+  optional SignedMessage server_sql_sig = 3;
+}
+
+message FinishValidateTxnMessage {
+  // client_id is the client that is sending this message
+  required uint64 client_id = 1;
+  // validation_txn_seq_num is the sequence number of the txn that was validated
+  required uint64 validation_txn_seq_num = 2;
+  oneof validation_one_of {
+    bytes validation_txn_digest = 3;
+    SignedMessage signed_validation_txn_digest = 4;
+  }
+  // optionally can compare entire transaction directly
+  optional TransactionMessage val_txn_msg = 5;
+}

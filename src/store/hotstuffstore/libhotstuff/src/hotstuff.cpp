@@ -244,7 +244,7 @@ promise_t HotStuffBase::async_deliver_blk(const uint256_t &blk_hash,
             pm.resolve(storage->find_blk(blk_hash));
         });
 
-    fprintf(stderr, "[CPU:%d]: Deliver block %d", sched_getcpu());
+    // fprintf(stderr, "[CPU:%d]: Deliver block %d", sched_getcpu());
 
     auto it = blk_delivery_waiting.find(blk_hash);
     if (it != blk_delivery_waiting.end())
@@ -561,7 +561,7 @@ HotStuffBase::~HotStuffBase() {}
 static std::mutex batch_mutex;
 void HotStuffBase::batch(){
    
-    
+    assert(false);
     batch_mutex.lock();
 
 //         std::string dummy_digest(32, '0'); //+std::to_string(bubbles));

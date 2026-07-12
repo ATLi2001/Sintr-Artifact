@@ -303,11 +303,6 @@ void TCPTransport::ConnectTCP(const std::pair<TCPTransportAddress, TransportRece
         return;
     }
 
-    if (bufferevent_enable(bev, EV_READ|EV_WRITE) < 0) {
-        Panic("Failed to enable bufferevent");
-    }
-
-    // Tell the receiver its address
     struct sockaddr_in sin;
     socklen_t sinsize = sizeof(sin);
     if (getsockname(fd, (sockaddr *) &sin, &sinsize) < 0) {
@@ -385,7 +380,7 @@ TCPTransport::Register(TransportReceiver *receiver,
     BindToPort(fd, host, port);
 
     // Listen for connections
-    if (listen(fd, 5) < 0) {
+    if (listen(fd, 100) < 0) {
         PPanic("Failed to listen for TCP connections");
     }
 
@@ -925,9 +920,13 @@ TCPTransport::TCPOutgoingEventCallback(struct bufferevent *bev,
     transport->mtx.unlock_shared();
 
     if (what & BEV_EVENT_CONNECTED) {
-        Debug("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
+        Warning("Established outgoing TCP connection to server [g:%d][r:%d]", info->groupIdx, info->replicaIdx);
+        // enable writes after
+        if (bufferevent_enable(bev, EV_READ|EV_WRITE) < 0) {
+          Panic("Failed to enable bufferevent");
+        }
     } else if (what & BEV_EVENT_ERROR) {
-        Warning("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
+        Debug("Error on outgoing TCP connection to server [g:%d][r:%d]: %s",
                 info->groupIdx, info->replicaIdx,
                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
         bufferevent_free(bev);

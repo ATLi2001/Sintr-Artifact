@@ -16,6 +16,7 @@
 #include "store/common/partitioner.h"
 
 #include "store/common/query_result/query_result.h"
+#include "store/common/policy/policy_cache.h"
 
 #include <functional>
 #include <string>
@@ -46,6 +47,10 @@ typedef std::function<void()> commit_timeout_callback;
 typedef std::function<void()> abort_callback;
 typedef std::function<void()> abort_timeout_callback;
 
+// Callback / timeout for server-side transaction execution (BFTSmart only).
+typedef std::function<void(transaction_status_t)> txn_exec_callback;
+typedef std::function<void()> txn_exec_timeout_callback;
+
 typedef std::function<void(int, query_result::QueryResult*)> sql_callback; 
 typedef std::function<void(int)> sql_timeout_callback;
 
@@ -65,7 +70,7 @@ class Client {
 
   // Begin a transaction.
   virtual void Begin(begin_callback bcb, begin_timeout_callback btcb,
-      uint32_t timeout, bool retry = false) = 0;
+      uint32_t timeout, bool retry = false, const std::string &txnState = std::string()) = 0;
 
   // Get the value corresponding to key.
   virtual void Get(const std::string &key, get_callback gcb,
@@ -96,6 +101,14 @@ class Client {
   // Get the result (rows affected) for a given write SQL statement
   inline virtual void Write(std::string &write_statement, write_callback wcb,
       write_timeout_callback wtcb, uint32_t timeout, bool blind_write = false){Panic("This protocol store does not implement support for Write Statements"); };   //TODO: Can probably avoid using Callbacks at all. Just void write-through.
+
+  // Get the client policy cache; only supported for sintred protocols
+  inline virtual const PolicyCache& GetPolicyCache() const { Panic("This protocol store does not implement support for Policy Cache"); }
+
+  // lift the transaction
+  inline virtual void LiftTransaction(std::vector<std::string> &lift_keys) { Panic("This protocol store does not implement support for Transaction Lifting"); }
+  
+  inline virtual const std::map<std::string, std::string> &GetReadset() {Panic("This protocol store does not implement support for Fetching Transaction Readset");};
 
   inline const Stats &GetStats() const { return stats; }
 

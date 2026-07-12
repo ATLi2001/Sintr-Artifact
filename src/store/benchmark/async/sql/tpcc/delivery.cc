@@ -28,13 +28,15 @@
 
 #include <fmt/core.h>
 
+#include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_utils.h"
 
 namespace tpcc_sql {
 
-SQLDelivery::SQLDelivery(uint32_t timeout, uint32_t w_id, uint32_t d_id,
-    std::mt19937 &gen)
-    : TPCCSQLTransaction(timeout), w_id(w_id), d_id(d_id) {
+SQLDelivery::SQLDelivery(uint32_t w_id, uint32_t d_id,
+    std::mt19937 &gen) : w_id(w_id), d_id(d_id) {
   o_carrier_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen);
   ol_delivery_d = std::time(0);
 
@@ -44,7 +46,7 @@ SQLDelivery::SQLDelivery(uint32_t timeout, uint32_t w_id, uint32_t d_id,
 SQLDelivery::~SQLDelivery() {
 }
 
-transaction_status_t SQLDelivery::Execute(SyncClient &client) {
+transaction_status_t SQLDelivery::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results; 
@@ -56,7 +58,16 @@ transaction_status_t SQLDelivery::Execute(SyncClient &client) {
   Debug("District: %u", d_id);
   //std::cerr << "warehouse: " << w_id << std::endl;
 
-  client.Begin(timeout);
+  std::string txnState;
+  if (serialize) {
+    SQLDelivery::SerializeTxnState(txnState);
+  }
+
+  client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
   
   // (1) Retrieve the row from NEW-ORDER with the lowest order id
   //     If none is found, skip delivery of an order for this district. 
@@ -163,6 +174,35 @@ transaction_status_t SQLDelivery::Execute(SyncClient &client) {
 
   Debug("COMMIT");
   return client.Commit(timeout);
+}
+
+void SQLDelivery::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_DELIVERY));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Delivery curr_txn = validation::proto::Delivery();
+  curr_txn.set_sequential(false);
+  curr_txn.set_w_id(w_id);
+  curr_txn.set_d_id(d_id);
+  curr_txn.set_o_carrier_id(o_carrier_id);
+  curr_txn.set_ol_delivery_d(ol_delivery_d);
+  std::vector<TPCC_Table> est_tables = SQLDelivery::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
+}
+
+std::vector<TPCC_Table> SQLDelivery::HeuristicFunction() {
+  return {NEW_ORDER, ORDER, ORDER_LINE, CUSTOMER, EARLIEST_NEW_ORDER};
 }
 
 } // namespace tpcc_sql

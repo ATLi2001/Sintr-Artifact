@@ -28,13 +28,15 @@
 
 #include <fmt/core.h>
 
+#include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/common/common-proto.pb.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_utils.h"
 
 namespace tpcc_sql {
 
-SQLNewOrder::SQLNewOrder(uint32_t timeout, uint32_t w_id, uint32_t C,
-    uint32_t num_warehouses, std::mt19937 &gen) :
-    TPCCSQLTransaction(timeout), w_id(w_id) {
+SQLNewOrder::SQLNewOrder(uint32_t w_id, uint32_t C,
+    uint32_t num_warehouses, std::mt19937 &gen, const TPCCLifts &tpcc_lifts) : w_id(w_id), tpcc_lifts(tpcc_lifts) {
 
   d_id = std::uniform_int_distribution<uint32_t>(1, 10)(gen); 
   c_id = tpcc_sql::NURand(static_cast<uint32_t>(1023), static_cast<uint32_t>(1), static_cast<uint32_t>(3000), C, gen);
@@ -87,8 +89,8 @@ SQLNewOrder::SQLNewOrder(uint32_t timeout, uint32_t w_id, uint32_t C,
 
 SQLNewOrder::~SQLNewOrder() {
 } 
- 
-transaction_status_t SQLNewOrder::Execute(SyncClient &client) {
+
+transaction_status_t SQLNewOrder::BaseExecute(SyncClient &client, uint32_t timeout, bool serialize, bool bftsmart_exec_txn_server_side) {
   std::unique_ptr<const query_result::QueryResult> queryResult;
   std::string statement;
   std::vector<std::unique_ptr<const query_result::QueryResult>> results;
@@ -98,8 +100,16 @@ transaction_status_t SQLNewOrder::Execute(SyncClient &client) {
   Debug("NEW_ORDER (parallel)"); 
   
   Debug("Warehouse: %u", w_id);
+  std::string txnState;
+  if (serialize) {
+    SQLNewOrder::SerializeTxnState(txnState);
+  }
 
-  client.Begin(timeout);
+  client.Begin(timeout, txnState);
+
+  if(bftsmart_exec_txn_server_side) {
+    return client.Commit(timeout);
+  }
 
   // (1) Retrieve row from WAREHOUSE, extract tax rate
   statement = fmt::format("SELECT * FROM {} WHERE w_id = {}", WAREHOUSE_TABLE, w_id);
@@ -259,8 +269,52 @@ transaction_status_t SQLNewOrder::Execute(SyncClient &client) {
 
   client.asyncWait();
 
+  // determine if we should lift this transaction
+  if (tpcc_lifts.IsLiftedPolicyFunction()) {
+    Debug("LIFTING NEW ORDER TRANSACTION");
+    std::vector<std::string> lifts = tpcc_lifts.NewOrderLiftFunction(client.GetPolicyCache(), all_local, client.GetReadset());
+    client.LiftTransaction(lifts);
+  }
+
   Debug("COMMIT");
   return client.Commit(timeout);
 }
 
+void SQLNewOrder::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_NEW_ORDER));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::NewOrder curr_txn = validation::proto::NewOrder();
+  curr_txn.set_w_id(w_id);
+  curr_txn.set_d_id(d_id);
+  curr_txn.set_c_id(c_id);
+  curr_txn.set_ol_cnt(ol_cnt);
+  curr_txn.set_rbk(rbk);
+  curr_txn.set_sequential(false);
+  *curr_txn.mutable_o_ol_i_ids() = {o_ol_i_ids.begin(), o_ol_i_ids.end()};
+  *curr_txn.mutable_o_ol_supply_w_ids() = {o_ol_supply_w_ids.begin(), o_ol_supply_w_ids.end()};
+  *curr_txn.mutable_o_ol_quantities() = {o_ol_quantities.begin(), o_ol_quantities.end()};
+  *curr_txn.mutable_unique_items() = {unique_items.begin(), unique_items.end()};
+  curr_txn.set_o_entry_d(o_entry_d);
+  curr_txn.set_all_local(all_local);
+  std::vector<TPCC_Table> est_tables = SQLNewOrder::HeuristicFunction();
+  for(const auto& value : est_tables) {
+    curr_txn.add_est_tables((int)value);
+  }
+
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
+}
+
+std::vector<TPCC_Table> SQLNewOrder::HeuristicFunction() {
+  return {DISTRICT, NEW_ORDER, ORDER, STOCK, ORDER_LINE};
+}
+ 
 } // namespace tpcc_sql

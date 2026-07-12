@@ -39,18 +39,20 @@
 #include "store/common/timestamp.h"
 #include "store/common/transaction.h"
 #include "store/common/common-proto.pb.h"
+#include "store/common/frontend/client.h"
 #include "store/bftsmartstore/pbft-proto.pb.h"
 #include "store/bftsmartstore/server-proto.pb.h"
 
 #include "store/bftsmartstore/bftsmartagent.h"
 
 #include <map>
+#include <mutex>
 #include <string>
 
 namespace bftsmartstore {
 
 // status, key, value
-typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&)> read_callback;
+typedef std::function<void(int, const std::string&, const std::string &, const Timestamp&, const proto::SignedMessage&, const proto::CommitProof&)> read_callback;
 typedef std::function<void(int, const std::string&)> read_timeout_callback;
 
 typedef std::function<void(int, const proto::TransactionDecision&)> prepare_callback;
@@ -65,7 +67,7 @@ class ShardClient : public TransportReceiver {
   /* Constructor needs path to shard config. */
   ShardClient(const transport::Configuration& config, Transport *transport,
       uint64_t client_id, uint64_t group_idx, const std::vector<int> &closestReplicas_,
-      bool signMessages, bool validateProofs,
+      bool signMessages, bool validateProofs, bool signClientProposals,
       KeyManager *keyManager, Stats* stats, bool order_commit, bool validate_abort, const std::string& bftsmart_config_path);
   ~ShardClient();
 
@@ -93,6 +95,13 @@ class ShardClient : public TransportReceiver {
 
   void Abort(std::string& txn_digest, const proto::ShardSignedDecisions& dec);
 
+  // Send a TxnExecRequest through BFTSmart ordering.
+  // ecb is called when a TxnExecReply arrives (same type as commit_callback).
+  void SendTxnExecRequest(const std::string &serializedTxnState,
+      uint64_t client_id, uint64_t client_seq_num,
+      commit_callback ecb,
+      uint32_t timeout);
+
  private:
    uint64_t start_time;
    uint64_t total_elapsed = 0;
@@ -102,6 +111,7 @@ class ShardClient : public TransportReceiver {
   Transport *transport; // Transport layer.
   int group_idx; // which shard this client accesses
   bool signMessages;
+  bool signClientProposals;
   bool validateProofs;
   KeyManager *keyManager;
   int client_id;
@@ -123,6 +133,7 @@ class ShardClient : public TransportReceiver {
     Timestamp maxTs;
     std::string maxValue;
     proto::CommitProof maxCommitProof;
+    proto::SignedMessage signedMsg;
 
     // the current status of the reply (default to fail)
     uint64_t status;
@@ -181,6 +192,24 @@ class ShardClient : public TransportReceiver {
   std::unordered_map<std::string, PendingSignedPrepare> pendingSignedPrepares;
   std::unordered_map<std::string, PendingWritebackReply> pendingWritebacks;
 
+  // Pending server-side execution requests: key = client_seq_num
+  struct PendingTxnExec {
+    commit_callback ecb;
+    Timeout *timeout;
+    // unsigned path: track ok/failed replica ids
+    std::unordered_set<uint64_t> receivedOkIds;
+    std::unordered_set<uint64_t> receivedFailedIds;
+    // signed path: track ok/failed replica ids with signatures
+    std::unordered_map<uint64_t, std::string> receivedValidSigs;
+    std::unordered_map<uint64_t, std::string> receivedFailedSigs;
+    // status of first ok reply (to forward to ecb)
+    int32_t okStatus{0};
+    int32_t failStatus{2};
+  };
+  std::unordered_map<uint64_t, PendingTxnExec> pendingTxnExecs;
+  std::mutex pendingTxnExecsMutex;
+
+  void HandleTxnExecReply(const proto::TxnExecReply &reply, const proto::SignedMessage &signedMsg);
 
   // verify that the proof asserts that the the value was written to the key
   // at the given timestamp

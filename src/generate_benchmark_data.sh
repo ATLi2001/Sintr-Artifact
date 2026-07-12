@@ -23,7 +23,7 @@ GENERATOR_NAME=sql_${BENCHMARK_NAME}_generator
 
 cd store/benchmark/async/sql/$BENCHMARK_NAME
 
-if [ "$BENCHMARK_NAME" = "tpcc" ]; then
+if [[ "$BENCHMARK_NAME" = "tpcc" || "$BENCHMARK_NAME" = "tpcc-lifting" ]]; then
 	./$GENERATOR_NAME -num_warehouses=$NUM_WAREHOUSES
 fi
 

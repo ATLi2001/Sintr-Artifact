@@ -43,6 +43,10 @@
 #include "store/common/frontend/sync_client.h"
 #include "store/common/frontend/async_client.h"
 #include "store/common/frontend/async_adapter_client.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/uniform_client_selector.h"
+#include "store/common/policy/zipf_client_selector.h"
+#include "store/common/sintring/params.h"
 #include "store/strongstore/client.h"
 #include "store/weakstore/client.h"
 #include "store/tapirstore/client.h"
@@ -56,12 +60,14 @@
 #include "store/benchmark/async/tpcc/sync/tpcc_client.h"
 #include "store/benchmark/async/tpcc/async/tpcc_client.h"
 #include "store/benchmark/async/sql/tpcc/tpcc_client.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_client.h"
 #include "store/benchmark/async/sql/seats/seats_client.h"
 #include "store/benchmark/async/sql/auctionmark/auctionmark_client.h"
 #include "store/benchmark/async/sql/tpcch/tpcch_client.h"
 #include "store/benchmark/async/smallbank/smallbank_client.h"
 #include "store/benchmark/async/toy/toy_client.h"
-#include "store/benchmark/async/rw-sql/rw-sql_client.h"
+#include "store/benchmark/async/rw-sql/sync/rw-sql_client.h"
+#include "store/benchmark/async/rw-sync/sync/rw-sync_client.h"
 
 // probs for tpcch 
 #include "store/benchmark/async/sql/tpcch/tpcch_constants.h"
@@ -69,6 +75,8 @@
 //protocol clients
 //Blackhole test printer
 #include "store/blackholestore/client.h"
+// Sintr
+#include "store/sintrstore/client.h"
 //Pesto
 #include "store/pequinstore/client.h"
 // Basil
@@ -98,6 +106,7 @@
 #include "store/benchmark/async/common/zipf_key_selector.h"
 
 #include <gflags/gflags.h>
+#include <valgrind/callgrind.h>
 
 #include <algorithm>
 #include <atomic>
@@ -114,6 +123,7 @@ enum protomode_t {
 	PROTO_TAPIR,
 	PROTO_WEAK,
 	PROTO_STRONG,
+  PROTO_SINTR,
   PROTO_PEQUIN,
   PROTO_INDICUS,
 	PROTO_PBFT,
@@ -141,10 +151,12 @@ enum benchmode_t {
   BENCH_TPCC_SYNC,
   BENCH_TOY,
   BENCH_TPCC_SQL,
+  BENCH_TPCC_LIFT_SQL,
   BENCH_RW_SQL, 
   BENCH_SEATS_SQL,
   BENCH_AUCTIONMARK_SQL,
-  BENCH_TPCCH_SQL
+  BENCH_TPCCH_SQL,
+  BENCH_RW_SYNC
 };
 
 enum keysmode_t {
@@ -303,6 +315,9 @@ DEFINE_uint64(indicus_batch_verification_timeout, 5, "batch verification timeout
 DEFINE_bool(pbft_order_commit, true, "order commit writebacks as well");
 DEFINE_bool(pbft_validate_abort, true, "validate abort writebacks as well");
 
+DEFINE_bool(bftsmart_exec_txn_server_side, false,
+    "When true, the BFTSmart client sends a TxnExecRequest to the server "
+    "(server-side execution mode) instead of running the transaction locally.");
 
 DEFINE_string(bftsmart_codebase_dir, "", "path to directory containing bftsmart configurations");
 
@@ -463,6 +478,94 @@ DEFINE_bool(pequin_use_semantic_cc, true, "use SemanticCC"); //Non-semantic mode
 DEFINE_bool(pequin_use_active_read_set, true, "store only keys that are Active w.r.t. to query predicate");
 
 
+// Sintr specific args
+DEFINE_string(clients_config_path, "", "path to client transport configuration file");
+DEFINE_uint64(sintr_max_val_threads, 1, "sintr max number of validation threads");
+DEFINE_bool(sintr_sign_fwd_read_results, true, "sintr sign forward read results");
+DEFINE_bool(sintr_sign_finish_validation, true, "sintr sign finish validation message");
+DEFINE_bool(sintr_debug_endorse_check, true, "sintr do a full debug validation txn endorsement check");
+DEFINE_bool(sintr_client_check_evidence, true, "sintr client check prepared committed evidence on forward read results");
+DEFINE_string(sintr_policy_function_name, "", "sintr policy function to use");
+DEFINE_string(sintr_policy_config_path, "", "path to sintr policy configuration file");
+DEFINE_uint32(sintr_read_include_policy, 0, "number indicates period of including policy in read messages, 0 indicates never");
+DEFINE_uint64(sintr_min_enable_pull_policies, 0, "minimum number of replicas needed to enable policy retrieval on retry, 0 indicates never");
+DEFINE_bool(sintr_hash_endorsements, true, "hash endorsements with transaction digest");
+DEFINE_bool(sintr_hide_timestamps, true, "do not send timestamp information to validation clients");
+DEFINE_bool(sintr_separate_transport, false, "Separate transport object for client2client comms");
+DEFINE_uint32(sintr_max_clients_connect, 0, "max number of clients a single client should connect to"); // set to 0 to disable
+DEFINE_bool(sintr_use_endorsement_cb, true, "use endorsement cb instead of busy waiting");
+DEFINE_int32(sintr_client_validation_heuristic, 0, "sintr number of clients to contact for validation relative to estimated policy; 0 = exact, -1 = all, >0 = that many more");
+
+DEFINE_bool(sintr_client_pin_cores, false, "sintr pin client cores for validation");
+DEFINE_bool(sintr_c2c_send_thread, false, "sintr separate thread for sending client-to-client communication");
+DEFINE_bool(sintr_c2c_receive_thread, false, "sintr separate thread for receiving client-to-client communication");
+DEFINE_bool(sintr_parallel_endorsement_check, false, "parallelize endorsement check");
+DEFINE_bool(sintr_parallel_query_sigs_check, false, "parallelize query signature check on forwarded query result");
+DEFINE_bool(sintr_blind_write_message, false, "send a blind write message to validating clients");
+DEFINE_bool(sintr_sort_writeset, true, "sort write set in order to get endorsement matches");
+DEFINE_bool(sintr_profile_one_client_load, false, "profiling with only one client load (other clients are validating only)");
+DEFINE_uint32(sintr_max_client_sig_check_threads, 0, "maximum number of parallel client threads for signature checks");
+
+// if sintr client has choice of which clients to contact, define the selection heuristic
+enum val_client_selector_t {
+  VAL_CLIENT_SELECTOR_UNKNOWN,
+  VAL_CLIENT_SELECTOR_RING, // choose validation client with next largest client id
+  VAL_CLIENT_SELECTOR_UNIFORM, // choose validation client uniformly at random
+  VAL_CLIENT_SELECTOR_ZIPF // choose validation client according to a zipf distribution
+};
+const std::string sintr_val_client_selector_args[] = {
+	"ring",
+  "uniform",
+  "zipf"
+};
+const val_client_selector_t sintr_val_client_selector[] {
+  VAL_CLIENT_SELECTOR_RING,
+  VAL_CLIENT_SELECTOR_UNIFORM,
+  VAL_CLIENT_SELECTOR_ZIPF
+};
+static bool ValidateSintrValClientSelector(const char* flagname,
+    const std::string &value) {
+  int n = sizeof(sintr_val_client_selector_args);
+  for (int i = 0; i < n; ++i) {
+    if (value == sintr_val_client_selector_args[i]) return true;
+  }
+  std::cerr << "Invalid value for --" << flagname << ": " << value << std::endl;
+  return false;
+}
+DEFINE_string(sintr_val_client_selector, sintr_val_client_selector_args[0], "if sintr client has choice of which clients to contact, define the selection heuristic");
+DEFINE_validator(sintr_val_client_selector, &ValidateSintrValClientSelector);
+DEFINE_double(sintr_val_client_selector_zipf, 0.5, "zipf parameter for sintr client validation client selector");
+DEFINE_bool(sintr_optimistic_receive_endorsement, true, "sintr receive endorsements optimistically (i.e. do not check for endorsement correctness before attempting to commit)");
+DEFINE_bool(sintr_client_ignore_policy_update, false, "sintr client ignores policy updates during a transaction");
+DEFINE_bool(sintr_client_estimate_policy, true, "sintr client estimates policy at start of transaction");
+DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
+
+const std::string sintr_fail_args[] = {
+  "ignore-validation-request",
+  "request-extra-validation"
+};
+const SintrFailureType sintr_fail[] {
+  SintrFailureType::IGNORE_VALIDATION_REQUEST, // ignore validation request from other clients
+  SintrFailureType::REQUEST_EXTRA_VALIDATION // request extra validation from other clients
+};
+static bool ValidateSintrFailureType(const char* flagname,
+    const std::string &value) {
+  int n = sizeof(sintr_fail_args);
+  for (int i = 0; i < n; ++i) {
+    if (value == sintr_fail_args[i]) {
+      return true;
+    }
+  }
+  std::cerr << "Invalid value for --" << flagname << ": " << value << std::endl;
+  return false;
+}
+DEFINE_string(sintr_failure_type, sintr_fail_args[0], "sintr specific type of failure");
+DEFINE_validator(sintr_failure_type, &ValidateSintrFailureType);
+DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inject a failure; byzantine clients are evenly spaced");
+DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
+DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
+DEFINE_bool(sintr_contact_all_byz_clients, false, "sintr contact all byz clients in system for validation");
+
 ///////////////////////////////////////////////////////////
 
 DEFINE_bool(debug_stats, false, "record stats related to debugging");
@@ -500,6 +603,7 @@ const std::string protocol_args[] = {
   "lock",
   "span-occ",
   "span-lock",
+  "sintr",
   "pequin",
   "indicus",
 	"pbft",
@@ -526,6 +630,7 @@ const protomode_t protomodes[] {
   PROTO_STRONG,
   PROTO_STRONG,
   //
+  PROTO_SINTR,
   PROTO_PEQUIN,
   PROTO_INDICUS,
   PROTO_PBFT,
@@ -592,10 +697,12 @@ const std::string benchmark_args[] = {
   "tpcc-sync",
   "toy",
   "tpcc-sql",
+  "tpcc-lift-sql",
   "rw-sql",
   "seats-sql",
   "auctionmark-sql",
-  "tpcch-sql"
+  "tpcch-sql",
+  "rw-sync"
 };
 const benchmode_t benchmodes[] {
   BENCH_RETWIS,
@@ -605,10 +712,12 @@ const benchmode_t benchmodes[] {
   BENCH_TPCC_SYNC,
   BENCH_TOY,
   BENCH_TPCC_SQL,
+  BENCH_TPCC_LIFT_SQL,
   BENCH_RW_SQL,
   BENCH_SEATS_SQL,
   BENCH_AUCTIONMARK_SQL,
-  BENCH_TPCCH_SQL
+  BENCH_TPCCH_SQL,
+  BENCH_RW_SYNC
 };
 static bool ValidateBenchmark(const char* flagname, const std::string &value) {
   int n = sizeof(benchmark_args);
@@ -651,6 +760,8 @@ DEFINE_int64(max_attempts, -1, "max number of attempts per transaction (or -1"
     " for unlimited).");
 DEFINE_uint64(message_timeout, 10000, "length of timeout for messages in ms.");
 DEFINE_uint64(max_backoff, 5000, "max time to sleep after aborting.");
+
+DEFINE_string(gov_txn_config_path, "", "path to file containing governance txns over time (empty = none)");
 
 const std::string partitioner_args[] = {
 	"default",
@@ -742,6 +853,7 @@ DEFINE_bool(rw_read_only, false, "only do read operations");
  */
 DEFINE_uint64(rw_read_only_rate, 0, "percentage of read only operations");
 DEFINE_bool(rw_secondary_condition, true, "whether the read/update has a condition on a secondary key");
+DEFINE_uint32(rw_sql_sim_delay, 0, "simulation delay for rw sql transactions in ms");
 
 DEFINE_uint64(num_tables, 1, "number of tables for rw-sql");
 DEFINE_uint64(num_keys_per_table, 1000, "number of keys per table for rw-sql");
@@ -821,11 +933,14 @@ std::vector<::OneShotClient *> oneShotClients;
 std::vector<::BenchmarkClient *> benchClients;
 std::vector<std::thread *> threads;
 Transport *tport;
+Transport *c2cport;
 transport::Configuration *config;
+transport::Configuration *clients_config;
 KeyManager *keyManager;
 Partitioner *part;
 KeySelector *keySelector;
 QuerySelector *querySelector;
+ClientSelector *sintrValClientSelector = nullptr;
 
 void Cleanup(int signal);
 void FlushStats();
@@ -954,7 +1069,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if ((mode == PROTO_INDICUS || mode == PROTO_PEQUIN) && read_dep == READ_DEP_UNKNOWN) {
+  if ((mode == PROTO_INDICUS || mode == PROTO_PEQUIN || mode == PROTO_SINTR) && read_dep == READ_DEP_UNKNOWN) {
     std::cerr << "Unknown read dep." << std::endl;
     return 1;
   }
@@ -968,7 +1083,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (mode == PROTO_PEQUIN && query_sync_quorum == QUERY_SYNC_QUORUM_UNKNOWN) { 
+  if ((mode == PROTO_PEQUIN || mode == PROTO_SINTR) && query_sync_quorum == QUERY_SYNC_QUORUM_UNKNOWN) { 
     std::cerr << "Unknown query sync quorum." << std::endl;
     return 1;
   }
@@ -982,7 +1097,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (mode == PROTO_PEQUIN && query_messages == QUERY_MESSAGES_UNKNOWN) { 
+  if ((mode == PROTO_PEQUIN || mode == PROTO_SINTR) && query_messages == QUERY_MESSAGES_UNKNOWN) { 
     std::cerr << "Unknown query messages." << std::endl;
     return 1;
   }
@@ -996,7 +1111,7 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (mode == PROTO_PEQUIN && query_merge_threshold == QUERY_SYNC_QUORUM_UNKNOWN) { 
+  if ((mode == PROTO_PEQUIN || mode == PROTO_SINTR) && query_merge_threshold == QUERY_SYNC_QUORUM_UNKNOWN) { 
     std::cerr << "Unknown query merge threshold." << std::endl;
     return 1;
   }
@@ -1010,11 +1125,34 @@ int main(int argc, char **argv) {
       break;
     }
   }
-  if (mode == PROTO_PEQUIN && sync_messages == QUERY_MESSAGES_UNKNOWN) { 
+  if ((mode == PROTO_PEQUIN || mode == PROTO_SINTR) && sync_messages == QUERY_MESSAGES_UNKNOWN) { 
     std::cerr << "Unknown sync messages." << std::endl;
     return 1;
   }
 
+  // parse sintr validation client selector
+  val_client_selector_t  sintr_val_client_selector_type = VAL_CLIENT_SELECTOR_UNKNOWN;
+  int numSintrValClientSelectors = sizeof(sintr_val_client_selector_args);
+  for (int i = 0; i < numSintrValClientSelectors; ++i) {
+    if (FLAGS_sintr_val_client_selector == sintr_val_client_selector_args[i]) {
+      sintr_val_client_selector_type = sintr_val_client_selector[i];
+      break;
+    }
+  }
+  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR) && sintr_val_client_selector_type == VAL_CLIENT_SELECTOR_UNKNOWN) {
+    std::cerr << "Unknown sintr validation client selector." << std::endl;
+    return 1;
+  }
+
+  // parse sintr failure type
+  SintrFailureType sintr_failure_type = SintrFailureType::IGNORE_VALIDATION_REQUEST;
+  int numSintrFailureTypes = sizeof(sintr_fail_args);
+  for (int i = 0; i < numSintrFailureTypes; ++i) {
+    if (FLAGS_sintr_failure_type == sintr_fail_args[i]) {
+      sintr_failure_type = sintr_fail[i];
+      break;
+    }
+  }
 
 //////////////////////////
 
@@ -1032,7 +1170,7 @@ int main(int argc, char **argv) {
 
   // parse retwis settings
   std::vector<std::string> keys;
-  if (benchMode == BENCH_RETWIS || benchMode == BENCH_RW) {
+  if (benchMode == BENCH_RETWIS || benchMode == BENCH_RW || benchMode == BENCH_RW_SYNC) {
     if (FLAGS_keys_path.empty()) {
       if (FLAGS_num_keys > 0) {
         for (size_t i = 0; i < FLAGS_num_keys; ++i) {
@@ -1062,9 +1200,15 @@ int main(int argc, char **argv) {
   switch (trans) {
     case TRANS_TCP:
       tport = new TCPTransport(0.0, 0.0, 0, false, 0, 1, FLAGS_indicus_hyper_threading, false, 0);
+      if(FLAGS_sintr_separate_transport) {
+        c2cport = new TCPTransport(0.0, 0.0, 0, false, 0, 1, FLAGS_indicus_hyper_threading, false, 0);
+      }
       break;
     case TRANS_UDP:
       tport = new UDPTransport(0.0, 0.0, 0, nullptr);
+      if(FLAGS_sintr_separate_transport) {
+        c2cport = new UDPTransport(0.0, 0.0, 0, nullptr);
+      }
       break;
     default:
       NOT_REACHABLE();
@@ -1072,7 +1216,9 @@ int main(int argc, char **argv) {
 
   Debug("transport protocol used: %d",trans);
 
-  if(FLAGS_zipf_coefficient == 1.0) Panic("Use a Zipf coefficient != 1.0. E.g. 0.99 or 1.01. 1.0 is not supported");
+  if(FLAGS_zipf_coefficient == 1.0 || FLAGS_sintr_val_client_selector_zipf == 1.0) {
+    Panic("Use a Zipf coefficient != 1.0. E.g. 0.99 or 1.01. 1.0 is not supported");
+  }
 
   switch (keySelectionMode) {
     case KEYS_UNIFORM:
@@ -1168,7 +1314,7 @@ int main(int argc, char **argv) {
     case WAREHOUSE:
     {
       if(FLAGS_sql_bench){
-        UW_ASSERT(benchMode == BENCH_TPCC_SQL);
+        UW_ASSERT(benchMode == BENCH_TPCC_SQL || benchMode == BENCH_TPCC_LIFT_SQL);
         part = new WarehouseSQLPartitioner(FLAGS_tpcc_num_warehouses, rand);
       }
       else{
@@ -1218,6 +1364,9 @@ int main(int argc, char **argv) {
       }
 
       tport->Stop();
+      if(FLAGS_sintr_separate_transport) {
+        c2cport->Stop();
+      }
     }
   };
 
@@ -1228,6 +1377,16 @@ int main(int argc, char **argv) {
     return -1;
   }
   config = new transport::Configuration(configStream);
+
+  std::ifstream clientsConfigStream(FLAGS_clients_config_path);
+  if ((mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR || mode == PROTO_HOTSTUFF || mode == PROTO_BFTSMART) && clientsConfigStream.fail()) {
+    std::cerr << "Did not provide valid clients config path for Sintr: " << FLAGS_clients_config_path
+              << std::endl;
+    return -1;
+  }
+  else if(mode == PROTO_SINTR || mode == PROTO_PELOTON_SMR || mode == PROTO_HOTSTUFF || mode == PROTO_BFTSMART) {
+    clients_config = new transport::Configuration(clientsConfigStream);
+  }
 
 	crypto::KeyType keyType;
   switch (FLAGS_indicus_key_type) {
@@ -1293,6 +1452,12 @@ int main(int argc, char **argv) {
     uint64_t pessimistic_quorum_bonus = FLAGS_indicus_optimistic_read_quorum? 0 : config->f; //by default only sends read to the same amount of replicas that we need replies from; if there are faults, we may need to send to more.
     uint64_t readDepSize = 0; //number of replica replies needed to form dependency  
     InjectFailure failure; //Type of Failure to be injected
+    SintrFailure sintrFailure(
+      sintr_failure_type,
+      FLAGS_num_client_hosts,
+      FLAGS_sintr_byz_client_total,
+      clientId
+    ); // type of sintr failure to be injected
 
     uint64_t syncQuorumSize = 0; //number of replies necessary to form a sync quorum
     uint64_t queryMessages = 0; //number of query messages sent to replicas to request sync replies
@@ -1300,12 +1465,27 @@ int main(int argc, char **argv) {
     uint64_t syncMessages = 0;    //number of sync messages sent to replicas to request result replies
     uint64_t resultQuorum = FLAGS_pequin_query_result_honest? config->f + 1 : 1;
 
-
     switch (mode) {
       case PROTO_POSTGRES:
       case PROTO_CRDB:
       case PROTO_TAPIR:
            break;
+      case PROTO_SINTR:
+        switch(sintr_val_client_selector_type) {
+          case VAL_CLIENT_SELECTOR_RING:
+            sintrValClientSelector = nullptr;
+            break;
+          case VAL_CLIENT_SELECTOR_UNIFORM:
+            sintrValClientSelector = new UniformClientSelector(client_total);
+            break;
+          case VAL_CLIENT_SELECTOR_ZIPF:
+            sintrValClientSelector = new ZipfClientSelector(client_total, FLAGS_sintr_val_client_selector_zipf);
+            break;
+          default:
+            NOT_REACHABLE();
+        }
+        Notice("Client %lu sintr failure enabled: %d", clientId, sintrFailure.enabled);
+
       case PROTO_PEQUIN:
          switch (query_sync_quorum) {
           case QUERY_SYNC_QUROUM_ONE:
@@ -1448,6 +1628,19 @@ int main(int argc, char **argv) {
       case PROTO_HOTSTUFF:
       case PROTO_PG_SMR:
       case PROTO_PELOTON_SMR:
+        switch(sintr_val_client_selector_type) {
+            case VAL_CLIENT_SELECTOR_RING:
+              sintrValClientSelector = nullptr;
+              break;
+            case VAL_CLIENT_SELECTOR_UNIFORM:
+              sintrValClientSelector = new UniformClientSelector(client_total);
+              break;
+            case VAL_CLIENT_SELECTOR_ZIPF:
+              sintrValClientSelector = new ZipfClientSelector(client_total, FLAGS_sintr_val_client_selector_zipf);
+              break;
+            default:
+              NOT_REACHABLE();
+        }
       case PROTO_BFTSMART:
       case PROTO_AUGUSTUS_SMART:
       case PROTO_AUGUSTUS:
@@ -1546,6 +1739,44 @@ int main(int argc, char **argv) {
 
 //Declare Protocol Clients
 
+    // non flag parameters are server only
+    ::SintrParameters sintr_params(
+      FLAGS_sintr_max_val_threads,
+      FLAGS_sintr_sign_fwd_read_results,
+      FLAGS_sintr_sign_finish_validation,
+      FLAGS_sintr_debug_endorse_check,
+      FLAGS_sintr_client_check_evidence,
+      FLAGS_sintr_policy_function_name,
+      FLAGS_sintr_policy_config_path,
+      FLAGS_sintr_read_include_policy,
+      FLAGS_sintr_client_validation_heuristic,
+      true,
+      FLAGS_sintr_client_pin_cores,
+      FLAGS_sintr_min_enable_pull_policies,
+      FLAGS_sintr_c2c_send_thread,
+      FLAGS_sintr_c2c_receive_thread,
+      FLAGS_sintr_parallel_endorsement_check,
+      true,
+      FLAGS_sintr_hash_endorsements,
+      FLAGS_sintr_parallel_query_sigs_check,
+      FLAGS_sintr_blind_write_message,
+      FLAGS_sintr_sort_writeset,
+      FLAGS_sintr_hide_timestamps,
+      FLAGS_sintr_max_client_sig_check_threads,
+      false, true,
+      FLAGS_sintr_optimistic_receive_endorsement,
+      FLAGS_sintr_client_ignore_policy_update,
+      FLAGS_sintr_client_estimate_policy,
+      FLAGS_sintr_hash_query_gen_id,
+      FLAGS_sintr_separate_transport,
+      FLAGS_sintr_max_clients_connect,
+      FLAGS_sintr_use_endorsement_cb,
+      sintrFailure,
+      FLAGS_sintr_include_readset_for_txn_policy,
+      FLAGS_sintr_enable_lifting,
+      FLAGS_sintr_contact_all_byz_clients
+    );
+
     switch (mode) {
     case PROTO_BLACKHOLE: {
         client = new blackhole::Client();
@@ -1557,6 +1788,74 @@ int main(int argc, char **argv) {
                                         tport, part, FLAGS_ping_replicas, FLAGS_tapir_sync_commit,
                                         TrueTime(FLAGS_clock_skew,
                                                  FLAGS_clock_error));
+        break;
+    }
+    case PROTO_SINTR: {
+      sintrstore::QueryParameters query_params(FLAGS_store_mode,
+                                                syncQuorumSize,
+                                                queryMessages,
+                                                mergeThreshold,
+                                                syncMessages,
+                                                resultQuorum,
+                                                FLAGS_pequin_retry_limit,
+                                                FLAGS_pequin_snapshot_prepared_k,
+                                                FLAGS_pequin_query_eager_exec,
+                                                FLAGS_pequin_query_point_eager_exec,
+                                                FLAGS_pequin_eager_plus_snapshot,
+                                                FLAGS_pequin_simulate_fail_eager_plus_snapshot,
+                                                false, //ForceReadFromSnapshot
+                                                FLAGS_pequin_query_read_prepared,
+                                                FLAGS_pequin_query_cache_read_set,
+                                                FLAGS_pequin_query_optimistic_txid,
+                                                FLAGS_pequin_query_compress_optimistic_txid, 
+                                                FLAGS_pequin_query_merge_active_at_client,
+                                                FLAGS_pequin_sign_client_queries,
+                                                false,    // FLAGS_pequin_sign_replica_to_replica_sync,
+                                                false,   //FLAGS_pequin_parallel_queries);
+                                                FLAGS_pequin_use_semantic_cc,
+                                                FLAGS_pequin_use_active_read_set,
+                                                0UL, 0UL); //monotonicity grace (first & second)
+
+        sintrstore::Parameters params(FLAGS_indicus_sign_messages,
+                                        FLAGS_indicus_validate_proofs, FLAGS_indicus_hash_digest,
+                                        FLAGS_indicus_verify_deps, FLAGS_indicus_sig_batch,
+                                        FLAGS_indicus_max_dep_depth, readDepSize,
+																				false, false,
+																				false, false,
+                                        FLAGS_indicus_merkle_branch_factor, failure,
+                                        FLAGS_indicus_multi_threading, FLAGS_indicus_batch_verification,
+																				FLAGS_indicus_batch_verification_size,
+																				false,
+																				false,
+																				false,
+																				FLAGS_indicus_parallel_CCC,
+																				false,
+																				FLAGS_indicus_all_to_all_fb,
+																			  FLAGS_indicus_no_fallback,
+																				FLAGS_indicus_relayP1_timeout,
+																			  false,
+                                        FLAGS_indicus_sign_client_proposals,
+                                        0,
+                                        query_params,
+                                        sintr_params);
+
+        Notice("Warmup secs: %d", FLAGS_warmup_secs);
+        client = new sintrstore::Client(config, clientId,
+                                          FLAGS_num_shards,
+                                          FLAGS_num_groups, closestReplicas, FLAGS_ping_replicas, tport, c2cport, part,
+                                          FLAGS_tapir_sync_commit, 
+                                          readMessages, readQuorumSize,
+                                          params, 
+                                          FLAGS_data_file_path, //table_registry
+                                          keyManager, 
+                                          FLAGS_indicus_phase1_decision_timeout,
+                                          FLAGS_warmup_secs,
+																					FLAGS_indicus_max_consecutive_abstains,
+                                          FLAGS_sql_bench,
+																					TrueTime(FLAGS_clock_skew, FLAGS_clock_error),
+                                          clients_config,
+                                          sintrValClientSelector,
+                                          keys); // for benchmarks that need keys, need to give the validating client access
         break;
     }
     case PROTO_PEQUIN: {
@@ -1673,10 +1972,10 @@ int main(int argc, char **argv) {
                                        FLAGS_num_groups, closestReplicas,
 																			  tport, part,
                                        readMessages, readQuorumSize,
-                                       FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-                                       keyManager,
+                                       FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, FLAGS_indicus_sign_client_proposals,
+                                       keyManager, sintr_params, clients_config, sintrValClientSelector,
 																			 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
-																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error));
+																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), keys);
         break;
     }
 
@@ -1696,11 +1995,15 @@ int main(int argc, char **argv) {
     case PROTO_PELOTON_SMR: {
         client = new pelotonstore::Client(*config, clientId, FLAGS_num_shards,
                                        FLAGS_num_groups, closestReplicas,
-																			  tport, part,
+																			  tport, c2cport, part,
                                        readMessages, readQuorumSize,
                                        FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-                                       keyManager,
-																			 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode, FLAGS_bftsmart_codebase_dir);
+                                       FLAGS_indicus_sign_client_proposals,
+                                       keyManager, sintr_params,
+                                       TrueTime(FLAGS_clock_skew, FLAGS_clock_error), clients_config,
+                                       sintrValClientSelector, FLAGS_pg_fake_SMR, FLAGS_pg_SMR_mode,
+                                       FLAGS_bftsmart_codebase_dir, keys,
+                                       FLAGS_bftsmart_exec_txn_server_side);
         break;
     }
 
@@ -1710,10 +2013,11 @@ int main(int argc, char **argv) {
 		                                       FLAGS_num_groups, closestReplicas,
 																					  tport, part,
 		                                       readMessages, readQuorumSize,
-		                                       FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs,
-		                                       keyManager, FLAGS_bftsmart_codebase_dir,
+		                                       FLAGS_indicus_sign_messages, FLAGS_indicus_validate_proofs, FLAGS_indicus_sign_client_proposals,
+		                                       keyManager, FLAGS_bftsmart_codebase_dir, sintr_params, clients_config, sintrValClientSelector,
 																					 FLAGS_pbft_order_commit, FLAGS_pbft_validate_abort,
-																					 TrueTime(FLAGS_clock_skew, FLAGS_clock_error));
+																					 TrueTime(FLAGS_clock_skew, FLAGS_clock_error), keys,
+                                         FLAGS_bftsmart_exec_txn_server_side);
 		        break;
 		    }
 
@@ -1784,9 +2088,11 @@ int main(int argc, char **argv) {
         break;
       case BENCH_TOY: 
       case BENCH_RW_SQL:
+      case BENCH_RW_SYNC:
       case BENCH_SMALLBANK_SYNC:
       case BENCH_TPCC_SYNC:
       case BENCH_TPCC_SQL:
+      case BENCH_TPCC_LIFT_SQL:
       case BENCH_SEATS_SQL:
       case BENCH_AUCTIONMARK_SQL:
       case BENCH_TPCCH_SQL:
@@ -1848,7 +2154,22 @@ int main(int argc, char **argv) {
             FLAGS_tpcc_delivery_ratio, FLAGS_tpcc_payment_ratio,
             FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
             FLAGS_static_w_id, FLAGS_abort_backoff,
-            FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout);
+            FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
+            FLAGS_sintr_policy_function_name, FLAGS_bftsmart_exec_txn_server_side, "", FLAGS_gov_txn_config_path);
+        break;
+      case BENCH_TPCC_LIFT_SQL:
+        UW_ASSERT(syncClient != nullptr);
+        bench = new tpcc_lift_sql::TPCCSQLClient(FLAGS_tpcc_run_sequential, *syncClient, *tport,
+            seed,
+            FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
+            FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
+            FLAGS_tpcc_num_warehouses, FLAGS_tpcc_w_id, FLAGS_tpcc_C_c_id,
+            FLAGS_tpcc_C_c_last, FLAGS_tpcc_new_order_ratio,
+            FLAGS_tpcc_delivery_ratio, FLAGS_tpcc_payment_ratio,
+            FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
+            FLAGS_static_w_id, FLAGS_abort_backoff,
+            FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
+            FLAGS_sintr_policy_function_name, "", FLAGS_gov_txn_config_path);
         break;
       case BENCH_SMALLBANK_SYNC:
         UW_ASSERT(syncClient != nullptr);
@@ -1860,7 +2181,7 @@ int main(int argc, char **argv) {
             FLAGS_timeout, FLAGS_balance_ratio, FLAGS_deposit_checking_ratio,
             FLAGS_transact_saving_ratio, FLAGS_amalgamate_ratio,
             FLAGS_num_hotspots, FLAGS_num_customers - FLAGS_num_hotspots, FLAGS_hotspot_probability,
-            FLAGS_customer_name_file_path);
+            FLAGS_customer_name_file_path, FLAGS_bftsmart_exec_txn_server_side);
         break;
       case BENCH_RW:
         UW_ASSERT(asyncClient != nullptr);
@@ -1870,6 +2191,15 @@ int main(int argc, char **argv) {
             FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
             FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff,
             FLAGS_max_attempts);
+        break;
+      case BENCH_RW_SYNC:
+        UW_ASSERT(syncClient != nullptr);
+        bench = new rwsync::RWSyncClient(keySelector, FLAGS_num_ops_txn, FLAGS_rw_read_only,
+            *syncClient, *tport, seed,
+            FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
+            FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
+            FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff,
+            FLAGS_max_attempts, FLAGS_timeout);
         break;
       case BENCH_TOY:
         UW_ASSERT(syncClient != nullptr);
@@ -1888,7 +2218,8 @@ int main(int argc, char **argv) {
             FLAGS_num_requests, FLAGS_exp_duration, FLAGS_delay,
             FLAGS_warmup_secs, FLAGS_cooldown_secs, FLAGS_tput_interval,
             FLAGS_abort_backoff, FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts,
-            FLAGS_timeout);
+            FLAGS_timeout, FLAGS_gov_txn_config_path, FLAGS_bftsmart_exec_txn_server_side, 
+            FLAGS_rw_sql_sim_delay);
         break;
       case BENCH_SEATS_SQL:
         {
@@ -1929,7 +2260,8 @@ int main(int argc, char **argv) {
                 FLAGS_tpcc_delivery_ratio, FLAGS_tpcc_payment_ratio,
                 FLAGS_tpcc_order_status_ratio, FLAGS_tpcc_stock_level_ratio,
                 FLAGS_static_w_id, FLAGS_abort_backoff,
-                FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout);
+                FLAGS_retry_aborted, FLAGS_max_backoff, FLAGS_max_attempts, FLAGS_message_timeout,
+                FLAGS_sintr_policy_function_name, "", FLAGS_gov_txn_config_path);
           }
           break;
       }
@@ -1945,21 +2277,30 @@ int main(int argc, char **argv) {
 	      tport->Timer(0, [bench, bdcb]() { bench->Start(bdcb); });
         break;
       case BENCH_RW_SQL:
+      case BENCH_RW_SYNC:
       case BENCH_SMALLBANK_SYNC:
       case BENCH_SEATS_SQL:
       case BENCH_AUCTIONMARK_SQL:
       case BENCH_TPCC_SQL:
+      case BENCH_TPCC_LIFT_SQL:
       case BENCH_TPCCH_SQL:
       case BENCH_TPCC_SYNC: {
         SyncTransactionBenchClient *syncBench = dynamic_cast<SyncTransactionBenchClient *>(bench);
         UW_ASSERT(syncBench != nullptr);
-        threads.push_back(new std::thread([syncBench, bdcb](){
+        // for profiling sintr isolate one client as executing and other as validating only
+        bool skip = FLAGS_sintr_profile_one_client_load && (mode == PROTO_SINTR) && (clientId > 0);
+        threads.push_back(new std::thread([syncBench, bdcb, skip](){
             syncBench->Start([](){});
             while (!syncBench->IsFullyDone()) {
               syncBench->StartLatency();
-              transaction_status_t result;
-              syncBench->SendNext(&result);
-              syncBench->IncrementSent(result);
+              if (!skip) {
+                transaction_status_t result;
+                syncBench->SendNext(&result);
+                syncBench->IncrementSent(result);
+              }
+              else {
+                syncBench->IncrementSent(1);
+              }
             }
             bdcb();
         }));
@@ -2005,7 +2346,12 @@ int main(int argc, char **argv) {
   std::signal(SIGTERM, Cleanup); //signal 15
   std::signal(SIGINT, Cleanup);
 
+  CALLGRIND_START_INSTRUMENTATION;
+
   tport->Run();
+
+  CALLGRIND_STOP_INSTRUMENTATION;
+  CALLGRIND_DUMP_STATS;
 
   Cleanup(0);
 
@@ -2041,9 +2387,16 @@ void Cleanup(int signal) {
   }
   tport->Stop();
   delete tport;
+  if(FLAGS_sintr_separate_transport) {
+    c2cport->Stop();
+    delete c2cport;
+  }
   delete part;
 
   if(FLAGS_sql_bench && querySelector != nullptr) delete querySelector;
+  if (sintrValClientSelector != nullptr) {
+    delete sintrValClientSelector;
+  }
   Notice("Finished Cleanup. Exiting");
   //exit(0); Allow segfault for duplicate config deletion to mask printing endless ASAN leaks that we can't fix...
 }

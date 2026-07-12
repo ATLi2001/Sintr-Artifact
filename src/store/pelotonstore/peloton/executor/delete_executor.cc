@@ -86,6 +86,20 @@ bool DeleteExecutor::DExecute() {
 
   auto current_txn = executor_context_->GetTransaction();
 
+  ///////////////////// sintr specific ///////////////////////////////////
+  std::shared_ptr<index::Index> primary_key_index = nullptr;
+  int index_count = target_table_->GetIndexCount();
+  for (int index_itr = index_count - 1; index_itr >= 0; --index_itr) {
+    auto index = target_table_->GetIndex(index_itr);
+    if (index == nullptr) continue;
+    if (index->GetIndexType() == IndexConstraintType::PRIMARY_KEY) {
+      primary_key_index = index;
+      break;
+    }
+  }
+  auto query_read_set_mgr = current_txn->GetQueryReadSetMgr();
+  ////////////////////////////////////////////////////////////////////////
+
   LOG_TRACE("Source tile : %p Tuples : %lu ", source_tile.get(),
             source_tile->GetTupleCount());
 
@@ -192,6 +206,24 @@ bool DeleteExecutor::DExecute() {
       // if the transaction is the owner of the tuple, then directly update in
       // place.
       LOG_TRACE("The current transaction is the owner of the tuple");
+
+      ///////////////////// sintr specific ///////////////////////////////////
+      if (current_txn->GetHasReadSetMgr()) {
+        // for sintr need the primary key cols
+        std::vector<std::string> primary_key_cols;
+        auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+        for (auto col : primary_index_columns_) {
+          Debug("Primary key column: %d", col);
+          auto val = old_tuple.GetValue(col);
+          primary_key_cols.push_back(val.ToString());
+        }
+
+        std::string &&encoded = EncodeTableRow(target_table_->GetName(), primary_key_cols);
+        Debug("encoded write set key is: %s.", encoded.c_str());
+        query_read_set_mgr->AddToWriteSet(std::move(encoded));
+      }
+      ////////////////////////////////////////////////////////////////////////
+
       transaction_manager.PerformDelete(current_txn, old_location);
     } else {
       bool is_ownable = is_owner ||
@@ -235,6 +267,24 @@ bool DeleteExecutor::DExecute() {
                                                    ResultType::FAILURE);
           return false;
         }
+
+        ///////////////////// sintr specific ///////////////////////////////////
+        if (current_txn->GetHasReadSetMgr()) {
+          // for sintr need the primary key cols
+          std::vector<std::string> primary_key_cols;
+          auto const &primary_index_columns_ = primary_key_index->GetMetadata()->GetKeyAttrs();
+          for (auto col : primary_index_columns_) {
+            Debug("Primary key column: %d", col);
+            auto val = old_tuple.GetValue(col);
+            primary_key_cols.push_back(val.ToString());
+          }
+
+          std::string &&encoded = EncodeTableRow(target_table_->GetName(), primary_key_cols);
+          Debug("encoded write set key is: %s.", encoded.c_str());
+          query_read_set_mgr->AddToWriteSet(std::move(encoded));
+        }
+        ////////////////////////////////////////////////////////////////////////
+
         transaction_manager.PerformDelete(current_txn, old_location,
                                           new_location);
 

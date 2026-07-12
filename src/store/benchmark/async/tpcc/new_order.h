@@ -37,7 +37,10 @@ namespace tpcc {
 class NewOrder : public TPCCTransaction {
  public:
   NewOrder(uint32_t w_id, uint32_t C, uint32_t num_warehouses, std::mt19937 &gen);
+  NewOrder() {};
   virtual ~NewOrder();
+
+  virtual void SerializeTxnState(std::string &txnState) override;
 
  protected:
   uint32_t w_id;
@@ -50,6 +53,8 @@ class NewOrder : public TPCCTransaction {
   std::vector<uint8_t> o_ol_quantities;
   uint32_t o_entry_d;
   bool all_local;
+  transaction_status_t BaseExecute(SyncClient &client, int timeout, bool serialize);
+  std::vector<Tables> HeuristicFunction();
 };
 
 }

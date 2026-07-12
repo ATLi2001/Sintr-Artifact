@@ -27,18 +27,28 @@
 #include "store/benchmark/async/smallbank/transact.h"
 #include "store/benchmark/async/smallbank/smallbank_transaction.h"
 #include "store/benchmark/async/smallbank/utils.h"
+#include "store/benchmark/async/smallbank/smallbank_common.h"
+#include "store/benchmark/async/smallbank/smallbank-validation-proto.pb.h"
 
 namespace smallbank {
 
 TransactSaving::TransactSaving(const std::string &cust, const int32_t value, const uint32_t timeout) : SmallbankTransaction(TRANSACT), cust(cust), value(value), timeout(timeout) {}
 TransactSaving::~TransactSaving() {
 }
-transaction_status_t TransactSaving::Execute(SyncClient &client) {
+transaction_status_t TransactSaving::BaseExecute(SyncClient &client, bool serialize, bool bftsmart_exec_txn_server_side) {
 	proto::SavingRow savingRow;
     proto::AccountRow accountRow;
 
-    client.Begin(timeout);
+    std::string txnState;
+    if(serialize) {
+        TransactSaving::SerializeTxnState(txnState);
+    }
+
+    client.Begin(timeout, txnState);
     Debug("TransactSaving for name %s with val %d", cust.c_str(), value);
+    if(bftsmart_exec_txn_server_side) {
+        return client.Commit(timeout);
+    }
     if (!ReadAccountRow(client, cust, accountRow, timeout)) {
         client.Abort(timeout);
         Debug("Aborted TransactSaving (AccountRow)");
@@ -61,6 +71,24 @@ transaction_status_t TransactSaving::Execute(SyncClient &client) {
     }
     InsertSavingRow(client, customerId, resultingBalance, timeout);
     return client.Commit(timeout);
+}
+
+void TransactSaving::SerializeTxnState(std::string &txnState) {
+  TxnState currTxnState = TxnState();
+  std::string txn_name;
+  txn_name.append(BENCHMARK_NAME);
+  txn_name.push_back('_');
+  txn_name.append(GetBenchmarkTxnTypeName(TRANSACT));
+  currTxnState.set_txn_name(txn_name);
+
+  validation::proto::Transact curr_txn = validation::proto::Transact();
+  curr_txn.set_cust(cust);
+  curr_txn.set_value(value);
+  std::string txn_data;
+  curr_txn.SerializeToString(&txn_data);
+  currTxnState.set_txn_data(txn_data);
+
+  currTxnState.SerializeToString(&txnState);
 }
 
 } // namespace smallbank

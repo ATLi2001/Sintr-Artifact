@@ -1,5 +1,6 @@
 #include "store/benchmark/async/sql/seats/update_customer.h"
 #include "store/benchmark/async/sql/seats/seats_constants.h"
+#include "store/benchmark/async/sql/seats/seats-sql-validation-proto.pb.h"
 #include <fmt/core.h>
 
 namespace seats_sql {
@@ -19,15 +20,28 @@ SQLUpdateCustomer::SQLUpdateCustomer(uint32_t timeout, std::mt19937 &gen, SeatsP
         attr1 = std::uniform_int_distribution<int64_t>(1, 100000)(gen);
     }
 
+SQLUpdateCustomer::SQLUpdateCustomer(uint32_t timeout, std::mt19937 &gen, SeatsProfile &profile, const validation::proto::UpdateCustomer &msg)
+    : SEATSSQLTransaction(timeout),
+      profile(profile),
+      c_id(msg.c_id()),
+      c_id_str(msg.c_id_str()),
+      update_ff(msg.update_ff()),
+      attr0(msg.attr0()),
+      attr1(msg.attr1()) {}
+
 SQLUpdateCustomer::~SQLUpdateCustomer() {}
 
-transaction_status_t SQLUpdateCustomer::Execute(SyncClient &client) {
+transaction_status_t SQLUpdateCustomer::BaseExecute(SyncClient &client, bool serialize) {
     std::unique_ptr<const query_result::QueryResult> queryResult;
     std::vector<std::unique_ptr<const query_result::QueryResult>> results; 
     std::string query;
 
     Debug("UPDATE_CUSTOMER");
-    client.Begin(timeout);
+    std::string txnState;
+    if(serialize) {
+        SQLUpdateCustomer::SerializeTxnState(txnState);
+    }
+    client.Begin(timeout, txnState);
 
     // if (c_id == NULL_ID) {
     //     if (c_id_str.size() == 0) Panic("no customer id nor customer id string given");
@@ -119,5 +133,28 @@ transaction_status_t SQLUpdateCustomer::Execute(SyncClient &client) {
     
     return client.Commit(timeout);
 }
+
+void SQLUpdateCustomer::SerializeTxnState(std::string &txnState) {
+    TxnState currTxnState = TxnState();
+    std::string txn_name;
+    txn_name.append(BENCHMARK_NAME);
+    txn_name.push_back('_');
+    txn_name.append(GetBenchmarkTxnTypeName(SQL_TXN_UPDATE_CUSTOMER));
+    currTxnState.set_txn_name(txn_name);
+    
+    validation::proto::UpdateCustomer curr_txn = validation::proto::UpdateCustomer();
+    curr_txn.set_c_id(c_id);
+    curr_txn.set_c_id_str(c_id_str);
+    curr_txn.set_update_ff(update_ff);
+    curr_txn.set_attr0(attr0);
+    curr_txn.set_attr1(attr1);
+
+    std::string txn_data;
+    curr_txn.SerializeToString(&txn_data);
+    currTxnState.set_txn_data(txn_data);
+
+    currTxnState.SerializeToString(&txnState);
+}
+
 
 }

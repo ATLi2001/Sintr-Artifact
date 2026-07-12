@@ -3,19 +3,19 @@
 The high-level requirements for building the codebase are: 
 - Operating System: Ubuntu 20.04 LTS, Focal 
    - We recommend running on Ubuntu 20.04 LTS, Focal, as a) the binaries of our experimental evaluation were built and run on this operating system, and b) our supplied images use Ubuntu 20.04 LTS.    - If you cannot do this locally, consider using a CloudLab controller machine - see section "Setting up CloudLab".
-   - Prior builds used Ubuntu 18.04 (Bionic) and should have remained backwards compatbile.
+   - Prior builds used Ubuntu 18.04 (Bionic) and should have remained backwards compatible.
    <!-- You may try to use Ubuntu 20.04.2 LTS instead of 18.04 LTS. However, we do not guarantee a fully documented install process, nor precise repicability of our results. Note, that using Ubuntu 20.04.2 LTS locally (or as control machine) to generate and upload binaries may *not* be compatible with running Cloudlab machines using our cloud lab images (as they use 18.04 LTS(. In order to use Ubuntu 20.04.2 LTS you may have to manually create new disk images for CloudLab instead of using our supplied images for 18.04 LTS to guarantee library compatibility. -->
    <!-- You may try to run on Mac, which has worked for us in the past, but is not documented in the following ReadMe and may not easily be trouble-shooted by us. -->
   
 - Requires python3 (install included below)
 - Requires C++ 17 
-- Requires Java Version >= 1.8 (for BFTSmart). We suggest you run the Open JDK java 11 version (install included below) as our Makefile is currently hard-coded for it. (install included below)
+- Requires Java Version >= 1.8 (for BFT-SMaRt). We suggest you run the Open JDK java 11 version (install included below) as our Makefile is currently hard-coded for it. (install included below)
 
 ### AUTOMATIC INSTALLATION
 
 Simply run `./install_dependencies.sh`. If the script is not set to executable by default, use `chmod +x install_dependencies.sh` first. 
-Each installation step will print `COMPLETE` upon completion, and require manual input to proceed -- please verify that the installation step proceeded without errors. In case of errors, please consult the [manual installation](#MANUAL-INSTALLATION) and [troubleshooting](#Troubleshooting) below.
-If successful, skip ahead to [Building binaries](#Building-binaries). 
+Each installation step will print `COMPLETE` upon completion, and require manual input to proceed -- please verify that the installation step proceeded without errors. In case of errors, please consult the [manual installation](#manual-installation) and [troubleshooting](#troubleshooting) below.
+If successful, skip ahead to [Building binaries](#building-binaries). 
 
 > :warning: NOTE: The script requires explicit manual interaction when installing IntelTBB and BFT-SMaRt requisites. Please consult the manual installation below.
 
@@ -38,14 +38,14 @@ Then, install the following tools:
 
 ### Development library dependencies
 
-The prototype implementations depend the following development libraries:
+The prototype implementations depend on the following development libraries:
 - libevent-openssl
 - libevent-pthreads
 - libevent-dev
 - libssl-dev
 - libgflags-dev
 - libsodium-dev
-- libbost-all-dev
+- libboost-all-dev
 - libuv1-dev
 - libpq-dev 
 - postgresql-server-dev-all
@@ -75,14 +75,14 @@ You may install them directly using:
    
    Run from folder where downloaded:
    ```
-   sudo apt install libfmt-dev_6.1.2+ds-2_amd64.deb
+   sudo apt install ./libfmt-dev_6.1.2+ds-2_amd64.deb
    ```
 
 In addition, you will need to install the following libraries from source (detailed instructions below):
 <!---- [Hoard Allocator](https://github.com/emeryberger/Hoard) -->
 - [jemalloc](https://github.com/jemalloc/jemalloc)
 - [taopq](https://github.com/taocpp/taopq)
-- [nlohman/json](https://github.com/nlohmann/json)
+- [nlohmann/json](https://github.com/nlohmann/json)
 - [googletest-1.10](https://github.com/google/googletest/releases/tag/release-1.10.0)
 - [protobuf-3.5.1](https://github.com/protocolbuffers/protobuf/releases/tag/v3.5.1)
 - [cryptopp-8.2](https://github.com/weidai11/cryptopp/releases/tag/CRYPTOPP_8_2_0) <!-- (htps://cryptopp.com/cryptopp820.zip)-->
@@ -116,25 +116,25 @@ We recommend organizing all installs in a dedicated folder:
 3. `cd src`
 4. `make`
 5. `sudo cp libhoard.so /usr/local/lib`
-6. `sudo echo 'export LD_PRELOAD=/usr/local/lib/libhoard.so' >> ~/.bashrc; source ~/.bashrc;` (once) or `export LD_PRELOAD=/usr/local/lib/libhoard.so` (everytime)
+6. `sudo echo 'export LD_PRELOAD=/usr/local/lib/libhoard.so' >> ~/.bashrc; source ~/.bashrc;` (once) or `export LD_PRELOAD=/usr/local/lib/libhoard.so` (every time)
 7. `cd ..`
 -->
 #### Installing jemalloc
 ```
 git clone https://github.com/jemalloc/jemalloc
 cd jemalloc
-./autogen.h
+./autogen.sh
 make
 sudo make install
-sudo echo 'export LD_PRELOAD=/usr/local/lib/libjemalloc.so' >> ~/.bashrc; source ~/.bashrc;`
-cd ..`
+sudo echo 'export LD_PRELOAD=/usr/local/lib/libjemalloc.so' >> ~/.bashrc; source ~/.bashrc;
+cd ..
 ```
 1. `git clone https://github.com/jemalloc/jemalloc`
 2. `cd jemalloc`
-3. `./autogen.h`
+3. `./autogen.sh`
 4. `make`
 5. `sudo make install`
-6. `sudo echo 'export LD_PRELOAD=/usr/local/lib/libjemalloc.so' >> ~/.bashrc; source ~/.bashrc;` (once) or `export LD_PRELOAD=/usr/local/lib/libjemalloc.so` (everytime)
+6. `sudo echo 'export LD_PRELOAD=/usr/local/lib/libjemalloc.so' >> ~/.bashrc; source ~/.bashrc;` (once) or `export LD_PRELOAD=/usr/local/lib/libjemalloc.so` (every time)
 7. `cd ..`
 
 #### Installing taopq 
@@ -158,19 +158,19 @@ Next, build taopq:
 7. `sudo ldconfig`
 8. `cd ..`
 
-#### Installing nlohman/json 
+#### Installing nlohmann/json 
 
 Download the library:
 
 1. `git clone https://github.com/nlohmann/json.git`
 2. `cd json`
 
-Next, build nlohman/json
+Next, build nlohmann/json
 
-4. `cmake .`
-6. `sudo make install`
-7. `sudo ldconfig`
-8. `cd ..`
+3. `cmake .`
+4. `sudo make install`
+5. `sudo ldconfig`
+6. `cd ..`
 
 
 #### Installing google test
@@ -207,8 +207,8 @@ Download the library:
 
 Alternatively, you may download and unzip from source: 
 
-1.`wget https://github.com/protocolbuffers/protobuf/releases/download/v3.5.1/protobuf-all-3.5.1.zip`
-2.`unzip protobuf-all-3.5.1.zip`
+1. `wget https://github.com/protocolbuffers/protobuf/releases/download/v3.5.1/protobuf-all-3.5.1.zip`
+2. `unzip protobuf-all-3.5.1.zip`
 
 Next, build protobuf:
 
@@ -255,11 +255,11 @@ Download the library:
 1. `git clone https://github.com/BLAKE3-team/BLAKE3`
 2. `cd BLAKE3/c`
 
-Create a shared libary:
+Create a shared library:
 
 3. `gcc -fPIC -shared -O3 -o libblake3.so blake3.c blake3_dispatch.c blake3_portable.c blake3_sse2_x86-64_unix.S blake3_sse41_x86-64_unix.S blake3_avx2_x86-64_unix.S blake3_avx512_x86-64_unix.S`
 
-Move the shared libary:
+Move the shared library:
 
 4. `sudo cp libblake3.so /usr/local/lib/`
 5. `sudo ldconfig`
@@ -276,7 +276,7 @@ Create a shared library:
 
 3. `gcc -fPIC -shared -O3 -m64 -o libed25519_donna.so ed25519.c -lssl -lcrypto`
 
-Move the shared libary:
+Move the shared library:
 
 4. `sudo cp libed25519_donna.so /usr/local/lib`
 5. `sudo ldconfig`
@@ -328,7 +328,7 @@ First, download the installation script:
 (To run the installation script you may have to manually install `apt -y install ncurses-term` if you do not have it already).
 
 Follow the installation instructions: 
-- It will either open a GUI installation interface if availalbe, or otherwise show the same within the shell (e.g. on a control machine)
+- It will either open a GUI installation interface if available, or otherwise show the same within the shell (e.g. on a control machine)
 - Select custom installation 
 - You need only "Intel oneAPI Threading Building Blocks". You may uncheck every other install -- In the shell use the space bar to uncheck all items marked with an X 
 - Skip Eclipse IDE configuration
@@ -340,20 +340,20 @@ If you installed Intel TBB with root access, it should be installed under `/opt/
 
 3. `source /opt/intel/oneapi/setvars.sh`
 
-Note, that this must be done everytime you open a new terminal. You may add it to your .bashrc to automate it:
+Note, that this must be done every time you open a new terminal. You may add it to your .bashrc to automate it:
 
 4. `echo source /opt/intel/oneapi/setvars.sh --force >> ~/.bashrc`
 5. `source ~/.bashrc`
 
-(When building on a Cloudlab controller instead of locally, the setvars.sh must be sourced manually everytime since bashrc will not be persisted across images. All other experiment machines will be source via the experiment scripts, so no further action is necessary there.)
+(When building on a CloudLab controller instead of locally, the setvars.sh must be sourced manually every time since bashrc will not be persisted across images. All other experiment machines will be sourced via the experiment scripts, so no further action is necessary there.)
 
 
-#### Additional prereq for BFTSmart 
+#### Additional prereq for BFT-SMaRt 
 
-First, install Java open jdk 1.11.0 in /usr/lib/jvm and export your LD_LIBRARY_Path:
+First, install Java open jdk 1.11.0 in /usr/lib/jvm and export your `LD_LIBRARY_PATH`:
 
-1. `sudo apt-get install openjdk-11-jdk` Confirm that `java-11-openjdk-amd64` it is installed in /usr/lib/jvm  
-2. `sudo echo 'export LD_LIBRARY_PATH=/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server:$LD_LIBRARY_PATH' >> ~/.bashrc; source ~/.bashrc` (once) or `export LD_LIBRARY_PATH=/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server:$LD_LIBRARY_PATH` (everytime)
+1. `sudo apt-get install openjdk-11-jdk` Confirm that `java-11-openjdk-amd64` is installed in /usr/lib/jvm  
+2. `sudo echo 'export LD_LIBRARY_PATH=/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server:$LD_LIBRARY_PATH' >> ~/.bashrc; source ~/.bashrc` (once) or `export LD_LIBRARY_PATH=/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server:$LD_LIBRARY_PATH` (every time)
 3. `sudo ldconfig`
 
 If it is not installed in `/usr/lib/jvm` then source the `LD_LIBRARY_PATH` according to your install location and adjust the following lines in the Makefile with your path:
@@ -363,7 +363,7 @@ If it is not installed in `/usr/lib/jvm` then source the `LD_LIBRARY_PATH` accor
 - `CFLAGS += -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux`
 - `LDFLAGS += -L/usr/lib/jvm/java-1.11.0-openjdk-amd64/lib/server -ljvm`  (adjust this)
 
-Afterwards, navigate to `/usr/lib/jvm/java-11-openjdk-amd64/conf/security/java.security`and comment out (or remove) the following line: `jdk.tls.disabledAlgorithms=SSLv3, TLSv1, RC4, DES, MD5withRSA, DH keySize < 1024 EC keySize < 224, 3DES_EDE_CBC, anon, NULL`
+Afterwards, navigate to `/usr/lib/jvm/java-11-openjdk-amd64/conf/security/java.security` and comment out (or remove) the following line: `jdk.tls.disabledAlgorithms=SSLv3, TLSv1, RC4, DES, MD5withRSA, DH keySize < 1024 EC keySize < 224, 3DES_EDE_CBC, anon, NULL`
 
 #### Additional prereq for CockroachDB 
 
@@ -371,7 +371,7 @@ First, download and extract cockroach.
 - `wget https://binaries.cockroachdb.com/cockroach-v22.2.2.linux-amd64.tgz --no-check-certificate`
 - `tar -xf cockroach-v22.2.2.linux-amd64.tgz`
 
-Then, create a directory to store the external libraries. Copy the libararies to the directory:
+Then, create a directory to store the external libraries. Copy the libraries to the directory:
 - `sudo mkdir -p /usr/local/lib/cockroach`
 - `sudo cp -i cockroach-v22.2.2.linux-amd64/lib/libgeos.so /usr/local/lib/cockroach/`
 - `sudo cp -i cockroach-v22.2.2.linux-amd64/lib/libgeos_c.so /usr/local/lib/cockroach/`
@@ -385,7 +385,7 @@ For any Troubleshooting consult: https://www.cockroachlabs.com/docs/stable/insta
    
 Once you have completed all required installation steps you can build the binaries:
 
-Navigate to `Pequin-Artifact/src` and build:
+Navigate to `src/` and build:
 - `make -j $(nproc)`
 
 If you run into issues, consult the troubleshooting section below, or contact us directly.
@@ -393,7 +393,7 @@ If you run into issues, consult the troubleshooting section below, or contact us
 ### Confirming that binaries work locally (optional sanity check)
 You may want to run a simple toy single server/single client experiment using Pesto to validate that the binaries you built do not have an obvious error.
 
-Navigate to `Pequin-Artifact/src`. Run `./keygen.sh` to generate local priv/pub key-pairs. 
+Navigate to `src/`. Run `./keygen.sh` to generate local priv/pub key-pairs. 
 
 Run server:
 
@@ -403,7 +403,7 @@ Then run client:
 
 `./client-tester.sh`
 
-The client should finish within 10 seconds and the output file `client-0.out` should include summary of the transactions committed at the end.
+The client should finish within 10 seconds and the output file `src/0_local_test_outputs/client-0.out` should include a summary of the transactions committed at the end.
 
 
 ### Troubleshooting:
@@ -416,7 +416,7 @@ The client should finish within 10 seconds and the output file `client-0.out` sh
    <!--- Hoard: usr/local/lib -->
    - Jemalloc: usr/local/lib
    - TaoPq:  /usr/local/lib
-   - Nlohman/JSON:  /usr/local/include
+   - Nlohmann/JSON:  /usr/local/include
    - Secp256k1:  /usr/local/lib
    - CryptoPP: /usr/local/include  /usr/local/bin   /usr/local/share
    - Blake3: /usr/local/lib
@@ -428,7 +428,7 @@ The client should finish within 10 seconds and the output file `client-0.out` sh
 
  Run `export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/share:/usr/local/include:$LD_LIBRARY_PATH` (adjusted depending on where `make install` puts the libraries) followed by `sudo ldconfig`.
    
-2. If you installed more Intel API tools besides "Intel oneAPI Threading Building Blocks", then the Intel oneAPI installation might have  installed a different protobuf binary. Since the application pre-pends the Intel install locations to `PATH`, you may need to manually pre-pend the original directories. Run: `export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH`
+2. If you installed more Intel API tools besides "Intel oneAPI Threading Building Blocks", then the Intel oneAPI installation might have installed a different protobuf binary. Since the application pre-pends the Intel install locations to `PATH`, you may need to manually pre-pend the original directories. Run: `export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH`
 
 3. Building googletest differently:
    
@@ -436,10 +436,10 @@ The client should finish within 10 seconds and the output file `client-0.out` sh
    1. `git clone https://github.com/google/googletest.git`
    2. `cd googletest`
    3. `git checkout release-1.10.0`
-   4. `rm -rf <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
-   5. `mkdir <Relative-Path>/Pequin-Artifact/src/.obj`
-   6. `cp -r googletest <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
-   7. `cd <Relative-Path>/Pequin-Artifact/src/.obj/gtest`
+   4. `rm -rf <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
+   5. `mkdir <Relative-Path>/Sintr-Artifact/src/.obj`
+   6. `cp -r googletest <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
+   7. `cd <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
    8. `cmake CMakeLists.txt`
    9. `make -j $(nproc)`
    10. `g++ -isystem ./include -I . -pthread -c ./src/gtest-all.cc`

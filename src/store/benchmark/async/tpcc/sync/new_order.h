@@ -38,7 +38,6 @@ class SyncNewOrder : public SyncTPCCTransaction, public NewOrder {
       uint32_t num_warehouses, std::mt19937 &gen);
   virtual ~SyncNewOrder();
   virtual transaction_status_t Execute(SyncClient &client);
-
 };
 
 } // namespace tpcc

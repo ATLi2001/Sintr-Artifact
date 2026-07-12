@@ -1,0 +1,432 @@
+/***********************************************************************
+ *
+ * Copyright 2024 Daniel Lee <dhl93@cornell.edu>
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use, copy,
+ * modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ **********************************************************************/
+
+#include "store/common/sintring/estimate_policy.h"
+#include "store/common/policy/policy_id.h"
+#include "store/benchmark/async/tpcc/validation/tpcc_transaction.h"
+#include "store/benchmark/async/tpcc/validation/delivery.h"
+#include "store/benchmark/async/tpcc/validation/new_order.h"
+#include "store/benchmark/async/tpcc/validation/payment.h"
+#include "store/benchmark/async/tpcc/tpcc-validation-proto.pb.h"
+#include "store/benchmark/async/tpcc/tpcc_common.h"
+#include "store/benchmark/async/rw-sql/rw-sql_common.h"
+#include "store/benchmark/async/rw-sql/rw-sql-validation-proto.pb.h"
+#include "store/benchmark/async/rw-sql/validation/rw-sql_val_transaction.h"
+#include "store/benchmark/async/rw-sync/rw-base_transaction.h"
+#include "store/benchmark/async/rw-sync/rw-validation-proto.pb.h"
+#include "store/benchmark/async/rw-sync/validation/rw-val_transaction.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc/tpcc_schema.h"
+#include "store/benchmark/async/sql/tpcc/validation/delivery.h"
+#include "store/benchmark/async/sql/tpcc/validation/new_order.h"
+#include "store/benchmark/async/sql/tpcc/validation/payment.h"
+#include "store/benchmark/async/sql/tpcc/tpcc-sql-validation-proto.pb.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_common.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc_schema.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/delivery.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/new_order.h"
+#include "store/benchmark/async/sql/tpcc-lifting/validation/payment.h"
+#include "store/benchmark/async/sql/tpcc-lifting/tpcc-lift-sql-validation-proto.pb.h"
+
+
+void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache) const {
+  std::string txn_name(protoTxnState.txn_name());
+
+  size_t pos = txn_name.find("_");
+  if (pos == std::string::npos)
+  {
+    Panic("Received unexpected txn name: %s", txn_name.c_str());
+  }
+
+  std::string txn_bench = txn_name.substr(0, pos);
+  std::string txn_type = txn_name.substr(pos + 1);
+
+  if (txn_bench == ::tpcc::BENCHMARK_NAME) {
+    // TODO: see if there's a better way to associate Table to policy...
+    // right now hardcoded table to policy ID
+    ::google::protobuf::RepeatedField<::google::protobuf::uint32> repeated_values;
+
+    ::tpcc::TPCCTransactionType tpcc_txn_type = ::tpcc::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (tpcc_txn_type) {
+      case ::tpcc::TXN_DELIVERY:
+      {
+        ::tpcc::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_NEW_ORDER:
+      {
+        ::tpcc::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_ORDER_STATUS:
+      {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_PAYMENT:
+      {
+        ::tpcc::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc::TXN_STOCK_LEVEL:
+      {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc::validation::proto::StockLevel valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      default:
+      {
+        // don't change policyClient, keep policy stored as null
+        break;
+      }
+    }
+    if (repeated_values.size() > 0) {
+      for (int const &value : repeated_values) {
+        const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench));
+        UW_ASSERT(temp_policy != nullptr);
+        policyClient->AddPolicy(temp_policy);
+      }
+    }
+  }
+  else if (txn_bench == ::rwsync::BENCHMARK_NAME) {
+    ::rwsync::validation::proto::RWSync valTxnData;
+    UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+    if (valTxnData.read_only() || valTxnData.num_ops() <= 1) {
+      // txn will only have reads, so keep it as the default initialized policy
+    }
+    else {
+      // txn will have writes
+      const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+      UW_ASSERT(temp_policy != nullptr);
+      policyClient->AddPolicy(temp_policy);
+    }
+  }
+  else if (txn_bench == ::tpcc_sql::BENCHMARK_NAME) {
+    ::google::protobuf::RepeatedField<::google::protobuf::uint32> repeated_values;
+
+    ::tpcc_sql::SQLTPCCTransactionType tpcc_txn_type = ::tpcc_sql::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (tpcc_txn_type) {
+      case ::tpcc_sql::SQL_TXN_DELIVERY: {
+        ::tpcc_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_DELIVERY_SEQUENTIAL: {
+        ::tpcc_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_NEW_ORDER: {
+        ::tpcc_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_NEW_ORDER_SEQUENTIAL: {
+        ::tpcc_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_ORDER_STATUS: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_sql::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_PAYMENT: {
+        ::tpcc_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
+        ::tpcc_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_sql::SQL_TXN_STOCK_LEVEL: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_sql::validation::proto::StockLevel valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      default:
+        break;
+    }
+    if (repeated_values.size() > 0) {
+      for (int const &value : repeated_values) {
+        const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench));
+        UW_ASSERT(temp_policy != nullptr);
+        policyClient->AddPolicy(temp_policy);
+      }
+    }
+  } else if (txn_bench == ::rwsql::BENCHMARK_NAME) {
+    ::rwsql::RWSQLTransactionType rwsql_txn_type = ::rwsql::GetBenchmarkTxnTypeEnum(txn_type);
+
+    switch (rwsql_txn_type) {
+      case ::rwsql::RW_SQL_TRANSACTION: {
+        ::rwsql::validation::proto::RWSql valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (valTxnData.read_only() && !include_readset_for_txn_policy) {
+          break;
+        }
+
+        if (policy_function_name.empty() || policy_function_name == "basic_id") {
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+          UW_ASSERT(temp_policy != nullptr);
+          policyClient->AddPolicy(temp_policy);
+        }
+        else if (policy_function_name == "rw_sql_policy_change_grouped") {
+          for (const uint64_t &t : valTxnData.tables()) {
+            const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
+            UW_ASSERT(temp_policy != nullptr);
+            policyClient->AddPolicy(temp_policy);
+          }
+        }
+        else {
+          Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
+        }
+        break;
+      }
+      case ::rwsql::RW_SQL_POLICY_CHANGE: {
+        ::rwsql::validation::proto::RWSqlPolicyChange valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        if (policy_function_name.empty() || policy_function_name == "basic_id") {
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+          UW_ASSERT(temp_policy != nullptr);
+          policyClient->AddPolicy(temp_policy);
+        }
+        else if (policy_function_name == "rw_sql_policy_change_grouped") {
+          const Policy *temp_policy = policyCache.Get(PolicyIdString(valTxnData.policy_id()));
+          UW_ASSERT(temp_policy != nullptr);
+          policyClient->AddPolicy(temp_policy);
+        }
+        else {
+          Panic("Unexpected policy function name for RW-SQL: %s", policy_function_name.c_str());
+        }
+        break;
+      }
+    }
+  } else if (txn_bench == ::tpcc_lift_sql::BENCHMARK_NAME) {
+    ::google::protobuf::RepeatedField<::google::protobuf::uint32> repeated_values;
+
+    ::tpcc_lift_sql::SQLTPCCTransactionType tpcc_txn_type = ::tpcc_lift_sql::GetBenchmarkTxnTypeEnum(txn_type);
+    switch (tpcc_txn_type) {
+      case ::tpcc_lift_sql::SQL_TXN_DELIVERY: {
+        ::tpcc_lift_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_DELIVERY_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::Delivery valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_NEW_ORDER: {
+        ::tpcc_lift_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_NEW_ORDER_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::NewOrder valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_ORDER_STATUS: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_lift_sql::validation::proto::OrderStatus valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_PAYMENT: {
+        ::tpcc_lift_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_PAYMENT_SEQUENTIAL: {
+        ::tpcc_lift_sql::validation::proto::Payment valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      case ::tpcc_lift_sql::SQL_TXN_STOCK_LEVEL: {
+        // this is a read only txn, so only include if include_readset_for_txn_policy is true
+        if (!include_readset_for_txn_policy) {
+          break;
+        }
+        ::tpcc_lift_sql::validation::proto::StockLevel valTxnData;
+        UW_ASSERT(valTxnData.ParseFromString(protoTxnState.txn_data()));
+        repeated_values = valTxnData.est_tables();
+        break;
+      }
+      default:
+        break;
+    }
+    if (repeated_values.size() > 0) {
+      for (int const &value : repeated_values) {
+        const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(value, txn_bench));
+        UW_ASSERT(temp_policy != nullptr);
+        policyClient->AddPolicy(temp_policy);
+      }
+    }
+  }
+  else {
+    // return default policy ID (policy ID 0)
+    const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+    UW_ASSERT(temp_policy != nullptr);
+    policyClient->AddPolicy(temp_policy);
+  }
+}
+
+std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string &txn_bench) const {
+  if(txn_bench == ::tpcc::BENCHMARK_NAME) {
+    ::tpcc::Tables table = static_cast<::tpcc::Tables>(t);
+    switch (table) {
+    case ::tpcc::Tables::WAREHOUSE:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::DISTRICT:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::CUSTOMER:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::HISTORY:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::NEW_ORDER:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::ORDER:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::ORDER_LINE:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::ITEM:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::STOCK:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::ORDER_BY_CUSTOMER:
+      return PolicyIdString(0);
+    case ::tpcc::Tables::EARLIEST_NEW_ORDER:
+      return PolicyIdString(0);
+    default:
+      Panic("Received unexpected table type for tpcc: %d", t);
+    }
+  } else if(txn_bench == ::tpcc_sql::BENCHMARK_NAME) {
+    ::tpcc_sql::TPCC_Table table = static_cast<::tpcc_sql::TPCC_Table>(t);
+    switch (table) {
+      case ::tpcc_sql::TPCC_Table::WAREHOUSE:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::DISTRICT:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::CUSTOMER:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::HISTORY:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::NEW_ORDER:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::ORDER:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::ORDER_LINE:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::ITEM:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::STOCK:
+        return PolicyIdString(0);
+      case ::tpcc_sql::TPCC_Table::EARLIEST_NEW_ORDER:
+        return PolicyIdString(0);
+      default:
+        Panic("Received unexpected table type for tpcc sql: %lu", t);
+    }
+  }
+  else if(txn_bench == ::tpcc_lift_sql::BENCHMARK_NAME) {
+    ::tpcc_lift_sql::TPCC_Table table = static_cast<::tpcc_lift_sql::TPCC_Table>(t);
+    switch (table) {
+      case ::tpcc_lift_sql::TPCC_Table::WAREHOUSE:
+        return PolicyIdString(0);
+      case ::tpcc_lift_sql::TPCC_Table::DISTRICT:
+        return PolicyIdString(0);
+      case ::tpcc_lift_sql::TPCC_Table::CUSTOMER:
+        return PolicyIdString(0);
+      case ::tpcc_lift_sql::TPCC_Table::HISTORY:
+        return PolicyIdString(0);
+      case ::tpcc_lift_sql::TPCC_Table::NEW_ORDER:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::ORDER:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::ORDER_LINE:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::ITEM:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::STOCK:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::EARLIEST_NEW_ORDER:
+        return PolicyIdString(1);
+      case ::tpcc_lift_sql::TPCC_Table::LATEST_ORDER:
+        return PolicyIdString(1);
+      default:
+        Panic("Received unexpected table type for tpcc sql: %lu", t);
+    }
+  }
+  else if(txn_bench == ::rwsql::BENCHMARK_NAME) {
+    return rwsql::GetPolicyIdForTable(t, policy_function_name);
+  }
+}

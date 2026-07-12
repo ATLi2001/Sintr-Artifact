@@ -3,19 +3,23 @@
 F=0
 NUM_GROUPS=1
 CONFIG="0_local_test_outputs/configs/shard-r1.config"
-PROTOCOL="pequin"
+POLICY_CONFIG="0_local_test_outputs/configs/policy-weight1.config"
+POLICY_FUNCTION="basic_id"
+PROTOCOL="sintr"
 STORE=${PROTOCOL}store
 ZIPF=0.0
-NUM_OPS_TX=2
-NUM_KEYS_IN_DB=1
+NUM_OPS_TX=1
+NUM_KEYS_IN_DB=10000
 KEY_PATH="keys"
+STORE_MODE="true"
 SQL_BENCH="true"
 
+# FILE_PATH="/usr/local/etc/tpcc-1-warehouse"
 FILE_PATH="0_local_test_outputs/rw-sql/rw-sql.json"
-#FILE_PATH="store/benchmark/async/sql/tpcc/sql-tpcc-tables-schema.json"
+# FILE_PATH="store/benchmark/async/sql/tpcc/sql-tpcc-tables-schema.json"
 #FILE_PATH="store/benchmark/async/sql/seats/sql-seats-tables-schema.json"
 #FILE_PATH="store/benchmark/async/sql/auctionmark/sql-auctionmark-tables-schema.json"
-
+DEBUG_FILES="store/$STORE/server.cc"
 
 while getopts f:g:p:s:z:o:k: option; do
 case "${option}" in
@@ -46,6 +50,19 @@ for j in `seq 0 $((NUM_GROUPS-1))`; do
 	for i in `seq 0 $((N-1))`; do
 		#echo Starting Replica $(($i+$j*$N))
 		#valgrind --tool=callgrind --instr-atstart=no
-		DEBUG=store/$STORE/ store/server --config_path $CONFIG --group_idx $j --num_groups $NUM_GROUPS --num_shards $NUM_GROUPS --replica_idx $i --protocol $PROTOCOL --num_keys $NUM_KEYS_IN_DB --sql_bench=$SQL_BENCH --data_file_path $FILE_PATH --debug_stats --indicus_key_path $KEY_PATH --optimize_tpool_for_dev_machine &> ./0_local_test_outputs/server$(($i+$j*$N)).out &
+		DEBUG=$DEBUG_FILES store/server --config_path $CONFIG --group_idx $j \
+			--num_groups $NUM_GROUPS --num_shards $NUM_GROUPS --replica_idx $i --protocol $PROTOCOL \
+			--num_keys $NUM_KEYS_IN_DB --sql_bench=$SQL_BENCH \
+			--data_file_path $FILE_PATH \
+			--debug_stats --indicus_key_path $KEY_PATH \
+			--value_size -1 \
+			--indicus_sig_batch 1 \
+			--store_mode=$STORE_MODE --indicus_hash_digest=true --indicus_verify_deps=false \
+			--indicus_parallel_CCC=false \
+    		--pequin_query_cache_read_set=false \
+			--sintr_policy_config_path $POLICY_CONFIG --sintr_policy_function_name $POLICY_FUNCTION \
+			--indicus_no_fallback=false --sintr_parallel_endorsement_check=false \
+			--sintr_hash_endorsements=true \
+			--sintr_hide_timestamps=false &> ./0_local_test_outputs/server$(($i+$j*$N)).out &
 	done;
 done;

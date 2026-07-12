@@ -41,6 +41,15 @@
 #include "store/pelotonstore/shardclient.h"
 #include "store/common/query_result/query_result.h"
 #include "store/common/query_result/query_result_proto_wrapper.h"
+#include "store/pelotonstore/client2client.h"
+#include "store/common/sintring/endorsement_client.h"
+#include "store/common/policy/policy-proto.pb.h"
+#include "store/common/policy/policy_parse_client.h"
+#include "store/common/policy/policy_function.h"
+#include "store/common/policy/client_selector.h"
+#include "store/common/policy/policy_cache.h"
+#include "store/common/sintring/params.h"
+#include "store/common/sintring/client_common.h"
 
 #include <unordered_map>
 
@@ -53,15 +62,19 @@ class Client : public ::Client {
  public:
   Client(const transport::Configuration& config, uint64_t id, int nShards, int nGroups,
       const std::vector<int> &closestReplicas,
-      Transport *transport, Partitioner *part,
+      Transport *transport, Transport *c2cport, Partitioner *part,
       uint64_t readMessages, uint64_t readQuorumSize, bool signMessages,
-      bool validateProofs, KeyManager *keyManager,
-      TrueTime timeserver = TrueTime(0,0), bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "");
+      bool validateProofs, bool signClientProposals, KeyManager *keyManager,
+      SintrParameters sintr_params, TrueTime timeserver = TrueTime(0,0),
+      transport::Configuration *clients_config = nullptr, ClientSelector *valClientSelector = nullptr,
+      bool fake_SMR = true, uint64_t SMR_mode = 0, const std::string &PG_BFTSMART_config_path = "",
+      const std::vector<std::string> &keys = std::vector<std::string>(),
+      bool execTxnServerSide = false);
   ~Client();
 
   // Begin a transaction.
   virtual void Begin(begin_callback bcb, begin_timeout_callback btcb,
-      uint32_t timeout, bool retry = false) override;
+      uint32_t timeout, bool retry = false, const std::string &txnState = std::string()) override;
 
   // Get the value corresponding to key.
   virtual void Get(const std::string &key, get_callback gcb,
@@ -89,6 +102,8 @@ class Client : public ::Client {
   virtual void Write(std::string &write_statement, write_callback wcb,write_timeout_callback wtcb, uint32_t timeout, bool blind_write = false) override;
 
  private:
+  void getEndorsementsAndCommit(try_commit_callback tccb, commit_timeout_callback ctcb, uint32_t timeout, uint64_t seq_num);
+  void handlePolicyUpdateOnKey(const std::string &key);
   std::shared_ptr<tao::pq::connection> connection;
   std::shared_ptr<tao::pq::transaction> transaction;
 
@@ -98,6 +113,8 @@ class Client : public ::Client {
   uint64_t client_id;
   /* Configuration State */
   transport::Configuration config;
+  // client to client transport configuration state
+  transport::Configuration *clients_config;
   // Number of replica groups.
   uint64_t nshards;
   // Number of replica groups.
@@ -111,6 +128,7 @@ class Client : public ::Client {
   uint64_t readQuorumSize;
   bool signMessages;
   bool validateProofs;
+  bool signClientProposals;
   KeyManager *keyManager;
   // TrueTime server.
   TrueTime timeServer;
@@ -122,13 +140,41 @@ class Client : public ::Client {
   uint64_t SMR_mode; //Control whether to run without replication (0), with Hotstuff (1) or BFTSmart (2)
   const std::string& PG_BFTSMART_config_path; //Path for BFTSmart (if in use)
 
+  // When true, Begin() serialises the TxnState and forwards it to the server
+  // via a TxnExecRequest; Query/Write become no-ops and Commit waits for the reply.
+  bool execTxnServerSide = false;
+  // Per-seq_num commit callbacks and early-arriving results (open-loop safe).
+  std::unordered_map<uint64_t, commit_callback> pending_exec_ccbs;
+  std::unordered_map<uint64_t, transaction_status_t> pending_exec_results;
+
+  // Handles a TxnExecReply from the server (server-side execution mode).
+  void HandleTxnExecReply(uint64_t seq_num, transaction_status_t status);
+
+  // track overall readset and writeset of transaction
+  TransactionMessage *txn_msg;
+  std::unordered_set<std::string> perTxnPolicyIds;
+
 
   /* Debug State */
   std::unordered_map<std::string, uint32_t> statInts;
 
   uint64_t exec_start_us;
   uint64_t exec_end_us;
+  // client for other clients
+  Client2Client *c2client;
 
+  // collect endorsements for current transaction
+  EndorsementClient *endorseClient;
+  PolicyParseClient policyParseClient;
+  policy_id_function policyIdFunction;
+  std::unique_ptr<PolicyCache> policyCache;
+
+  ClientSelector *valClientSelector;
+  SintrParameters sintr_params;
+  const std::vector<std::string> &keys;
+  std::mt19937 rand;
+  std::unordered_map<uint64_t, bool> endorsementsReceived;
+  Timeout *waitingForEndorsementsTimeout;
 };
 
 } // namespace pelotonstore

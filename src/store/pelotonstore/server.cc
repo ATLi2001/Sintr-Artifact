@@ -26,10 +26,15 @@
  **********************************************************************/
 #include "store/pelotonstore/server.h"
 #include "store/pelotonstore/common.h"
+#include "store/pelotonstore/serverclient.h"
 #include "store/common/transaction.h"
+#include "store/common/util.h"
+#include "store/common/frontend/sync_client.h"
+#include "store/common/sintring/validation_parse_client.h"
 #include <iostream>
 #include <sys/time.h>
 #include <cstdlib>
+#include <atomic>
 #include <fmt/core.h>
 #include <regex>
 
@@ -42,12 +47,14 @@ using namespace std;
 
 Server::Server(const transport::Configuration& config, KeyManager *keyManager, std::string &table_registry_path,
   int groupIdx, int idx, int numShards, int numGroups, bool signMessages,
-  bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp, bool localConfig, int SMR_mode,
+  bool validateProofs, uint64_t timeDelta, Partitioner *part, Transport* tp, bool localConfig, int SMR_mode, SintrParameters sintr_params,
+  bool execTxnServerSide, uint32_t simDelay, bool fake_SMR,
   TrueTime timeServer) : 
   config(config), keyManager(keyManager),
   groupIdx(groupIdx), idx(idx), id(groupIdx * config.n + idx),
   numShards(numShards), numGroups(numGroups), signMessages(signMessages),
-  validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp), localConfig(localConfig), timeServer(timeServer) {
+  validateProofs(validateProofs),  timeDelta(timeDelta), part(part), tp(tp), localConfig(localConfig),
+  sintr_params(sintr_params), execTxnServerSide(execTxnServerSide), timeServer(timeServer), simDelay(simDelay),fake_SMR(fake_SMR) {
 
   int num_threads = std::thread::hardware_concurrency();
   if(num_threads > 8) {
@@ -71,11 +78,23 @@ Server::Server(const transport::Configuration& config, KeyManager *keyManager, s
     if(SMR_mode == 2) number_of_threads = 7;
   tp->AddIndexedThreads(number_of_threads);
 
+    // load policy store
+  Notice("Loading Policy Store from config file: %s. ", sintr_params.policyConfigPath.c_str());
+  LoadPolicyStore(sintr_params.policyConfigPath);
+
+  policyIdFunction = GetPolicyIdFunction(sintr_params.policyFunctionName);
+  if(execTxnServerSide) {
+    InitExecClients();
+  }
 
   Notice("Peloton Server Id: %d", idx);
 }
 
 Server::~Server() {
+  for (auto *sc : syncClientsForExec) delete sc;
+  for (auto *sc : serverClientsForExec) delete sc;
+  syncClientsForExec.clear();
+  serverClientsForExec.clear();
   delete table_store;
 }
 
@@ -122,6 +141,15 @@ static uint64_t counter = 0;
 //Synchronous Execution Interface -> Exec synchronously and return result (no threads)
 std::vector<::google::protobuf::Message*> Server::Execute(const string& type, const string& msg) {
   Debug("Execute: %s", type.c_str());
+
+  // Handle TxnExecRequest separately — it bypasses normal ParseMsg/ProcessReq.
+  proto::TxnExecRequest txnExecRequest;
+  if (type == txnExecRequest.GetTypeName()) {
+    UW_ASSERT(execTxnServerSide);
+    txnExecRequest.ParseFromString(msg);
+    auto thread_id = getThreadID(txnExecRequest.client_id());
+    return ExecuteTxnServerSide(txnExecRequest, thread_id);
+  }
   
   std::vector<::google::protobuf::Message*> results;
  
@@ -143,6 +171,21 @@ std::vector<::google::protobuf::Message*> Server::Execute(const string& type, co
 void Server::Execute_Callback(const string& type, const string& msg, std::function<void(std::vector<google::protobuf::Message*>& )> ecb) {
   Debug("Execute with callback: %s", type.c_str());
 
+  // Handle TxnExecRequest separately — it bypasses normal ParseMsg/ProcessReq.
+  proto::TxnExecRequest txnExecRequest;
+  if (type == txnExecRequest.GetTypeName()) {
+    UW_ASSERT(execTxnServerSide);
+    txnExecRequest.ParseFromString(msg);
+    // Dispatch to a thread based on client_id so different clients run in parallel.
+    auto thread_id = getThreadID(txnExecRequest.client_id());
+    auto f = [this, txnExecRequest, ecb, thread_id](){
+      std::vector<::google::protobuf::Message*> results = ExecuteTxnServerSide(txnExecRequest, thread_id);
+      tp->IssueCB(std::bind(ecb, results), (void*) true);
+      return (void*) true;
+    };
+    tp->DispatchIndexedTP_noCB(thread_id, f);
+    return;
+  }
 
   uint64_t req_id;
   uint64_t client_id;
@@ -193,7 +236,7 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   bool begin = false;
   bool active = c->second.GetTxStatus(tx_id, begin, terminate_last); //Checks if there is an ongoing Txn (and if it is active); if not, starts a new Tx.
   if(terminate_last){
-    if(idx == 0) Panic("Call terminate last on leader? ProcessReq. client: %lu. txn: %lu. req: %lu", client_id, tx_id, req_id);
+    if(idx == 0 && fake_SMR) Panic("Call terminate last on leader? ProcessReq. client: %lu. txn: %lu. req: %lu", client_id, tx_id, req_id);
     table_store->Abort(client_id, tx_id-1); //NOTE: This is only to help with FakeSMR mode. It's not technically necessary.
   }
   if(begin) table_store->Begin(client_id, tx_id);
@@ -206,7 +249,8 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
       return HandleSQL_RPC(c, req_id, client_id, tx_id, sql_rpc->query());
     } 
     else if (type == try_commit_template.GetTypeName()) {
-      return HandleTryCommit(c, req_id, client_id, tx_id);
+      proto::TryCommit *try_commit = (proto::TryCommit*) req;
+      return HandleTryCommit(c, req_id, client_id, tx_id, *try_commit);
     } 
     else if (type == user_abort_template.GetTypeName()) {
       //Panic("This case should not be triggered in simple RW-SQL test with single client");
@@ -266,12 +310,17 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   //     stmt += " ON CONFLICT DO NOTHING";
   // }
   // std::string result = table_store->ExecTransactional(stmt, client_id, tx_id, result_status, error_msg);
-  
+
+  // query_read_set_mgr will directly modify reply read set and write set
+  QueryReadSetMgr query_read_set_mgr(reply->mutable_txn_msg());
   //result == serialized ProtoWrapper result
-  std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg);
+  std::string result = table_store->ExecTransactional(query, client_id, tx_id, result_status, error_msg, query_read_set_mgr);
 
   bool terminate = true;
-
+  if(!sintr_params.serverSkipEndorsementCheck) {
+    reply->set_sql_gen_id(SQLGenId(query, client_id, tx_id, sintr_params.hashQueryGenId));
+    Debug("sql gen ID is: %s for query %s client id %lu seq num %d", BytesToHex(reply->sql_gen_id(), 16).c_str(), query.c_str(), client_id, tx_id);
+  }
   if (result_status == peloton_peloton::ResultType::SUCCESS) {  //NOTE: If an INSERT failed it will still be treated as Success, but rows_affected will be 0
     Debug("Success! [%d:%d:%d]. Query: %s", client_id, tx_id, req_id, query.c_str());
     terminate = false;
@@ -318,8 +367,33 @@ uint64_t Server::getThreadID(const uint64_t &client_id){
   return reply;
 }
 
-::google::protobuf::Message* Server::HandleTryCommit(ClientStateMap::accessor &c, uint64_t req_id, uint64_t client_id, uint64_t tx_id) {
+::google::protobuf::Message* Server::HandleTryCommit(ClientStateMap::accessor &c,
+    uint64_t req_id, uint64_t client_id, uint64_t tx_id, const proto::TryCommit &try_commit) {
   Debug("Trying to commit a txn %d", req_id);
+  if (false) {
+    for (const auto &read : try_commit.txn_msg().readset()) {
+      Debug("read key: %s", read.key().c_str());
+    }
+    for (const auto &write : try_commit.txn_msg().writeset()) {
+      Debug("write key: %s", write.key().c_str());
+    }
+  }
+  if(!sintr_params.serverSkipEndorsementCheck && !execTxnServerSide) {
+    //TODO: Parallelize the endorsement check
+    if(!EndorsementCheck(TransactionDigest(try_commit.txn_msg()), &try_commit)) {
+      //TODO: abort...
+      // for now just panic
+      for (const auto &read : try_commit.txn_msg().readset()) {
+        Warning("read key: %s", read.key().c_str());
+      }
+      for (const auto &write : try_commit.txn_msg().writeset()) {
+        Warning("write key: %s", write.key().c_str());
+        Warning("write value: %s", BytesToHex(write.value(), 16).c_str());
+      }
+      Panic("Endorsement check failed for txn %s for client_id %lu seq num %lu ",
+        BytesToHex(TransactionDigest(try_commit.txn_msg()), 16).c_str(), client_id, tx_id);
+    }
+  }
  
   proto::TryCommitReply* reply = new proto::TryCommitReply();
   reply->set_req_id(req_id);
@@ -602,9 +676,357 @@ void Server::LoadTableRows(const std::string &table_name, const std::vector<std:
     }
 }
 
+//TODO: Move to common folder
+void Server::LoadPolicyStore(const std::string &policyStorePath) {
+  std::unique_ptr<PolicyCache> policies = policyParseClient.ParseConfigFile(policyStorePath);
+  std::vector<std::string> policyIds = policies->GetAllKeys();
+
+  for (const auto &p : policyIds) {
+    std::unique_ptr<Policy> policy = policies->Take(p);
+    policyStore.put(p, policy.get(), Timestamp());
+    policiesToFree.push_back(std::move(policy));
+  }
+}
+
+//TODO: Move to common folder
+//RETURNS True if endorsement check passed, otherwise false
+bool Server::EndorsementCheck(const std::string &txnDigest, const proto::TryCommit *try_commit) {
+
+  PolicyClient policyClient;
+  ExtractPolicy(&try_commit->txn_msg(), policyClient);
+  return ValidateEndorsements(policyClient, &try_commit->endorsements(), try_commit->client_id(), txnDigest);
+}
+
+//TODO: Move to common folder
+void Server::ExtractPolicy(const TransactionMessage *txn, PolicyClient &policyClient) {
+  // struct timespec ts_start;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+  // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+  //TODO: Implement versioning for policy store
+  Timestamp ts = Timestamp();
+  std::unordered_set<std::string> policiesChecked;
+
+  for (const auto &write : txn->writeset()) {
+    if (write.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(write.key())) {
+    //   // skip if write key is not owned
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(write.key(), write.value());
+
+    if (policiesChecked.find(policyId) != policiesChecked.end()) {
+      continue;
+    }
+    else {
+      policiesChecked.insert(policyId);
+    }
+
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(write.key(), 16).c_str());
+
+    std::pair<Timestamp, const Policy*> tsPolicy;
+    policyStore.get(policyId, ts, tsPolicy);
+    policyClient.AddPolicy(tsPolicy.second);
+  }
+
+  if (!sintr_params.includeReadsetForTxnPolicy && !sintr_params.checkPolicyLeak) {
+    // no need to consider readset for policy or leak check
+    return;
+  }
+
+  // policies from readset to add into policyClient
+  std::unordered_set<const Policy *> readsetPoliciesToAdd;
+
+  for (const auto &read : txn->readset()) {
+    if (read.is_table_col_version()) {
+      // skip table column versions
+      continue;
+    }
+    // Peloton doesn't support sharding, skipping IsKeyOwned check
+    // if (!IsKeyOwned(read.key())) {
+    //   continue;
+    // }
+
+    std::string policyId = policyIdFunction(read.key(), "");
+    Debug("Extracting policy %s for key %s", policyId.c_str(), BytesToHex(read.key(), 16).c_str());
+    std::pair<Timestamp, const Policy*> tsPolicy;
+    policyStore.get(policyId, ts, tsPolicy);
+
+    // at least one of includeReadsetForTxnPolicy and checkPolicyLeak is true
+    if (sintr_params.includeReadsetForTxnPolicy) {
+      if (policiesChecked.find(policyId) == policiesChecked.end()) {
+        readsetPoliciesToAdd.insert(tsPolicy.second);
+        policiesChecked.insert(policyId);
+      }
+    }
+
+    if (sintr_params.checkPolicyLeak) {
+      // disallow readset to contain a policy that does not imply the write set policy
+      if (!policyClient.IsImpliedBy(tsPolicy.second)) {
+        Panic(
+          "Read policy (%s) does not imply write policy (%s)",
+          tsPolicy.second->ToString().c_str(),
+          policyClient.ToString().c_str()
+        );
+      }
+    }
+  }
+
+  if (sintr_params.includeReadsetForTxnPolicy) {
+    for (const auto &p : readsetPoliciesToAdd) {
+      policyClient.AddPolicy(p);
+    }
+  }
+
+  // struct timespec ts_end;
+  // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+  // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+  // auto duration = end - start;
+  // extract_policy_us.add(duration);
+}
+
+bool Server::ValidateEndorsements(const PolicyClient &policyClient, const proto::SignedMessages *endorsements, 
+    uint64_t client_id, const std::string &txnDigest) {
+
+  // client initiating txn is always an endorser
+  std::set<uint64_t> endorsers;
+  endorsers.insert(client_id);
+
+  if (endorsements != nullptr) {
+    for (const auto &endorsement : endorsements->sig_msgs()) {
+      if (!ValidateEndorsementHelper(endorsement, txnDigest)) {
+        Debug(
+          "Txn %s failed to validate endorsement from client %lu",
+          BytesToHex(txnDigest, 16).c_str(),
+          endorsement.replica_id()
+        );
+        continue;
+      }
+      endorsers.insert(endorsement.replica_id());
+    }
+  }
+
+  // check if endorsers satisfy policy
+  return policyClient.IsSatisfied(endorsers);
+}
 
 
 
+bool Server::ValidateEndorsementHelper(const proto::SignedMessage &endorsement, const std::string &txnDigest) {
+  // cannot have empty data
+  if (endorsement.packed_msg().length() == 0) {
+    return false;
+  }
+  // then check that data is all same as well
+  if (txnDigest != endorsement.packed_msg()) {
+    Warning("Mismatch in endorsements");
+    Warning("Transaction digest %s is not same as endorsement msg %s", BytesToHex(txnDigest, 16).c_str(), BytesToHex(endorsement.packed_msg(), 16).c_str());
+    return false;
+  }
+
+  // check signature
+  if (sintr_params.signFinishValidation) {
+    // struct timespec ts_start;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    // uint64_t start = ts_start.tv_sec * 1000 * 1000 + ts_start.tv_nsec / 1000;
+    if (!pelotonstore::CheckSignature(endorsement, keyManager, true)) {
+      Warning(
+        "Txn %s failed to validate endorsement from client %lu",
+        BytesToHex(txnDigest, 16).c_str(),
+        endorsement.replica_id()
+      );
+      return false;
+    }
+    // struct timespec ts_end;
+    // clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    // uint64_t end = ts_end.tv_sec * 1000 * 1000 + ts_end.tv_nsec / 1000;
+    // auto duration = end - start;
+    // validate_endorsements_us.add(duration);
+  }
+  return true;
+}
+
+////////////////////////////////////////////
+/*     SERVERCLIENT DIRECT-CALL METHODS   */
+////////////////////////////////////////////
+
+void Server::DirectBegin(uint64_t client_id, uint64_t tx_id) {
+  Debug("DirectBegin: client %lu tx %lu", client_id, tx_id);
+  ClientStateMap::accessor c;
+  clientState.insert(c, client_id);
+  if(!c->second.ValidTX(tx_id)) {
+    Panic("Tx[%lu:%lu] is no longer active!", client_id, tx_id);
+    return;
+  }
+  bool terminate_last = false;
+  bool begin = false;
+  bool active = c->second.GetTxStatus(tx_id, begin, terminate_last); //Checks if there is an ongoing Txn (and if it is active); if not, starts a new Tx.
+  if(terminate_last){
+    if(idx == 0 && fake_SMR) Panic("Call terminate last on leader? ProcessReq. client: %lu. txn: %lu.", client_id, tx_id);
+    table_store->Abort(client_id, tx_id-1); //NOTE: This is only to help with FakeSMR mode. It's not technically necessary.
+  }
+  if(begin) table_store->Begin(client_id, tx_id);
+}
+
+std::string Server::DirectExecSQL(const std::string &query, uint64_t client_id,
+    uint64_t tx_id, int &status) {
+  Debug("DirectExecSQL: client %lu tx %lu query [%s]", client_id, tx_id, query.c_str());
+  ClientStateMap::accessor c;
+  clientState.insert(c, client_id);
+  if(!c->second.ValidTX(tx_id)) {
+    Panic("Tx[%lu:%lu] is no longer active!", client_id, tx_id);
+    return "";
+  }
+  bool terminate_last = false;
+  bool begin = false;
+  bool active = c->second.GetTxStatus(tx_id, begin, terminate_last); //Checks if there is an ongoing Txn (and if it is active); if not, starts a new Tx.
+  if(terminate_last){
+    Panic("Call terminate in direct exec sql? ProcessReq. client: %lu. txn: %lu.", client_id, tx_id);
+  }
+  if(begin) {
+    Panic("Should never begin in direct exec sql?");
+  }
+
+  if(active) {
+    peloton_peloton::ResultType result_status;
+    std::string error_msg;
+
+    // We still need a QueryReadSetMgr for the table_store call, but since there
+    // is no client-facing reply proto to fill in, we create a throw-away one.
+    TransactionMessage dummy_txn_msg;
+    QueryReadSetMgr query_read_set_mgr(&dummy_txn_msg);
+    std::string result = table_store->ExecTransactional(query, client_id, tx_id,
+        result_status, error_msg, query_read_set_mgr);
+    if (result_status == peloton_peloton::ResultType::SUCCESS) {
+      status = REPLY_OK;
+      return result;
+    } else if (result_status == peloton_peloton::ResultType::ABORTED) {
+      Debug("DirectExecSQL: Peloton ABORTED for client %lu tx %lu", client_id, tx_id);      
+      table_store->Abort(client_id, tx_id);
+      c->second.TerminateTX();
+      status = REPLY_FAIL;
+      return "";
+    } else {
+      Panic("DirectExecSQL: Peloton unexpected result %d for client %lu tx %lu",
+          result_status, client_id, tx_id);
+      status = REPLY_FAIL;
+      return "";
+    }
+  } else {
+    Debug("Non active transaction %lu", tx_id);
+    return "";
+  }
+}
+
+int Server::DirectCommit(uint64_t client_id, uint64_t tx_id) {
+  Debug("DirectCommit: client %lu tx %lu", client_id, tx_id);
+  ClientStateMap::accessor c;
+  clientState.insert(c, client_id);
+  if(c->second.ValidTX(tx_id)) {
+    auto result_type = table_store->Commit(client_id, tx_id);
+    c->second.TerminateTX();
+    if (result_type == peloton_peloton::ResultType::SUCCESS) {
+      return REPLY_OK;
+    }
+  }
+  return REPLY_FAIL;
+}
+
+void Server::DirectAbort(uint64_t client_id, uint64_t tx_id) {
+  Debug("DirectAbort: client %lu tx %lu", client_id, tx_id);
+  ClientStateMap::accessor c;
+  clientState.insert(c, client_id);
+  if(c->second.ValidTX(tx_id)) {
+    table_store->Abort(client_id, tx_id);
+    c->second.TerminateTX();
+  }
+}
+
+void Server::InitExecClients() {
+
+  serverClientsForExec.resize(number_of_threads, nullptr);
+  syncClientsForExec.resize(number_of_threads, nullptr);
+  ClientStateMap::accessor c;
+  for (uint64_t i = 0; i < number_of_threads; ++i) {
+    // uint64_t exec_client_id = static_cast<uint64_t>(-1) - i;
+    serverClientsForExec[i] = new ServerClient(this, i, tp);
+    syncClientsForExec[i]   = new SyncClient(serverClientsForExec[i]);
+    clientState.insert(c, i);
+  }
+  Notice("Initialized %lu per-thread ServerClient/SyncClient pairs for server-side exec",
+         number_of_threads);
+}
+
+std::vector<::google::protobuf::Message*> Server::ExecuteTxnServerSide(
+    const proto::TxnExecRequest &req, uint64_t thread_id) {
+  std::vector<::google::protobuf::Message*> results;
+
+  UW_ASSERT(thread_id < number_of_threads);
+  SyncClient *syncClient = syncClientsForExec[thread_id];
+
+  Debug("ExecuteTxnServerSide: client %lu seq num %lu thread %lu",
+        req.client_id(), req.client_seq_num(), thread_id);
+
+  // Parse the embedded TxnState to obtain the right ValidationTransaction.
+  TxnState txnState;
+  if (!txnState.ParseFromString(req.txn_state())) {
+    Debug("ExecuteTxnServerSide: failed to parse TxnState");
+    proto::TxnExecReply *reply = new proto::TxnExecReply();
+    reply->set_client_id(req.client_id());
+    reply->set_client_seq_num(req.client_seq_num());
+    reply->set_status(static_cast<int32_t>(ABORTED_SYSTEM));
+    results.push_back(reply);
+    return results;
+  }
+
+  // ValidationParseClient is stateless (timeout only) – cheap to construct.
+  ValidationParseClient parseClient(/*timeout=*/5000);
+  ValidationTransaction *valTxn = parseClient.Parse(txnState);
+  if (valTxn == nullptr) {
+    Warning("ExecuteTxnServerSide: ParseClient returned nullptr for txn_name=%s",
+            txnState.txn_name().c_str());
+    proto::TxnExecReply *reply = new proto::TxnExecReply();
+    reply->set_client_id(req.client_id());
+    reply->set_client_seq_num(req.client_seq_num());
+    reply->set_status(static_cast<int32_t>(ABORTED_SYSTEM));
+    results.push_back(reply);
+    return results;
+  }
+
+  // Run the transaction synchronously via the per-thread SyncClient (which wraps
+  // the per-thread ServerClient, which calls DirectExecSQL / DirectCommit directly
+  // on this Server).
+  transaction_status_t status = ABORTED_SYSTEM;
+  try {
+    if (simDelay > 0) {
+      // should only be for rw-sql workloads
+      status = valTxn->Validate(*syncClient, simDelay);
+    } else {
+      status = valTxn->Validate(*syncClient);
+    }
+  } catch (const std::exception& e) {
+      // std::cerr << "Caught an exception: " << e.what() << std::endl;
+      Debug("catch abort for txn for client %lu : %lu.", req.client_id(), req.client_seq_num());
+      status = ABORTED_SYSTEM; //ABORTED_USER;
+  }
+  if(valTxn != nullptr) {
+    delete valTxn;
+    valTxn = nullptr;
+  }
+  Debug("ExecuteTxnServerSide: status is %d", static_cast<int32_t>(status));
+
+  proto::TxnExecReply *reply = new proto::TxnExecReply();
+  reply->set_client_id(req.client_id());
+  reply->set_client_seq_num(req.client_seq_num());
+  reply->set_status(static_cast<int32_t>(status));
+  Debug("Successfully executed txn for client %lu seq num %lu", req.client_id(), req.client_seq_num());
+  results.push_back(reply);
+  return results;
+}
 
 
 }

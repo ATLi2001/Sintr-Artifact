@@ -24,6 +24,7 @@
 
 '''
 import ipaddress
+import shutil
 
 from lib.experiment_codebase import *
 
@@ -40,6 +41,11 @@ class IndicusCodebase(ExperimentCodebase):
                     config['bin_directory_name'], config['client_bin_name'])
             exp_directory = local_exp_directory
             config_path = os.path.join(local_exp_directory, config['network_config_file_name'])
+            if 'sintr_protocol_settings' in config:
+                client_config_path = os.path.join(local_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
+                policy_config_path = os.path.join(local_exp_directory, "policy.config")
+                if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                    gov_txn_config_path = os.path.join(local_exp_directory, "gov-txn.config")
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'], 'client-%d-%d' % (i, j),
                     'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
@@ -49,6 +55,11 @@ class IndicusCodebase(ExperimentCodebase):
                     config['bin_directory_name'], config['client_bin_name'])
             exp_directory = remote_exp_directory
             config_path = os.path.join(remote_exp_directory, config['network_config_file_name'])
+            if 'sintr_protocol_settings' in config:
+                client_config_path = os.path.join(remote_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
+                policy_config_path = os.path.join(remote_exp_directory, "policy.config")
+                if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                    gov_txn_config_path = os.path.join(remote_exp_directory, "gov-txn.config")
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'],
                     'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
@@ -84,7 +95,7 @@ class IndicusCodebase(ExperimentCodebase):
             client_command += ' --trans_protocol %s' % config['replication_protocol_settings']['message_transport_type']
 
         if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'pbft' or config['replication_protocol'] == 'hotstuff' or \
-            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus':
+            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus' or config['replication_protocol'] == 'sintr':
             if 'read_quorum' in config['replication_protocol_settings']:
                 client_command += ' --indicus_read_quorum %s' % config['replication_protocol_settings']['read_quorum']
             if 'optimistic_read_quorum' in config['replication_protocol_settings']:
@@ -143,7 +154,82 @@ class IndicusCodebase(ExperimentCodebase):
             if 'all_to_all_fb' in config['replication_protocol_settings']:
                 client_command += ' --indicus_all_to_all_fb=%s' % str(config['replication_protocol_settings']['all_to_all_fb']).lower()
 
-        if config['replication_protocol'] == 'pequin':
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'hotstuff' or config['replication_protocol'] == 'bftsmart':
+            client_command += ' --clients_config_path %s' % client_config_path
+            client_command += ' --sintr_policy_config_path %s' % policy_config_path
+            if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                client_command += ' --gov_txn_config_path %s' % gov_txn_config_path
+            if 'sintr_max_val_threads' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_max_val_threads %d' % config['sintr_protocol_settings']['sintr_max_val_threads']
+            if 'sintr_sign_fwd_read_results' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_sign_fwd_read_results=%s' % str(config['sintr_protocol_settings']['sintr_sign_fwd_read_results']).lower()
+            if 'sintr_sign_finish_validation' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_sign_finish_validation=%s' % str(config['sintr_protocol_settings']['sintr_sign_finish_validation']).lower()
+            if 'sintr_debug_endorse_check' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_debug_endorse_check=%s' % str(config['sintr_protocol_settings']['sintr_debug_endorse_check']).lower()
+            if 'sintr_client_check_evidence' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_check_evidence=%s' % str(config['sintr_protocol_settings']['sintr_client_check_evidence']).lower()
+            if 'sintr_policy_function_name' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_policy_function_name %s' % config['sintr_protocol_settings']['sintr_policy_function_name']
+            if 'sintr_read_include_policy' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_read_include_policy %d' % config['sintr_protocol_settings']['sintr_read_include_policy']
+            if 'sintr_min_enable_pull_policies' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_min_enable_pull_policies %d' % config['sintr_protocol_settings']['sintr_min_enable_pull_policies']
+            if 'sintr_client_validation_heuristic' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_validation_heuristic %d' % config['sintr_protocol_settings']['sintr_client_validation_heuristic']
+            if 'sintr_client_pin_cores' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_pin_cores=%s' % str(config['sintr_protocol_settings']['sintr_client_pin_cores']).lower()
+            if 'sintr_c2c_send_thread' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_c2c_send_thread=%s' % str(config['sintr_protocol_settings']['sintr_c2c_send_thread']).lower()
+            if 'sintr_c2c_receive_thread' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_c2c_receive_thread=%s' % str(config['sintr_protocol_settings']['sintr_c2c_receive_thread']).lower()
+            if 'sintr_hash_endorsements' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_hash_endorsements=%s' % str(config['sintr_protocol_settings']['sintr_hash_endorsements']).lower()
+            if 'sintr_client_parallel_endorsement_check' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_parallel_endorsement_check=%s' % str(config['sintr_protocol_settings']['sintr_client_parallel_endorsement_check']).lower()
+            if 'sintr_parallel_query_sigs_check' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_parallel_query_sigs_check=%s' % str(config['sintr_protocol_settings']['sintr_parallel_query_sigs_check']).lower()
+            if 'sintr_blind_write_message' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_blind_write_message=%s' % str(config['sintr_protocol_settings']['sintr_blind_write_message']).lower()
+            if 'sintr_sort_writeset' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_sort_writeset=%s' % str(config['sintr_protocol_settings']['sintr_sort_writeset']).lower()
+            if 'sintr_profile_one_client_load' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_profile_one_client_load=%s' % str(config['sintr_protocol_settings']['sintr_profile_one_client_load']).lower()
+            if 'sintr_max_client_sig_check_threads' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_max_client_sig_check_threads %d' % config['sintr_protocol_settings']['sintr_max_client_sig_check_threads']
+            if 'sintr_hide_timestamps' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_hide_timestamps=%s' % str(config['sintr_protocol_settings']['sintr_hide_timestamps']).lower()
+            if 'sintr_val_client_selector' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_val_client_selector %s' % config['sintr_protocol_settings']['sintr_val_client_selector']
+            if 'sintr_val_client_selector_zipf' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_val_client_selector_zipf %f' % config['sintr_protocol_settings']['sintr_val_client_selector_zipf']
+            if 'sintr_optimistic_receive_endorsement' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_optimistic_receive_endorsement=%s' % str(config['sintr_protocol_settings']['sintr_optimistic_receive_endorsement']).lower()
+            if 'sintr_client_ignore_policy_update' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_ignore_policy_update=%s' % str(config['sintr_protocol_settings']['sintr_client_ignore_policy_update']).lower()
+            if 'sintr_client_estimate_policy' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_client_estimate_policy=%s' % str(config['sintr_protocol_settings']['sintr_client_estimate_policy']).lower()
+            if 'sintr_hash_query_gen_id' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
+            if 'sintr_separate_transport' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_separate_transport=%s' % str(config['sintr_protocol_settings']['sintr_separate_transport']).lower()
+            if 'sintr_max_clients_connect' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_max_clients_connect=%s' % str(config['sintr_protocol_settings']['sintr_max_clients_connect']).lower()
+            if 'sintr_use_endorsement_cb' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_use_endorsement_cb=%s' % str(config['sintr_protocol_settings']['sintr_use_endorsement_cb']).lower()
+            if 'sintr_failure_type' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_failure_type %s' % config['sintr_protocol_settings']['sintr_failure_type']
+            if 'sintr_byz_client_total' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_byz_client_total %d' % config['sintr_protocol_settings']['sintr_byz_client_total']
+            if 'sintr_include_readset_for_txn_policy' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_include_readset_for_txn_policy=%s' % str(config['sintr_protocol_settings']['sintr_include_readset_for_txn_policy']).lower()
+            if 'sintr_enable_lifting' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_enable_lifting=%s' % str(config['sintr_protocol_settings']['sintr_enable_lifting']).lower()
+            if 'sintr_contact_all_byz_clients' in config['sintr_protocol_settings']:
+                client_command += ' --sintr_contact_all_byz_clients=%s' % str(config['sintr_protocol_settings']['sintr_contact_all_byz_clients']).lower()
+
+
+        if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ##Sync protocol settings
             if 'query_sync_quorum' in config['replication_protocol_settings']:
                 client_command += " --pequin_query_sync_quorum=%s" % str(config['replication_protocol_settings']['query_sync_quorum']).lower()
@@ -271,7 +357,7 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --key_selector %s' % config['client_key_selector']
                 if config['client_key_selector'] == 'zipf':
                     client_command += ' --zipf_coefficient %f' % config['client_zipf_coefficient']
-        elif config['benchmark_name'] == 'rw' or config['benchmark_name'] == 'rw-sql':
+        elif config['benchmark_name'] == 'rw' or config['benchmark_name'] == 'rw-sql' or config['benchmark_name'] == 'rw-sync':
             client_command += ' --num_keys %d' % config['client_num_keys']
             client_command += ' --num_ops_txn %d' % config['rw_num_ops_txn']
             if 'rw_read_only' in config:
@@ -284,6 +370,8 @@ class IndicusCodebase(ExperimentCodebase):
             if config['benchmark_name'] == 'rw-sql':
                 client_command += ' --rw_read_only_rate %d' % config['rw_read_only_rate']
                 client_command += ' --rw_secondary_condition=%s' % (str(config['rw_secondary_condition']).lower())
+                if 'rw_sql_sim_delay' in config:
+                    client_command += " --rw_sql_sim_delay %d" % config['rw_sql_sim_delay']
 
                 client_command += ' --num_tables %d' % config['num_tables']
                 client_command += ' --num_keys_per_table %d' % config['num_keys_per_table']
@@ -300,7 +388,7 @@ class IndicusCodebase(ExperimentCodebase):
                 client_command += ' --scan_as_point_parallel=%s' % (str(config['scan_as_point_parallel']).lower())
                 client_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
 
-        elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql':
+        elif config['benchmark_name'] == 'tpcc' or config['benchmark_name'] == 'tpcc-sync' or config['benchmark_name'] == 'tpcc-sql' or config['benchmark_name'] == 'tpcc-lift-sql':
             client_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
             client_command += ' --tpcc_w_id %d' % (client_id % config['tpcc_num_warehouses'] + 1)
             client_command += ' --tpcc_C_c_id %d' % config['tpcc_c_c_id']
@@ -326,6 +414,9 @@ class IndicusCodebase(ExperimentCodebase):
         elif config['benchmark_name'] == 'seats-sql' or config['benchmark_name'] == 'auctionmark-sql':
             client_command += ' --benchbase_scale_factor %d ' % config['scale_factor']
 
+        if "bftsmart_exec_txn_server_side" in config:
+            #TODO: Only works for txbftsmart and pelotonsmart for now
+            client_command += ' --bftsmart_exec_txn_server_side=%s' % (str(config['bftsmart_exec_txn_server_side']).lower())
     
 
         if 'client_wrap_command' in config and len(config['client_wrap_command']) > 0:
@@ -388,6 +479,8 @@ class IndicusCodebase(ExperimentCodebase):
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'], 'server-%d' % i,
                     'server-%d-%d-stats-%d.json' % (i, k, run))
+            if 'sintr_protocol_settings' in config:
+                policy_config_path = os.path.join(local_exp_directory, "policy.config")
         else:
             path_to_server_bin = os.path.join(
                     config['base_remote_bin_directory_nfs'],
@@ -398,8 +491,10 @@ class IndicusCodebase(ExperimentCodebase):
             stats_file = os.path.join(exp_directory,
                     config['out_directory_name'],
                     'server-%d-%d-stats-%d.json' % (i, k, run))
+            if 'sintr_protocol_settings' in config:
+                policy_config_path = os.path.join(remote_exp_directory, "policy.config")
 
-        if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin':
+        if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             n = 5 * config['fault_tolerance'] + 1
         elif config['replication_protocol'] == 'pbft' or config['replication_protocol'] == 'hotstuff' or config['replication_protocol'] == 'pg-smr' or \
             config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus':
@@ -457,7 +552,7 @@ class IndicusCodebase(ExperimentCodebase):
 
 
         if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'pbft' or config['replication_protocol'] == 'hotstuff' or \
-            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus':
+            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus' or config['replication_protocol'] == 'sintr':
             if 'read_dep' in config['replication_protocol_settings']:
                 replica_command += ' --indicus_read_dep %s' % config['replication_protocol_settings']['read_dep']
             if 'watermark_time_delta' in config['replication_protocol_settings']:
@@ -536,11 +631,38 @@ class IndicusCodebase(ExperimentCodebase):
             if 'replica_gossip' in config['replication_protocol_settings']:
                 replica_command += ' --indicus_replica_gossip=%s' % str(config['replication_protocol_settings']['replica_gossip']).lower()
 
-        
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'hotstuff':
+            replica_command += ' --sintr_policy_config_path %s' % policy_config_path
+            if 'sintr_sign_finish_validation' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_sign_finish_validation=%s' % str(config['sintr_protocol_settings']['sintr_sign_finish_validation']).lower()
+            if 'sintr_policy_function_name' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_policy_function_name %s' % config['sintr_protocol_settings']['sintr_policy_function_name']
+            if 'sintr_check_policy_leak' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_check_policy_leak=%s' % str(config['sintr_protocol_settings']['sintr_check_policy_leak']).lower()
+            if 'sintr_server_parallel_endorsement_check' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_parallel_endorsement_check=%s' % str(config['sintr_protocol_settings']['sintr_server_parallel_endorsement_check']).lower()
+            if 'sintr_use_occ_for_policies' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_use_occ_for_policies=%s' % str(config['sintr_protocol_settings']['sintr_use_occ_for_policies']).lower()
+            if 'sintr_hash_endorsements' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_hash_endorsements=%s' % str(config['sintr_protocol_settings']['sintr_hash_endorsements']).lower()
+            if 'sintr_hide_timestamps' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_hide_timestamps=%s' % str(config['sintr_protocol_settings']['sintr_hide_timestamps']).lower()
+            if 'sintr_server_skip_endorsement_check' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_server_skip_endorsement_check=%s' % str(config['sintr_protocol_settings']['sintr_server_skip_endorsement_check']).lower()
+            if 'sintr_policy_CCC' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_policy_CCC=%s' % str(config['sintr_protocol_settings']['sintr_policy_CCC']).lower()
+            if 'sintr_hash_query_gen_id' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_hash_query_gen_id=%s' % str(config['sintr_protocol_settings']['sintr_hash_query_gen_id']).lower()
+            if 'sintr_include_readset_for_txn_policy' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_include_readset_for_txn_policy=%s' % str(config['sintr_protocol_settings']['sintr_include_readset_for_txn_policy']).lower()
+            if 'sintr_enable_lifting' in config['sintr_protocol_settings']:
+                replica_command += ' --sintr_enable_lifting=%s' % str(config['sintr_protocol_settings']['sintr_enable_lifting']).lower()
+
+
         #if 'rw_or_retwis' in config:
         #    replica_command += ' --rw_or_retwis=%s' % str(config['rw_or_retwis']).lower()
 
-        if config['replication_protocol'] == 'pequin':
+        if config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
             ## Snapshot settings
             if 'snapshot_prepared_k' in config['replication_protocol_settings']:
                 replica_command += " --pequin_snapshot_prepared_k %d" % config['replication_protocol_settings']['snapshot_prepared_k']
@@ -636,7 +758,7 @@ class IndicusCodebase(ExperimentCodebase):
             replica_command += ' --rw_or_retwis=false'
             if 'server_preload_keys' in config:
                 replica_command += ' --preload_keys=%s' % str(config['server_preload_keys']).lower()
-        elif config['benchmark_name'] == 'rw':
+        elif config['benchmark_name'] == 'rw' or config['benchmark_name'] == 'rw-sync':
             replica_command += ' --num_keys %d' % config['client_num_keys']
             replica_command += ' --rw_or_retwis=true'
             if 'server_preload_keys' in config:
@@ -652,12 +774,16 @@ class IndicusCodebase(ExperimentCodebase):
             replica_command += ' --value_size %d' % config['value_size']
             replica_command += ' --value_categories %d' % config['value_categories']  
             replica_command += ' --rw_simulate_point_kv=%s' % (str(config['rw_simulate_point_kv']).lower())
-        elif config['benchmark_name'] == 'tpcc-sql':
+            if 'rw_sql_sim_delay' in config:
+                replica_command += " --rw_sql_sim_delay %d" % config['rw_sql_sim_delay']
+        elif config['benchmark_name'] == 'tpcc-sql' or config['benchmark_name'] == 'tpcc-lift-sql':
              replica_command += ' --tpcc_num_warehouses %d' % config['tpcc_num_warehouses']
         
         if 'partitioner' in config:
             replica_command += ' --partitioner %s' % config['partitioner']
 
+        if 'bftsmart_exec_txn_server_side' in config:
+            replica_command += ' --bftsmart_exec_txn_server_side=%s' % (str(config['bftsmart_exec_txn_server_side']).lower())
 
 
         if 'server_wrap_command' in config and len(config['server_wrap_command']) > 0:
@@ -712,7 +838,7 @@ class IndicusCodebase(ExperimentCodebase):
         local_exp_directory = super().prepare_local_exp_directory(config, config_file)
         config_file = os.path.join(local_exp_directory, config['network_config_file_name'])
         with open(config_file, 'w') as f:
-            if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin':
+            if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'sintr':
                 n = 5 * config['fault_tolerance'] + 1
             elif config['replication_protocol'] == 'pbft' or config['replication_protocol'] == 'hotstuff' or config['replication_protocol'] == 'pg-smr' or \
                 config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus':
@@ -739,11 +865,39 @@ class IndicusCodebase(ExperimentCodebase):
                         print('replica %s:%d' % (config['server_names'][server_idx],
                             config['server_port'] + process_idx), file=f)
 
+        if config['replication_protocol'] == 'sintr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'hotstuff' or config['replication_protocol'] == 'bftsmart':
+            client_config_file = os.path.join(local_exp_directory, config['sintr_protocol_settings']['client_network_config_file_name'])
+            with open(client_config_file, 'w') as f:
+                print('f %d' % config['fault_tolerance'], file=f)
+                print('group', file=f)
+                port_counter = 0
+                for i in range(len(config['server_names'])):
+                    for j in range(config['client_nodes_per_server']):
+                        for k in range(config['client_processes_per_client_node']):
+                            # don't exceed client total
+                            if 'client_total' in config and port_counter >= config['client_total']:
+                                break
+
+                            if 'run_locally' in config and config['run_locally']:
+                                print('replica %s:%d' % ('localhost',
+                                    config['sintr_protocol_settings']['client_port'] + port_counter), file=f)
+                            else:
+                                print('replica client-%d-%d:%d' % (i, j,
+                                    config['sintr_protocol_settings']['client_port'] + k), file=f)
+                            port_counter += 1
+            # cp policy config to experiment directory
+            policy_config_path = config['sintr_protocol_settings']['sintr_policy_config_path']
+            shutil.copy(policy_config_path, os.path.join(local_exp_directory, "policy.config"))
+            # cp gov txn config to experiment directory
+            if 'gov_txn_config_path' in config['sintr_protocol_settings']:
+                gov_txn_config_path = config['sintr_protocol_settings']['gov_txn_config_path']
+                shutil.copy(gov_txn_config_path, os.path.join(local_exp_directory, "gov-txn.config"))
+
         return local_exp_directory
 
     def prepare_remote_server_codebase(self, config, host, local_exp_directory, remote_out_directory):
         if config['replication_protocol'] == 'indicus' or config['replication_protocol'] == 'pequin' or config['replication_protocol'] == 'pbft' or config['replication_protocol'] == 'hotstuff' or \
-            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus':
+            config['replication_protocol'] == 'pg-smr' or config['replication_protocol'] == 'peloton-smr' or config['replication_protocol'] == 'bftsmart' or config['replication_protocol'] == 'augustus' or config['replication_protocol'] == 'sintr':
             run_remote_command_sync('sudo rm -rf /dev/shm/*', config['emulab_user'], host)
 
     def setup_nodes(self, config):
