@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 # Fields whose override value only replaces the *directory prefix* of the path.
 # The final path component (the filename) in each config file is left unchanged,
 # so the override picks the directory while each config keeps its own file.
-PREFIX_ONLY_FIELDS = {"sintr_policy_config_path"}
+PREFIX_ONLY_FIELDS = {"sintr_policy_config_path", "gov_txn_config_path"}
 
 def prefix_replace(original_value, override_value):
     """
@@ -31,6 +31,9 @@ def deep_update(original, updates):
             deep_update(original[key], value)
         elif key in PREFIX_ONLY_FIELDS and key in original:
             original[key] = prefix_replace(original[key], value)
+        elif key in PREFIX_ONLY_FIELDS and key not in original:
+            # skip prefix replacement if the original config doesn't have this field
+            continue
         else:
             original[key] = value
     return original

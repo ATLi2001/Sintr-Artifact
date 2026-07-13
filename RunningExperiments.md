@@ -142,6 +142,9 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
 9. `"sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
     - change this to be the absolute path to the appropriate policy config
     - NOTE: in the override json for `update_configs.py`, this should be the path to the where the policy configs, as the script will change this prefix and leave the config filenames unchanged
+10. `"gov_txn_config_path" : "src/0_local_test_outputs/configs/<gov-txn-policy>.config"`
+    - change this to be the absolute path to the appropriate governance txn config
+    - NOTE: in the override json for `update_configs.py`, this should be the path to the where the governance transaction configs, as the script will change this prefix and leave the config filenames unchanged
 
 #### **Optional** Modifications 
 1. Experiment duration:
