@@ -1,0 +1,11 @@
+{
+  "project_name": "pequin-pg0",
+  "experiment_name": "sintr",
+  "emulab_user": "dhl001",
+  "base_local_exp_directory": "/home/dhl93/Sintr-Artifact/output",
+  "base_remote_bin_directory_nfs": "/users/dhl001/sintr",
+  "src_directory": "/home/dhl93/Sintr-Artifact/src",
+  "sintr_protocol_settings": {
+    "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs"
+  }
+}

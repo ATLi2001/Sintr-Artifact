@@ -148,13 +148,24 @@ This way, `update_configs.py` can bulk update configs without having to specify 
     - change this to be the absolute path to the appropriate governance txn config
     - NOTE: in the override json for `update_configs.py`, this should be the path to the where the governance transaction configs, as the script will change this prefix and leave the config filenames unchanged
 
-Below we list the appropriate `"benchmark_schema_file_path"` for each benchmark. 
-Note that Smallbank does not require a schema as it is a KVS benchmark.
+Below we list a table of the path to configs with the exact example override changes.
+Running `update_configs.py` according to the table will appropriately update the configs for reproducing our results.
 
-1. TPCC: `"/users/<cloudlab-user>/benchmark_data/sql-tpcc-tables-schema.json"`
-2. Seats: `"/users/<cloudlab-user>/benchmark_data/sql-seats-tables-schema.json"`
-3. YCSB Microbenchmark: `"/users/<cloudlab-user>/rw-sql.json"`
-
+| Experiment-config directory | Example override JSON |
+|---|---|
+| `experiment-configs/Sintr/1-Workloads/TPCC-SQL/TPCC-SQL-final/` | `experiment-scripts/example_user_overrides/example_user_override-tpcc.json` |
+| `experiment-configs/Sintr/1-Workloads/TPCC-SQL/Hotstuff/` | `experiment-scripts/example_user_overrides/example_user_override-tpcc.json` |
+| `experiment-configs/Sintr/1-Workloads/TPCC-SQL/BFTSmart/` | `experiment-scripts/example_user_overrides/example_user_override-tpcc-smart.json` |
+| `experiment-configs/Sintr/1-Workloads/Seats/Pesto/` | `experiment-scripts/example_user_overrides/example_user_override-seats.json` |
+| `experiment-configs/Sintr/1-Workloads/Seats/Hotstuff/` | `experiment-scripts/example_user_overrides/example_user_override-seats.json` |
+| `experiment-configs/Sintr/1-Workloads/Seats/BFTSmart/` | `experiment-scripts/example_user_overrides/example_user_override-seats-smart.json` |
+| `experiment-configs/Sintr/1-Workloads/Smallbank/Basil/` | `experiment-scripts/example_user_overrides/example_user_override-smallbank.json` |
+| `experiment-configs/Sintr/1-Workloads/Smallbank/Hotstuff/` | `experiment-scripts/example_user_overrides/example_user_override-smallbank.json` |
+| `experiment-configs/Sintr/1-Workloads/Smallbank/BFTSmart/` | `experiment-scripts/example_user_overrides/example_user_override-smallbank-smart.json` |
+| `experiment-configs/Sintr/2-Microbenchmarks/1-Vary-Policy/` | `experiment-scripts/example_user_overrides/example_user_override-micro.json` |
+| `experiment-configs/Sintr/2-Microbenchmarks/2-Gov-Txn/` | `experiment-scripts/example_user_overrides/example_user_override-gov-txn.json` |
+| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/` | `experiment-scripts/example_user_overrides/example_user_override-micro.json` |
+| `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting/` | `experiment-scripts/example_user_overrides/example_user_override-tpcc-lifting.json` |
 
 <!-- ### Detailed Manual Instructions
 
