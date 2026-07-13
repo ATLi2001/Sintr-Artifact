@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOTDIR="$HOME/Pequin-Artifact"
+ROOTDIR="$HOME/Sintr-Artifact"
 CONFIG_FILE=$1
 
 # Check if the config file is provided

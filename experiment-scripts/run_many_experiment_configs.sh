@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOTDIR="$HOME/Pequin-Artifact"
+ROOTDIR="$HOME/Sintr-Artifact"
 EXPERIMENT_CONFIGS_DIR=$1
 
 # Check if the experiment configs directory is provided

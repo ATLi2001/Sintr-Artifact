@@ -3,7 +3,7 @@
 # collect all results from the output directory and copy them to the experiment-results directory
 # output directory is temporary, experiment-results is permanent
 
-ROOTDIR="$HOME/Pequin-Artifact"
+ROOTDIR="$HOME/Sintr-Artifact"
 OUTPUT_DIR="$ROOTDIR/output"
 EXPERIMENT_RESULTS_DIR="$ROOTDIR/experiment-results"
 COLLECT_DIR="$EXPERIMENT_RESULTS_DIR/original"

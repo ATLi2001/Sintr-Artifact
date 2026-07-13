@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOTDIR="$HOME/Pequin-Artifact"
+ROOTDIR="$HOME/Sintr-Artifact"
 
 "$ROOTDIR/experiment-scripts/run_many_experiment_configs.sh" "$1" "$2"
 rm -rf "$ROOTDIR/experiment-results/original"/*

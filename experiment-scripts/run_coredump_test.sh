@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOTDIR="$HOME/Pequin-Artifact"
+ROOTDIR="$HOME/Sintr-Artifact"
 CONFIG_FILE=$1
 OUTPUT_DIR="$ROOTDIR/output"
 
