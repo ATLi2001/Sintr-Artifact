@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
 cd ~
-echo "Installing Pequin-Artifact dependencies"
+echo "Installing Sintr-Artifact dependencies"
 echo "In case of failure, follow manual instruction and consult troubleshooting"
 echo ""
 
