@@ -10,7 +10,7 @@ This section is split into 5 subsections:
 2. [Pre-configurations for HotStuff and BFT-SMaRt](#preconfig)
 3. [Experiment script instructions](#scripts)
 4. [Parsing outputs](#output)
-5. [Reproducing our experiments 1-by-1](#exp)
+5. [Reproducing experiment claims 1-by-1](#exp)
 
 
 Before you proceed, please confirm that your CloudLab credentials are accurate:
@@ -129,7 +129,7 @@ This way, `update_configs.py` can bulk update configs without having to specify 
 3. `"base_local_exp_directory": "/home/atl63/Sintr-Artifact/output"`
    - For convenience, some of our helper scripts default to assuming that this directory is named `output` and directly under the root of the artifact.
    - Set the value field to be the local path (on your machine or the control machine) where experiment output files will be downloaded to and aggregated. 
-4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/indicus"` 
+4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/sintr"` 
    - Set the field `<cloudlab-user>`. This is the directory on the CloudLab machines where the binaries will be uploaded
 5. `"src_directory" : "/home/atl63/Sintr-Artifact/src"` 
    - Set the value field to your local path (on your machine or the control machine) to the source directory 
@@ -204,7 +204,8 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
 
 4. Server names:
    - The provided config files use default `server_names`. The name has no meaning in LAN deployments, and serves only as a unique identifier (e.g. `us-east-1-0` does not imply where the server will be located). These server names must be consistent with the server names in your deployed CloudLab cluster.
-   - If you change the default names, you must also adjust the `server_regions` and `region_rtt_latencies` parameters. Group server names into the region you want to assign them to. The `region_rtt_latencies` values do not matter for LAN deployments; they are placeholders for WAN simulation---see [WAN instructions](#wan-instructions).
+   - If you change the default names, you must also adjust the `server_regions` and `region_rtt_latencies` parameters. Group server names into the region you want to assign them to. The `region_rtt_latencies` values do not matter for LAN deployments; they are placeholders for WAN simulation.
+   <!-- see [WAN instructions](#wan-instructions). -->
   
 #### Starting an experiment:
 You are ready to start an experiment. 
