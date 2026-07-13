@@ -110,22 +110,24 @@ In backup mode all existing files that would be changed are backed up to a folde
 python3 experiment-scripts/update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]
 ```
 
-> :warning: For configs for BFT-SMaRt, you also need to adjust `"bftsmart_codebase_dir"` to reflect your cloudlab username.
+<!-- > :warning: For configs for BFT-SMaRt, you also need to adjust `"bftsmart_codebase_dir"` to reflect your cloudlab username. -->
 
+### Required Modifications
 
-### Detailed Manual Instructions
+We list below the required fields that need to be modified in each config. 
+The `example_user_override.json` file has exactly these fields listed. 
 
-To run an experiment, you simply need to run: `python3 experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote CloudLab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `experiment-configs/`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time):
+> :warning: The `sintr_protocol_settings` fields `sintr_policy_config_path` and `gov_txn_config_path` are  expected to be an absolute path to a single config file.
+However, for convenience, we have scripted `update_configs.py` to take the path to a directory where these configs are.
+This is convenient under the assumption that all policy configs are left in the same config directory (which our repo does in `src/0_local_test_outputs/configs`).
+This way, `update_configs.py` can bulk update configs without having to specify the absolute path for each.
 
- <!-- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`. -->
-
-#### Required Modifications:
 1. `"project_name": "pequin-pg0"`
    - change the value field to the name of your CloudLab project `<project-name>`. On cloudlab.us (utah cluster) you will generally need to add "-pg0" to your project_name in order to ssh into the machines. To confirm which is the case for you, try to ssh into a machine directly using `ssh <cloudlab-user>@us-east-1-0.<experiment-name>.<project-name>.utah.cloudlab.us`.  
 2. `"experiment_name": "sintr"`
    - change the value field to the name of your CloudLab experiment `<experiment-name>`.
 3. `"base_local_exp_directory": "/home/atl63/Sintr-Artifact/output"`
-   - :warning: Some of our helper scripts assume that this directory is named `output` and directly under the root of the artifact.
+   - For convenience, some of our helper scripts default to assuming that this directory is named `output` and directly under the root of the artifact.
    - Set the value field to be the local path (on your machine or the control machine) where experiment output files will be downloaded to and aggregated. 
 4. `"base_remote_bin_directory_nfs": "/users/<cloudlab-user>/indicus"` 
    - Set the field `<cloudlab-user>`. This is the directory on the CloudLab machines where the binaries will be uploaded
@@ -135,16 +137,30 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
    - Set the field `<cloudlab-user>`. 
 7. `"benchmark_schema_file_path": "/users/atli/benchmark_data/sql-tpcc-tables-schema.json",`
     - change the user name (atli) to your `<cloudlab-user>`
-    - note: the file itself depends on which workload you are using
+    - note: the file itself depends on which workload you are using; see below for workload to schema file mapping
 8. `"bftsmart_codebase_dir" : "/users/atli"`
     - change the user name (atli) to your `<cloudlab-user>`
-    - this is only applicable to BFT-SMaRt configs
-9. `"sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
+    - this is only applicable to BFT-SMaRt configs, although it will not affect non-BFT-SMaRt configs
+9. `"sintr_protocol_settings" : "sintr_policy_config_path" : "src/0_local_test_outputs/configs/<policy_config>.config"`
     - change this to be the absolute path to the appropriate policy config
     - NOTE: in the override json for `update_configs.py`, this should be the path to the where the policy configs, as the script will change this prefix and leave the config filenames unchanged
-10. `"gov_txn_config_path" : "src/0_local_test_outputs/configs/<gov-txn-policy>.config"`
+10. `"sintr_protocol_settings" : "gov_txn_config_path" : "src/0_local_test_outputs/configs/<gov-txn-policy>.config"`
     - change this to be the absolute path to the appropriate governance txn config
     - NOTE: in the override json for `update_configs.py`, this should be the path to the where the governance transaction configs, as the script will change this prefix and leave the config filenames unchanged
+
+Below we list the appropriate `"benchmark_schema_file_path"` for each benchmark. 
+Note that Smallbank does not require a schema as it is a KVS benchmark.
+
+1. TPCC: `"/users/<cloudlab-user>/benchmark_data/sql-tpcc-tables-schema.json"`
+2. Seats: `"/users/<cloudlab-user>/benchmark_data/sql-seats-tables-schema.json"`
+3. YCSB Microbenchmark: `"/users/<cloudlab-user>/rw-sql.json"`
+
+
+<!-- ### Detailed Manual Instructions
+
+To run an experiment, you simply need to run: `python3 experiment-scripts/run_multiple_experiments.py <CONFIG>` using a specified configuration JSON file (see below). The script will load all binaries and configurations onto the remote CloudLab machines, and collect experiment data upon completion. We have provided experiment configurations for all experiments claimed by the paper, which you can find under `experiment-configs/`. In order for you to use them, you will need to make the following modifications to each file (Ctrl F and Replace in all the configs to save time): -->
+
+ <!-- > **NOTE**: We've added a new option to directly update configuration parameters in all configs. This option has not been thoroughly vetted, so please sanity check that it is working correctly for yourself!!! `experiment-configs/Config-Override-Test` contains a script `update_configs.py` that allows users to specify the parameters they want to change (`user_override.json`). The usage is `python3 update_configs.py <path_to_configs> <override_file> [--dry-run] [--backup]`. In dry run mode no changes are made, and all files that would be changed are printed. In backup mode all existing files that would be changed are backed up to a folder `backup`. -->
 
 #### **Optional** Modifications 
 1. Experiment duration:
@@ -168,7 +184,7 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
          - "client_threads_per_process" specifies the number of client threads run by each client process.  
    - The *absolute total number* of clients used by an experiment is: 
     - **Total clients** *= max(client_total, num_servers x client_nodes_per_server x client_processes_per_client_node) *x client_threads_per_process*. 
-    - For Pesto (1 shard) "num_servers" = 6, for Peloton (unreplicated) "num_servers" = 1, and for Peloton-SMR "num_servers" = 4.
+    - For Basil/Pesto "num_servers" = 6, and for Tx-SMR/Peloton-SMR "num_servers" = 4.
 
    - An example client series:
       - "client_total": [[5, 10, 20, 30, 20]],
@@ -180,7 +196,11 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
    - If you change the default names, you must also adjust the `server_regions` and `region_rtt_latencies` parameters. Group server names into the region you want to assign them to. The `region_rtt_latencies` values do not matter for LAN deployments; they are placeholders for WAN simulation---see [WAN instructions](#wan-instructions).
   
 #### Starting an experiment:
-You are ready to start an experiment. The JSON configs we used can be found under `experiment-configs/Sintr/<PATH>/<config>.json`. **Note that** all microbenchmark configs are Pesto (Pequin) exclusive.
+You are ready to start an experiment. 
+The JSON configs we used can be found under `experiment-configs/Sintr/<PATH>/<config>.json`. 
+**Note that** all microbenchmark configs are run with Sintr on top of Pesto.
+
+> For reproducing our results, we recommend using the scripts we detail [below](#exp) to run experiments in bulk rather than running each config individually.
 
 Run: `python3 <PATH>/experiment-scripts/run_multiple_experiments.py <PATH>/experiment-configs/Sintr/<PATH>/<config>.json` and wait!
 
@@ -188,11 +208,11 @@ Optional: To monitor experiment progress you can ssh into a server machine (e.g.
   
    
 ## (4) Parsing outputs <a name="output"></a>
-We provide experiment scripts that collect the results across multiple experiments together.
-See the next section for instructions on how to run these scripts.
-Below we detail how to understand the results of a single experiment run.
+This section explains how to understand the results of a single experiment run.
 
-### Detailed Manual Instructions
+> We provide experiment scripts that collect the results across multiple experiments together.
+See the next [section](#exp) for instructions on how to run these scripts.
+
 After the experiment is complete, the scripts will generate an output folder at your specified `base_local_exp_directory`. Each folder is timestamped. 
 
 To parse experiment results you have 2 options:
