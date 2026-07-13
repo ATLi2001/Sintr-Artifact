@@ -291,7 +291,7 @@ To directly compare against the numbers reported in our paper please refer to th
 
 > **Notice**: When running experiments with low load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
 
-> :warning: Sometimes CloudLab nodes can be finnicky and will hang or fail silently when trying to run an experiment. 
+> :warning: Sometimes CloudLab nodes can be finicky and will hang or fail silently when trying to run an experiment. 
 Take a look at the [troubleshooting](#troubleshooting) section below for help.
 
 <!-- > **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes or experienced miscellaneous changes to debug logging). This should have very little impact on performance, but we acknowledge it nonetheless for completeness. The main claims remain consistent. -->
