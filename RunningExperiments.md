@@ -91,7 +91,7 @@ When evaluating Peloton-HS, Peloton-Smart, Tx-HS, or Tx-Smart you will need to c
 
    <!-- 2. Run `./one_step_config.sh <Local Pequin-Artifact directory> <cloudlab-user> <experiment-name> <project-name> <cluster-domain-name>`
    3. For example: `./one_step_config.sh /home/floriansuri/Research/Projects/Pequin/Pequin-Artifact fs435 pequin pequin-pg0 utah.cloudlab.us`
-   4. This will upload the necessary configurations for the BFT-SMaRt Conesnsus module to the CloudLab machines.
+   4. This will upload the necessary configurations for the BFT-SMaRt Consensus module to the CloudLab machines.
       - Troubleshooting: Make sure files `server-hosts` and `client-hosts` in `/src/scripts/` do not contain empty lines at the end -->
 
 
@@ -194,7 +194,7 @@ To run an experiment, you simply need to run: `python3 experiment-scripts/run_mu
       - "client_threads_per_process": [[1]],
          - "client_threads_per_process" specifies the number of client threads run by each client process.  
    - The *absolute total number* of clients used by an experiment is: 
-    - **Total clients** *= max(client_total, num_servers x client_nodes_per_server x client_processes_per_client_node) *x client_threads_per_process*. 
+    - **Total clients** = max(client_total, num_servers x client_nodes_per_server x client_processes_per_client_node) *x client_threads_per_process*. 
     - For Basil/Pesto "num_servers" = 6, and for Tx-SMR/Peloton-SMR "num_servers" = 4.
 
    - An example client series:
@@ -457,7 +457,7 @@ substantially improve performance without sacrificing safety.
 | Leveraging policy lifting | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
 
 ### Troubleshooting
-Sometimes CloudLab nodes can be finnicky and will hang or fail to initialize properly when trying to run an experiment.
+Sometimes CloudLab nodes can be finicky and will hang or fail to initialize properly when trying to run an experiment.
 If this happens (either experiment takes too long to start, or output numbers are drastically too low), you may need to reboot some of the CloudLab nodes. 
 
 For example, if you notice the experiment is not starting for a long time, stop the current run and perform the following steps to identify which node is the problem.
