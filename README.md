@@ -93,7 +93,8 @@ The `sync/` subdirectory contains wrappers that call the benchmark code as an in
 
 Networking and cryptography functionality is found in `src/lib/`.
 
-The experiment scripts to run all prototypes on CloudLab are found in `experiment-scripts/`, `src/` and `src/scripts/` contain additional helper scripts used to create/upload benchmark data, and pre-configure HotStuff/BFT-SMaRt.
+The experiment scripts to run all prototypes on CloudLab are found in `experiment-scripts/`.
+`src/` and `src/scripts/` contain additional helper scripts used to create/upload benchmark data, and pre-configure HotStuff/BFT-SMaRt.
 Finally, `experiment-configs/` contains the configs we used in our experiments.
 
 
