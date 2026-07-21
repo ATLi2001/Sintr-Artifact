@@ -39,7 +39,7 @@ ValidationClient::ValidationClient(Transport *transport, uint64_t client_id, uin
     transport(transport), client_id(client_id), nshards(nshards), ngroups(ngroups), part(part), params(params),
     table_registry(table_registry), policyCache(policyCache) {
       // init policy id function
-      policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
+      policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName, params.sintr_params.policy1Percentage);
     }
 
 ValidationClient::~ValidationClient() {

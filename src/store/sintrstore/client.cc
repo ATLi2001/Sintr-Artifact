@@ -98,7 +98,7 @@ Client::Client(transport::Configuration *config, uint64_t id, int nShards,
         timeServer, phase1DecisionTimeout, consecutiveMax));
   }
 
-  policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
+  policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName, params.sintr_params.policy1Percentage);
   policyCache = policyParseClient.ParseConfigFile(params.sintr_params.policyConfigPath);
 
   endorseClient = new EndorsementClient(client_id);
@@ -309,7 +309,8 @@ bool Client::IsPolicyChangeTxn(const TxnState &protoTxnState) const {
 }
 
 void Client::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient) {
-  EstimatePolicy est_policy_obj(params.sintr_params.includeReadsetForTxnPolicy, params.sintr_params.policyFunctionName);
+  EstimatePolicy est_policy_obj(params.sintr_params.includeReadsetForTxnPolicy, params.sintr_params.policyFunctionName,
+    params.sintr_params.policy1Percentage, params.sintr_params.accurateRandomPolicyEst);
   est_policy_obj.EstimateTxnPolicy(protoTxnState, policyClient, *policyCache);
 }
 
