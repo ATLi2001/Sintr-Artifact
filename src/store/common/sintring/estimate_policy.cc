@@ -226,6 +226,7 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         }
 
         if (policy_function_name.empty() || policy_function_name == "basic_id") {
+          // always get the first policy for random policy estimate
           const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
           UW_ASSERT(temp_policy != nullptr);
           policyClient->AddPolicy(temp_policy);
@@ -233,6 +234,67 @@ void EstimatePolicy::EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClie
         else if (policy_function_name == "rw_sql_policy_change_grouped") {
           for (const uint64_t &t : valTxnData.tables()) {
             const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
+            UW_ASSERT(temp_policy != nullptr);
+            policyClient->AddPolicy(temp_policy);
+          }
+        }
+        else if (policy_function_name == "rw_sql_table_based_policy") {
+          if(accurateEst) {
+            for (const uint64_t &t : valTxnData.tables()) {
+              const Policy *temp_policy = policyCache.Get(EstimatePolicy::TableToPolicyID(t, txn_bench));
+              UW_ASSERT(temp_policy != nullptr);
+              policyClient->AddPolicy(temp_policy);
+            }
+          } else {
+            // always guess policy 0
+            const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
+            UW_ASSERT(temp_policy != nullptr);
+            policyClient->AddPolicy(temp_policy);
+          }
+        }
+        else if (policy_function_name == "rw_sql_random_policy") {
+          if (percentage == 100 && accurateEst) {
+            const Policy *temp_policy = policyCache.Get(PolicyIdString(1));
+            UW_ASSERT(temp_policy != nullptr);
+            policyClient->AddPolicy(temp_policy);
+          } else if(accurateEst) {
+            // should only have 1 query and start, end, and table should be the same size.
+            UW_ASSERT(valTxnData.starts().size() == valTxnData.ends().size() && valTxnData.starts().size() == 1 &&
+              valTxnData.tables().size() == 1);
+            uint32_t table_id = valTxnData.tables()[0];
+            uint32_t start = valTxnData.starts()[0];
+            uint32_t end = valTxnData.ends()[0];
+            if(start <= end) {
+              UW_ASSERT(end-start == 4); // should only have 5 keys for accurate estimation
+              for(uint32_t i = start; i <= end; i++) {
+                // 1 mil tables per key
+                uint32_t unique_int = table_id * 1000000 + i;
+                uint32_t policy_id = unique_int % 100 < percentage ? 1 : 0;
+                const Policy *temp_policy = policyCache.Get(PolicyIdString(policy_id));
+                UW_ASSERT(temp_policy != nullptr);
+                policyClient->AddPolicy(temp_policy);
+              }
+            } else {
+              UW_ASSERT(1000000-start + end+1 == 5); // should only have 5 keys for accurate estimation
+              for(uint32_t i = start; i < 1000000; i++) {
+                // 1 mil tables per key
+                uint32_t unique_int = table_id * 1000000 + i;
+                uint32_t policy_id = unique_int % 100 < percentage ? 1 : 0;
+                const Policy *temp_policy = policyCache.Get(PolicyIdString(policy_id));
+                UW_ASSERT(temp_policy != nullptr);
+                policyClient->AddPolicy(temp_policy);
+              }
+              for (int64_t i = end; i >= 0; i--) {
+                // 1 mil tables per key
+                uint32_t unique_int = table_id * 1000000 + i;
+                uint32_t policy_id = unique_int % 100 < percentage ? 1 : 0;
+                const Policy *temp_policy = policyCache.Get(PolicyIdString(policy_id));
+                UW_ASSERT(temp_policy != nullptr);
+                policyClient->AddPolicy(temp_policy);
+              }
+            }
+          } else {
+            const Policy *temp_policy = policyCache.Get(PolicyIdString(0));
             UW_ASSERT(temp_policy != nullptr);
             policyClient->AddPolicy(temp_policy);
           }
@@ -427,6 +489,6 @@ std::string EstimatePolicy::TableToPolicyID(const uint64_t t, const std::string 
     }
   }
   else if(txn_bench == ::rwsql::BENCHMARK_NAME) {
-    return rwsql::GetPolicyIdForTable(t, policy_function_name);
+    return rwsql::GetPolicyIdForTable(t, policy_function_name, percentage);
   }
 }

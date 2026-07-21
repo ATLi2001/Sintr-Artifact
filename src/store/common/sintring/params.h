@@ -70,7 +70,8 @@ typedef struct SintrParameters {
   const bool includeReadsetForTxnPolicy; // include readset for determining transaction policy
   const bool liftingEnabled; // bool to enable lifting
   const bool contactAllByzClients;
-
+  const uint32_t policy1Percentage; // percentage of keys that use policy 1
+  const bool accurateRandomPolicyEst;
   SintrParameters(uint64_t maxValThreads, bool signFwdReadResults, bool signFinishValidation,
     bool debugEndorseCheck, bool clientCheckEvidence, std::string policyFunctionName,
     std::string policyConfigPath, uint32_t readIncludePolicy, int clientValidationHeuristic,
@@ -80,7 +81,7 @@ typedef struct SintrParameters {
     bool serverSkipEndorsementCheck, bool policyCCC, bool optimisticReceiveEndorsement, bool ignorePolicyUpdate,
     bool clientEstimatePolicy, bool hashQueryGenId, bool separateTransport, uint32_t maxClientsConnect,
     bool useEndorsementCB, const SintrFailure &sintrFailure, bool includeReadsetForTxnPolicy, bool liftingEnabled,
-    bool contactAllByzClients) :
+    bool contactAllByzClients, uint32_t policy1Percentage, bool accurateRandomPolicyEst) :
     maxValThreads(maxValThreads),
     signFwdReadResults(signFwdReadResults),
     signFinishValidation(signFinishValidation),
@@ -115,7 +116,9 @@ typedef struct SintrParameters {
     sintrFailure(sintrFailure),
     includeReadsetForTxnPolicy(includeReadsetForTxnPolicy),
     liftingEnabled(liftingEnabled),
-    contactAllByzClients(contactAllByzClients)
+    contactAllByzClients(contactAllByzClients),
+    policy1Percentage(policy1Percentage),
+    accurateRandomPolicyEst(accurateRandomPolicyEst)
      {
         // either sort write set or send blind write message to get endorsement matches
         // doing neither will result in potential endorsement mismatch from nondeterministic write set ordering
@@ -143,6 +146,9 @@ typedef struct SintrParameters {
 
         if(!useOCCForPolicies) {
             Warning("Use OCC for policies must be true, we do not support reading from prepared policy transactions");
+        }
+        if(policyFunctionName == "rw_sql_table_based_policy" && policy1Percentage % 10 != 0) {
+            Panic("Policy function is rw_sql_table_based_policy but policy1Percentage is not a multiple of 10");
         }
     }
 

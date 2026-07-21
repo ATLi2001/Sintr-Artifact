@@ -46,7 +46,7 @@ typedef std::function<Policy *(const std::string &, const std::string &)> policy
 typedef std::function<std::string(const std::string &, const std::string &)> policy_id_function;
 
 // function that takes in a policy function name and returns the corresponding policy function
-inline policy_id_function GetPolicyIdFunction(const std::string &policy_function_name) {
+inline policy_id_function GetPolicyIdFunction(const std::string &policy_function_name, const int percentage = 0) {
   if (policy_function_name == "basic_id") {
     return [](const std::string &key, const std::string &value) -> std::string {
       return PolicyIdString(0);
@@ -62,12 +62,17 @@ inline policy_id_function GetPolicyIdFunction(const std::string &policy_function
       }
     };
   }
-  else if (policy_function_name == "rw_sql_policy_change_grouped") {
-    return [policy_function_name](const std::string &key, const std::string &value) -> std::string {
+  else if (policy_function_name == "rw_sql_policy_change_grouped" || policy_function_name == "rw_sql_table_based_policy") {
+    return [policy_function_name, percentage](const std::string &key, const std::string &value) -> std::string {
       std::string table_name;
       std::vector<std::string> primary_key_column_values;
       DecodeTableRow(key, table_name, primary_key_column_values);
-      return rwsql::GetPolicyIdForTable(table_name, policy_function_name);
+      return rwsql::GetPolicyIdForTable(table_name, policy_function_name, percentage);
+    };
+  }
+  else if (policy_function_name == "rw_sql_random_policy") {
+    return [policy_function_name, percentage](const std::string &key, const std::string &value) -> std::string {
+      return rwsql::GetPolicyIdForKey(key, policy_function_name, percentage);
     };
   }
   // tpcc can support warehouse based policies with lifting

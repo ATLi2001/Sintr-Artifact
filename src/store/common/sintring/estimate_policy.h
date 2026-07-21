@@ -38,8 +38,9 @@
 // this class takes TxnState proto message and estimates the policy needed for the transaction
 class EstimatePolicy {
  public:
-  EstimatePolicy(bool include_readset_for_txn_policy, const std::string &policy_function_name)
-      : include_readset_for_txn_policy(include_readset_for_txn_policy), policy_function_name(policy_function_name) {}
+  EstimatePolicy(bool include_readset_for_txn_policy, const std::string &policy_function_name, int percentage = 0, bool accurateEst = false)
+      : include_readset_for_txn_policy(include_readset_for_txn_policy), policy_function_name(policy_function_name), percentage(percentage), 
+      accurateEst(accurateEst) {}
   ~EstimatePolicy() {}
   // takes in transaction state, policy, and endorsement client and returns an estimated policy
   void EstimateTxnPolicy(const TxnState &protoTxnState, PolicyClient *policyClient, const PolicyCache &policyCache) const;
@@ -53,6 +54,8 @@ class EstimatePolicy {
 
   const bool include_readset_for_txn_policy;
   std::string policy_function_name;
+  const int percentage; // percentage of policy ID 1 for random policy estimation
+  const bool accurateEst; // whether to use accurate estimation for random policy estimation
 };
 
 #endif
