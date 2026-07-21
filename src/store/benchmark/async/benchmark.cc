@@ -565,6 +565,8 @@ DEFINE_uint32(sintr_byz_client_total, 0, "sintr number of clients that will inje
 DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
 DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
 DEFINE_bool(sintr_contact_all_byz_clients, false, "sintr contact all byz clients in system for validation");
+DEFINE_uint32(sintr_policy1_percentage, 0, "percentage of keys that use policy 1");
+DEFINE_bool(sintr_random_accurate_est, false, "Accurate estimation when using random policy for rw_sql");
 
 ///////////////////////////////////////////////////////////
 
@@ -1774,7 +1776,9 @@ int main(int argc, char **argv) {
       sintrFailure,
       FLAGS_sintr_include_readset_for_txn_policy,
       FLAGS_sintr_enable_lifting,
-      FLAGS_sintr_contact_all_byz_clients
+      FLAGS_sintr_contact_all_byz_clients,
+      FLAGS_sintr_policy1_percentage,
+      FLAGS_sintr_random_accurate_est
     );
 
     switch (mode) {

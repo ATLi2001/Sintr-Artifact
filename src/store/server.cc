@@ -491,7 +491,7 @@ DEFINE_bool(sintr_policy_CCC, true, "perform CCC for policies");
 DEFINE_bool(sintr_hash_query_gen_id, true, "sintr hash query general id");
 DEFINE_bool(sintr_include_readset_for_txn_policy, false, "sintr include readset for determining transaction policy");
 DEFINE_bool(sintr_enable_lifting, false, "sintr enable lifting for transactions");
-
+DEFINE_uint32(sintr_policy1_percentage, 0, "percentage of keys that use policy 1");
 
 /**
  * Experiment settings.
@@ -519,7 +519,6 @@ DEFINE_uint64(num_keys_per_table, 1000, "number of keys to generate per table");
 DEFINE_int32(value_size, 10, "-1 = value is int, > 0, value is string => if value is string: size of the value strings"); //Currently not supported. Requires rw-sql input that is value String and not bigint
 DEFINE_int32(value_categories, 50, "number of unique states value can be in; -1 = unlimited");
 DEFINE_bool(rw_simulate_point_kv, false, "whether to simulate point read execution in Pesto by not invoking the Table store, but just storing in the KV store");
-
 
 
 Server *server = nullptr;
@@ -839,6 +838,8 @@ int main(int argc, char **argv) {
     false, 0, false, SintrFailure(),
     FLAGS_sintr_include_readset_for_txn_policy,
     FLAGS_sintr_enable_lifting,
+    false,
+    FLAGS_sintr_policy1_percentage,
     false
   );
 
@@ -925,6 +926,9 @@ int main(int argc, char **argv) {
       Debug("Starting new server object");
       Notice("FILE PATH: %s", FLAGS_data_file_path.c_str());
       if(FLAGS_pequin_simulate_replica_failure && config.n == 0) Panic("Cannot simulate inconsitency without replication");
+      if((FLAGS_num_keys_per_table != 1000000 || FLAGS_num_tables != 10) && FLAGS_sintr_policy_function_name == "rw_sql_random_policy") {
+        Panic("Sintr random policy function is only supported for RW-SQL benchmark with 10 tables with 1M keys each");
+      }
       bool simulate_fault = FLAGS_pequin_simulate_replica_failure && (FLAGS_replica_idx == 0);
       Notice("Simulating Fault at this Replica? %d", simulate_fault);
       server = new sintrstore::Server(config, FLAGS_group_idx,
