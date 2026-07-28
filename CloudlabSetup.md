@@ -113,8 +113,138 @@ Connect using your CloudLab username and the following domain name:
 You may need to add `-pg0` to your project name in order to connect, i.e. if your project is called "pequin", it may need to be "pequin-pg0" in order to connect.
 It is crucial that you connect using the `-A` setting in order to transfer your local SSH agent to the control machine. If you still run into connection issues, try manually uploading your ssh key (that is registered with CloudLab) to the control machine.
 
+#### Troubleshooting with a control machine
+
+Depending on the control machine that you use, you may see some of the following problems. 
+
+1. Disk Space
 
 Control machines may be low on disk space in the default home directory, and have insufficient space to clone the artifact. If this should become a problem, try to clone the artifact into a directory such as `dev` or `mnt`.
+
+If the CloudLab node OS boots on a small 16 GB root partition
+(`/dev/nvme0n1p1`, mounted at `/`), and `/mnt` lives on that same root disk — it is *not* a separate volume. 
+A full build overflows 16 GB, which shows up as `No space left on device` errors while writing `.o`/`.s` files.
+
+The bulk of the disk was sitting unused in an unmounted partition `/dev/nvme0n1p4` (~216 GB). Mount it and build there instead.
+
+```bash
+df -h                       # confirm / is full and there's no separate /mnt disk
+lsblk                       # look for a large unmounted partition (nvme0n1p4)
+sudo blkid /dev/nvme0n1p4   # does it already have a filesystem?
+```
+
+If `blkid` reports an existing `TYPE=` (e.g. `ext4`), just mount it — do **not**
+reformat, or you'll wipe it:
+
+```bash
+sudo mkdir -p /mydata
+sudo mount /dev/nvme0n1p4 /mydata
+```
+
+Otherwise (empty partition), format first, then mount:
+
+```bash
+sudo mkfs.ext4 /dev/nvme0n1p4
+sudo mkdir -p /mydata
+sudo mount /dev/nvme0n1p4 /mydata
+df -h /mydata               # should show ~213 GB available
+```
+
+Next, make the mount survive reboots.
+
+```bash
+echo "UUID=$(sudo blkid -s UUID -o value /dev/nvme0n1p4) /mydata ext4 defaults 0 2" \
+  | sudo tee -a /etc/fstab
+```
+
+You can then clone the artifact into `/mydata/` (don't move the copy from the full root disk — clone a clean tree):
+
+```bash
+sudo chown -R $(whoami):$(id -gn) /mydata/
+cd /mydata
+git clone https://github.com/ATLi2001/Sintr-Artifact.git Sintr-Artifact
+```
+
+If root is already full and `git clone` or later steps complain about space,
+free a little first:
+
+```bash
+sudo apt-get clean
+# and remove any partial build tree left on the root disk, e.g.:
+# rm -rf /mnt/Sintr-Artifact/src/.obj
+```
+
+2. Compilation issues
+
+You may see that compilation complains about not having enough space for tmp files. 
+If this is the case, change the tmp directory before compiling.
+```bash
+export TMPDIR=/mydata/tmp && mkdir -p "$TMPDIR"
+make -j $(nproc)
+```
+
+We have also seen that the order of source compilation can vary depending on the machine.
+If you see `postgresparser.h` failed to compile with:
+
+```
+error: 'SQLStatementList' in namespace 'peloton::parser' does not name a type;
+did you mean 'SQLStatement'?
+```
+
+This was fixed by **forward-declaring the parser statement types** in
+`src/store/pequinstore/query-engine/parser/postgresparser.h` (in the
+`peloton::parser` namespace, before their first use):
+
+```cpp
+class AnalyzeStatement;
+class CopyStatement;
+class CreateStatement;
+class CreateFunctionStatement;
+class DeleteStatement;
+class DropStatement;
+class ExecuteStatement;
+class FuncParameter;
+class GroupByDescription;
+class JoinDefinition;
+class OrderDescription;
+class PrepareStatement;
+class ReturnType;
+class SelectStatement;
+class SQLStatementList;
+struct TableRef;
+class TransactionStatement;
+class UpdateClause;
+class UpdateStatement;
+class VariableSetStatement;
+
+// class PostgresParser { ...
+```
+
+3. SSH `ControlPath` Too Long
+
+When running `run_multiple_experiments.py` from the control machine, depending on your CloudLab username and group name, you may see the following warning.
+
+```
+unix_listener: path "/users/<my-account>/.ssh/cm-<my-account>@us-east-1-0.<my-labname>.<my-group>.utah.cloudlab.us:22.XXXX" too long for Unix domain socket
+```
+
+This can be resolved by changing `experiment-scripts/utils/remote_util.py`.
+
+Original options in `ssh_args()` function:
+
+```python
+'-o', 'ControlMaster=auto',
+'-o', 'ControlPersist=2m',
+'-o', 'ControlPath=~/.ssh/cm-%r@%h:%p',
+```
+
+Changed `ControlPath` to use the hashed connection identifier (`%C`) under `/tmp` instead:
+
+```python
+'-o', 'ControlMaster=auto',
+'-o', 'ControlPersist=2m',
+'-o', 'ControlPath=/tmp/sintr-ssh-%C',
+```
 
 ### Using a custom profile (skip if using pre-supplied profile)
 
