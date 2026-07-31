@@ -125,3 +125,29 @@ void DecodeTableRow(const std::string &enc_key, std::string &table_name, std::ve
   primary_key_column_values.push_back(enc_key.substr(last));
 
 }
+
+// use only for RW-SQL benchmark, to get a unique int for each row across all tables
+uint64_t ParseEncodedKeyToUniqueInt(const std::string &enc_key, const uint64_t total_rows_per_table) {
+  // Parse key: expected format "<table_id><delim><primary_key_value>[<delim>...]"
+  size_t delim_pos = enc_key.find(unique_delimiter);
+  if (delim_pos == std::string::npos) {
+    Panic("Malformed key: missing delimiter in key: %s", enc_key.c_str());
+  }
+
+  std::string table_id_str = enc_key.substr(0, delim_pos);
+  std::string primary_key_str = enc_key.substr(delim_pos + unique_delimiter.size());
+
+  // If there are additional primary key columns concatenated by more
+  // delimiters, only the first is used here for row identity.
+  size_t next_delim = primary_key_str.find(unique_delimiter);
+  if (next_delim != std::string::npos) {
+    primary_key_str = primary_key_str.substr(0, next_delim);
+  }
+
+  uint64_t table_id = std::stoull(table_id_str);
+  uint64_t key_val = std::stoull(primary_key_str);
+
+  // Compute a globally unique row index across all tables, using the
+  // known per-table bound so ranges don't overlap.
+  return table_id * total_rows_per_table + key_val;
+}

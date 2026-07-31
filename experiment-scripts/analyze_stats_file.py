@@ -26,6 +26,7 @@ import pandas as pd
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import json
 import os
 import argparse
@@ -171,6 +172,7 @@ ANALYSIS_TYPES = [
     "client_failures",
     "norm_tput_bar",
     "tput_bar",
+    "latency_percentiles_bar",
 ]
 
 # the original stats directory should have subdirectories, each corresponding to a single experiment run
@@ -281,6 +283,25 @@ def parse_stats_json(stats_json_path):
             return None, None
 
         return stats_json["run_stats"]["combined"]["tput"]["p50"], stats_json["run_stats"]["combined"]["mean"]["p50"]
+
+# return median throughput and p50/p90/p99/max latency (each the p50 across runs) from stats.json
+def parse_stats_json_percentiles(stats_json_path):
+    with open(stats_json_path, "r") as stats_file:
+        stats_json = json.load(stats_file)
+
+        if "run_stats" not in stats_json or "combined" not in stats_json["run_stats"]:
+            print(f"Skipping {stats_json_path} as it does not contain run_stats or combined data.")
+            return None, None, None, None, None, None, None
+
+        combined = stats_json["run_stats"]["combined"]
+        # each percentile/max is itself aggregated across runs; take its p50 like tput/mean above.
+        # the paired "stddev" is the run-to-run spread of that percentile, used for error bars.
+        return (
+            combined["tput"]["p50"],
+            combined["mean"]["p50"],
+            combined["p50"]["p50"], combined["p90"]["p50"], combined["p99"]["p50"],
+            combined["p50"]["stddev"], combined["p90"]["stddev"], combined["p99"]["stddev"],
+        )
 
 # read all the logs in a single logs directory
 # log files are formatted as operation,latency,timestamp,client_id
@@ -397,6 +418,38 @@ def tput_time_csv(logs_df, output_dir, now_string):
     out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[5]}-{now_string}.csv"), index=False)
     return out_df, policy_change_time_s
 
+# walk the original stats dir extracting p50/p90/p99 latency (and tput) per experiment run
+def latency_percentiles_csv(original_stats_dir, output_dir, now_string):
+    out_df = pd.DataFrame(
+        columns=["experiment_name", "num_clients", "timestamp", "tput", "mean",
+                 "p50_latency", "p90_latency", "p99_latency",
+                 "p50_latency_std", "p90_latency_std", "p99_latency_std"]
+    )
+
+    for subdir in os.listdir(original_stats_dir):
+        subdir_path = os.path.join(original_stats_dir, subdir)
+        if not os.path.isdir(subdir_path):
+            continue
+
+        analysis_name = None
+        num_clients = 0
+        for file in os.listdir(subdir_path):
+            # read in config file (any .json that is not stats.json)
+            if file != "stats.json" and file.endswith(".json"):
+                analysis_name, num_clients, _, _ = parse_config_file(os.path.join(subdir_path, file))
+
+        if not os.path.exists(os.path.join(subdir_path, "stats.json")):
+            print(f"Skipping {subdir_path} as it does not contain stats.json file.")
+            continue
+        tput, mean, p50, p90, p99, p50_std, p90_std, p99_std = parse_stats_json_percentiles(os.path.join(subdir_path, "stats.json"))
+        if tput is None:
+            continue
+        out_df.loc[len(out_df)] = [analysis_name, num_clients, subdir, tput, mean, p50, p90, p99, p50_std, p90_std, p99_std]
+
+    out_df.sort_values(by=["experiment_name", "num_clients", "timestamp"], inplace=True)
+    out_df.to_csv(os.path.join(output_dir, f"{ANALYSIS_TYPES[9]}-{now_string}.csv"), index=False)
+    return out_df
+
 def create_lat_tput_plots(df, output_dir, now_string, benchmark=None):
     # benchmark (tpcc/seats/smallbank/rw-sql) selects the legend/color scheme and
     # axis limits from BENCHMARK_PLOT_CONFIGS. When None, fall back to the generic
@@ -462,7 +515,13 @@ def create_lat_tput_plots(df, output_dir, now_string, benchmark=None):
 # grouped_data is a dictionary where keys are attributes (e.g., "sig", "no-sig") and values are lists of measurements
 # x_labels is a list of labels for the x-axis
 # grouped_data values should be the same length as x_labels
-def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None, bar_label=False):
+def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, output_dir, analysis_type, now_string, grouped_yerr=None, bar_label=False, series_colors=None, series_hatches=None, legend_handles=None):
+    # series_colors/series_hatches are positionally matched to grouped_data's keys
+    # and let the caller encode two dimensions at once (e.g. hue = percentile,
+    # hatch = variant). Both are optional; None falls back to matplotlib defaults.
+    # legend_handles overrides the one-entry-per-series legend, so a caller that
+    # encodes two dimensions can show one swatch per dimension value instead of
+    # one per combination.
     # spacing if too many bars per group
     bars_per_group = len(grouped_data)
     x = np.arange(len(x_labels)) * (bars_per_group // 4 + 1)  # the label locations
@@ -474,10 +533,12 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
 
     for attribute, measurement in grouped_data.items():
         offset = width * multiplier
+        color = series_colors[multiplier % len(series_colors)] if series_colors else None
+        hatch = series_hatches[multiplier % len(series_hatches)] if series_hatches else None
         if grouped_yerr:
-            rects = ax.bar(x + offset, measurement, width, label=attribute, yerr=grouped_yerr[attribute], capsize=5)
+            rects = ax.bar(x + offset, measurement, width, label=attribute, yerr=grouped_yerr[attribute], capsize=5, color=color, hatch=hatch, edgecolor="black" if series_hatches else None)
         else:
-            rects = ax.bar(x + offset, measurement, width, label=attribute)
+            rects = ax.bar(x + offset, measurement, width, label=attribute, color=color, hatch=hatch, edgecolor="black" if series_hatches else None)
         if bar_label:
             ax.bar_label(rects, label_type="center", fmt="%.2f")
         multiplier += 1
@@ -485,15 +546,26 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
     # Add some text for labels, title and custom x-axis tick labels, etc.
     # ax.set_ylabel(y_label)
     ax.set_ylabel(y_label, fontsize=24, fontweight="bold")
-    ax.set_xticks(x + width, x_labels)
+    # center the tick under the whole group regardless of how many bars it holds
+    ax.set_xticks(x + width * (bars_per_group - 1) / 2, x_labels)
     # ax.set_xlabel(x_axis_label)
     ax.set_xlabel(x_axis_label, fontsize=24, fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
     ylims = ax.get_ylim()
     ax.set_ylim(0, ylims[1] * 1.1)
-    ax.legend(loc="upper center", ncol=bars_per_group, fontsize=16, framealpha=0.5)
-
+    if(analysis_type == ANALYSIS_TYPES[9]):
+        ncol = len(legend_handles) if legend_handles else min(4, bars_per_group)
+        ax.legend(
+            **({"handles": legend_handles} if legend_handles else {}),
+            loc="upper center",
+            # bbox_to_anchor=(0.5, -0.22),        # below the x-axis label
+            ncol=ncol,
+            fontsize=16,
+            framealpha=0.5,
+        )
+    else:
+        ax.legend(loc="upper center", ncol=bars_per_group, fontsize=16, framealpha=0.5)
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color("black")
@@ -503,7 +575,10 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
         tick_label.set_fontweight("bold")
 
     # plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.png"))
-    plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
+    if(analysis_type == ANALYSIS_TYPES[9]):
+        plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.pdf"), bbox_inches="tight", format="pdf", dpi=600, transparent=True)
+    else:
+        plt.savefig(os.path.join(output_dir, f"{analysis_type}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
 def create_sig_no_sig_bar_plot(df, output_dir, analysis_type, now_string):
@@ -1040,6 +1115,116 @@ def create_tput_bar_plot(df, output_dir, now_string, benchmark=None):
     plt.savefig(os.path.join(output_dir, f"{ANALYSIS_TYPES[8]}-{now_string}.pdf"), format="pdf", dpi=600, transparent=True)
     plt.close()
 
+# experiment names look like "10%-P-5" and "10%-P-5-known": the leading token is
+# the policy-5 percentage (the x-axis group) and the "-known" suffix is the
+# variant plotted alongside it inside that group.
+def _split_policy5_experiment(experiment_name):
+    known = experiment_name.endswith("-known")
+    percentage = experiment_name[: -len("-known")] if known else experiment_name
+    percentage = percentage.split("-", 1)[0]
+    return percentage, known
+
+
+def create_latency_percentiles_bar_plot(df, output_dir, now_string):
+    # grouped bar chart: one group per policy-5 percentage, with both the base and
+    # the "-known" variant of that percentage sitting in the same group. Hue
+    # encodes the percentile (p50/p90/p99), hatching marks the "-known" variant.
+    percentiles = ["p50_latency", "p90_latency", "p99_latency"]
+    std_cols = ["p50_latency_std", "p90_latency_std", "p99_latency_std"]
+    percentile_labels = ["p50", "p90", "p99"]
+
+    # Per-run stddev of each percentile as recorded in each stats.json. Present
+    # only on CSVs produced after that column was added.
+    has_std = all(col in df.columns for col in std_cols)
+
+    # percentage -> variant -> the rows for that experiment
+    by_percentage = {}
+    for experiment_name, group in df.groupby("experiment_name", sort=False):
+        percentage, known = _split_policy5_experiment(experiment_name)
+        by_percentage.setdefault(percentage, {})[known] = group
+
+    # order groups by the numeric percentage rather than lexicographically, so
+    # 50% does not land between 10% and 20%
+    def percentage_sort_key(percentage):
+        digits = "".join(c for c in percentage if c.isdigit())
+        return int(digits) if digits else 0
+
+    x_labels = sorted(by_percentage, key=percentage_sort_key)
+
+    # one series per (percentile, variant) pair, ordered so each percentile's two
+    # variants sit next to each other within a group
+    series = [(label, p, s, known)
+              for label, p, s in zip(percentile_labels, percentiles, std_cols)
+              for known in (False, True)]
+
+    grouped_data = {}
+    grouped_yerr = {}
+    draw_yerr = False
+    for label, p, s, known in series:
+        key = f"{label} (known)" if known else label
+        values = []
+        errors = []
+        for percentage in x_labels:
+            group = by_percentage[percentage].get(known)
+            if group is None:
+                # this percentage has no run for this variant: leave a gap
+                values.append(np.nan)
+                errors.append(0)
+                continue
+            # average across any client counts / repeated runs for this experiment
+            values.append(group[p].mean())
+            if len(group) > 1:
+                # experiment was run multiple times: the error bar should capture
+                # the run-to-run spread of each percentile (std across runs), not
+                # the mean of the per-run stddevs (those are 0 when each run
+                # reports a single aggregate). ddof=0 so a single-percentile
+                # spread is well defined.
+                errors.append(group[p].std(ddof=0))
+                draw_yerr = True
+            elif has_std:
+                # single run: fall back to the per-run stddev recorded in stats.json
+                errors.append(group[s].mean())
+                draw_yerr = True
+            else:
+                errors.append(0)
+        grouped_data[key] = values
+        grouped_yerr[key] = errors
+
+    if not draw_yerr:
+        grouped_yerr = None
+
+    # hues drawn from the same 538 palette as the tpcc/seats/smallbank figures so
+    # this plot reads as part of the same set; hatching (not a separate hue) marks
+    # the "-known" variant, so the legend needs only one swatch per dimension.
+    percentile_colors = {
+        "p50": colors_538_extended["blue"][0],
+        "p90": colors_538_extended["orange"][0],
+        "p99": colors_538_extended["green"][0],
+    }
+    series_colors = [percentile_colors[label] for label, _, _, _ in series]
+    series_hatches = ["//" if known else "" for _, _, _, known in series]
+
+    # one swatch per percentile + a single hatch-only swatch standing for "known",
+    # rather than one entry per (percentile, variant) combination
+    legend_handles = [
+        Patch(facecolor=percentile_colors[label], edgecolor="black", label=label)
+        for label in percentile_labels
+    ] + [Patch(facecolor="white", edgecolor="black", hatch="//", label="known")]
+
+    create_grouped_bar_plot(
+        grouped_data,
+        x_labels,
+        "Percentage of P-5",
+        "Latency (ms)",
+        output_dir,
+        ANALYSIS_TYPES[9],
+        now_string,
+        grouped_yerr=grouped_yerr,
+        series_colors=series_colors,
+        series_hatches=series_hatches,
+        legend_handles=legend_handles,
+    )
+
 
 if __name__ == "__main__":
     # this script is used to analyze experiment runs
@@ -1111,6 +1296,9 @@ if __name__ == "__main__":
     logs_df = pd.DataFrame()
     if args.csv:
         df = pd.read_csv(args.csv)
+    elif args.analysis_type == ANALYSIS_TYPES[9]:
+        # latency percentiles need the richer p50/p90/p99 parse, not the log walk
+        df = latency_percentiles_csv(args.original_stats_dir, args.output_csv_dir, now_string)
     else:
         df, logs_df, byz_logs_df, total_recorded_time = parse_original_stats_dir(args.original_stats_dir, args.output_csv_dir, now_string)
 
@@ -1145,3 +1333,5 @@ if __name__ == "__main__":
         create_norm_tput_bar_plot(df, args.output_plot_dir, now_string, client_num=args.client_num, csv_path=args.csv, benchmark=args.benchmark)
     elif args.analysis_type == ANALYSIS_TYPES[8]:
         create_tput_bar_plot(df, args.output_plot_dir, now_string, benchmark=args.benchmark)
+    elif args.analysis_type == ANALYSIS_TYPES[9]:
+        create_latency_percentiles_bar_plot(df, args.output_plot_dir, now_string)

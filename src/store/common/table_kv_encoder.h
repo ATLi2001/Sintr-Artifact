@@ -47,6 +47,8 @@ std::string EncodeTableRow(const std::string &table_name, const std::vector<cons
 std::string EncodeTableRow(const std::string &table_name, const std::vector<const std::string_view*> &primary_key_column_values);
 std::string EncodeTableCol(const std::string &table_name, const std::string &col_name);
 void DecodeTableRow(const std::string &enc_key, std::string &table_name, std::vector<std::string> &primary_key_column_values);
+ // use only for RW-SQL benchmark, to get a unique int for each row across all tables
+uint64_t ParseEncodedKeyToUniqueInt(const std::string &enc_key, const uint64_t total_rows_per_table);
 
 
 #endif 

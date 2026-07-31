@@ -393,6 +393,7 @@ python3 experiment-scripts/analyze_stats_file.py <ANALYZE FLAG> -o <output-dir> 
 | Client failures — uniform| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-U`         | yes | yes | `-t "client_failures"`    |
 | Client failures — Zipfian| `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/RW-SQL-Z`         | yes | yes | `-t "client_failures"`    |
 | Lifting throughput       | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting`                          | –   | –   | `-t "tput_bar"`           |
+| Random Policy       | `experiment-configs/Sintr/2-Microbenchmarks/5-Random-Policy/RW-SQL-U`                | yes | –   | `-t "latency_percentiles_bar"`           |
 
 
 #### 2.1 Vary Policy
@@ -456,6 +457,21 @@ substantially improve performance without sacrificing safety.
 | Experiment | Result Graph (PDF) | Result CSV |
 |---|---|---|
 | Leveraging policy lifting | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
+
+#### 2.5 Random Policy
+
+We evaluate the impact of mis-estimating policies in Sintr.
+We use a YCSB-based microbenchmark with a uniform key access pattern.
+Each table is assigned either `policy-1` or `policy-5`, with the fraction of `policy-5` tables varied across runs.
+Because policies are assigned randomly across the workload, clients cannot reliably estimate a transaction's policy—except when given the `known` writeset parameter, which lets them estimate it accurately.
+We measure p50, p90, and p99 transaction latency, running each experiment 3 times.
+
+We find that not knowing the policy beforehand increases p99 latency by at most ~1 ms (~16.34%) relative to the `known`-policy experiments.
+
+| Experiment | Result Graph (PDF) | Result CSV |
+|---|---|---|
+| Leveraging policy lifting | `experiment-results/2-Microbenchmarks/5-Random-Policy/random-policy.pdf` | `experiment-results/2-Microbenchmarks/5-Random-Policy/random-policy.csv` |
+
 
 ### Troubleshooting
 Sometimes CloudLab nodes can be finicky and will hang or fail to initialize properly when trying to run an experiment.

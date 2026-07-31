@@ -166,7 +166,7 @@ Server::Server(const transport::Configuration &config, int groupIdx, int idx,
   Notice("Loading Policy Store from config file: %s", params.sintr_params.policyConfigPath.c_str());
   LoadPolicyStore(params.sintr_params.policyConfigPath);
 
-  policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName);
+  policyIdFunction = GetPolicyIdFunction(params.sintr_params.policyFunctionName, params.sintr_params.policy1Percentage);
 
   if (sql_bench) {
 
