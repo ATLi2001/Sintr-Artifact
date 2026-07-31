@@ -559,9 +559,9 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
         ax.legend(
             **({"handles": legend_handles} if legend_handles else {}),
             loc="upper center",
-            bbox_to_anchor=(0.5, -0.22),        # below the x-axis label
+            # bbox_to_anchor=(0.5, -0.22),        # below the x-axis label
             ncol=ncol,
-            fontsize=14,
+            fontsize=16,
             framealpha=0.5,
         )
     else:
