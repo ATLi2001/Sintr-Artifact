@@ -19,7 +19,7 @@
     ]
   ],
   "_analysis_name is just for convenience of naming in later analysis": 0,
-  "analysis_name": "sintr-seats-sql-policy1",
+  "analysis_name": "Pesto-P-1",
   "replication_protocol": ["sintr"],
   "client_protocol_mode": ["sintr"],
   "num_shards": [1],
