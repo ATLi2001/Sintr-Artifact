@@ -3,16 +3,54 @@
 # collect all results from the output directory and copy them to the experiment-results directory
 # output directory is temporary, experiment-results is permanent
 
-ROOTDIR="$HOME/Sintr-Artifact"
-OUTPUT_DIR="$ROOTDIR/output"
-EXPERIMENT_RESULTS_DIR="$ROOTDIR/experiment-results"
-COLLECT_DIR="$EXPERIMENT_RESULTS_DIR/original"
-# COLLECT_LOGS can be passed as the first positional argument (0 or 1). Default 0.
-COLLECT_LOGS="${1:-0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Artifact root. Precedence: --rootdir flag > ROOTDIR env var > the directory this
+# script lives in (experiment-scripts/..), which is correct for a normal checkout.
+ROOTDIR="${ROOTDIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+# COLLECT_LOGS can be passed as a positional argument (0 or 1). Default 0.
+COLLECT_LOGS=0
+
+usage() {
+    echo "Usage: $0 [COLLECT_LOGS] [--rootdir <path>]  # COLLECT_LOGS must be 0 or 1"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rootdir|-R)
+            if [[ -z "${2:-}" ]]; then
+                echo "Missing value for $1"
+                usage
+                exit 1
+            fi
+            ROOTDIR="$2"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            COLLECT_LOGS="$1"
+            ;;
+    esac
+    shift
+done
 
 # validate COLLECT_LOGS is 0 or 1
 if [ "$COLLECT_LOGS" != "0" ] && [ "$COLLECT_LOGS" != "1" ]; then
-    echo "Usage: $0 [COLLECT_LOGS]  # COLLECT_LOGS must be 0 or 1"
+    usage
+    exit 1
+fi
+
+OUTPUT_DIR="$ROOTDIR/output"
+EXPERIMENT_RESULTS_DIR="$ROOTDIR/experiment-results"
+COLLECT_DIR="$EXPERIMENT_RESULTS_DIR/original"
+
+if [ ! -d "$OUTPUT_DIR" ]; then
+    echo "Output directory not found at $OUTPUT_DIR"
+    echo "Pass the artifact root with --rootdir <path>."
     exit 1
 fi
 
