@@ -2,15 +2,21 @@
 Hurray! You have completed the tedious process of installing the binaries and setting up CloudLab. 
 Next, we will cover how to run experiments in order to reproduce all results. This is a straightforward but time-consuming process.
 
+> NOTE: We have created a new one-shot experiment script that automates all our experiment setup and runs. 
+> We recommend reading the instructions in full to understand what steps are taken.
+> **HotStuff and BFT-SMaRt pre-configuration must be done beforehand.**
+> Other steps are taken care of by the one-shot script.
+
 Ideally you have good network connectivity to quickly upload binaries to the remote machines and download experiment results. 
 Uploading binaries on high speed connections (e.g at your university) takes a few minutes and needs to be done only once per instantiated CloudLab experiment -- however, if your uplink speed is low it may take (as I have painstakingly experienced in preparing this documentation for you) several hours. Downloading experiment outputs requires a moderate amount of download bandwidth and is usually quite fast.
 
-This section is split into 5 subsections: 
+This section is split into 6 subsections: 
 1. [Preparing Benchmarks](#prep)
 2. [Pre-configurations for HotStuff and BFT-SMaRt](#preconfig)
 3. [Experiment script instructions](#scripts)
 4. [Parsing outputs](#output)
 5. [Reproducing experiment claims 1-by-1](#exp)
+6. [One-shot experiment setup](#oneshot)
 
 
 Before you proceed, please confirm that your CloudLab credentials are accurate:
@@ -294,7 +300,7 @@ To directly compare against the numbers reported in our paper please refer to th
 > **Notice**: When running experiments with low load (i.e. few clients) we observe that the average latency is typically higher than at moderate load (this is the case for all systems). This appears to be a protocol-independent system artifact that we have been unable to resolve so far. CPU and/or network speeds seem to increase under load.
 
 > :warning: Sometimes CloudLab nodes can be finicky and will hang or fail silently when trying to run an experiment. 
-Take a look at the [troubleshooting](#troubleshooting) section below for help.
+Take a look at the [Troubleshooting](Troubleshooting.md#cloudlab-experiment-nodes) section for help.
 
 <!-- > **Notice**: Some of the systems have matured since the reported results (e.g. undergone minor bugfixes or experienced miscellaneous changes to debug logging). This should have very little impact on performance, but we acknowledge it nonetheless for completeness. The main claims remain consistent. -->
 
@@ -460,12 +466,14 @@ substantially improve performance without sacrificing safety.
 |---|---|---|
 | Leveraging policy lifting | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.pdf` | `experiment-results/2-Microbenchmarks/4-Lifting/lifting-eval.csv` |
 
-#### 2.5 Random Policy
+#### 2.5 Dynamic Write-set Discovery
 
-We evaluate the impact of mis-estimating policies in Sintr.
+We evaluate the impact of dynamic write-set discovery in Sintr.
 We use a YCSB-based microbenchmark with a uniform key access pattern.
-Each table is assigned either `policy-1` or `policy-5`, with the fraction of `policy-5` tables varied across runs.
-Because policies are assigned randomly across the workload, clients cannot reliably estimate a transaction's policy—except when given the `known` writeset parameter, which lets them estimate it accurately.
+Each table is assigned either P-1 or P-5, with the fraction of P-5 tables varied across runs.
+Clients always estimate a transaction policy of P-1 and contact 1 validation client.
+As a result, if the transaction modifies keys with P-5, then the initiating client must contact 4 additional validation clients and wait for their endorsement before committing the transaction.
+For reference, we compare against the performance of initiating clients which contact the correct number of validators at the beginning of the transaction (`known`).
 We measure p50, p90, and p99 transaction latency, running each experiment 3 times.
 
 We find that not knowing the policy beforehand increases p99 latency by at most ~1 ms (~16.34%) relative to the `known`-policy experiments.
@@ -474,23 +482,75 @@ We find that not knowing the policy beforehand increases p99 latency by at most 
 |---|---|---|
 | Leveraging policy lifting | `experiment-results/2-Microbenchmarks/5-Random-Policy/random-policy.pdf` | `experiment-results/2-Microbenchmarks/5-Random-Policy/random-policy.csv` |
 
+## (6) One-shot experiment setup <a name="oneshot"></a>
 
-### Troubleshooting
-Sometimes CloudLab nodes can be finicky and will hang or fail to initialize properly when trying to run an experiment.
-If this happens (either experiment takes too long to start, or output numbers are drastically too low), you may need to reboot some of the CloudLab nodes. 
+Setting up configs by hand is the most tedious part of the workflow: `update_configs.py` has to
+be pointed at each config directory with the matching override file, benchmark data has to be
+generated and uploaded per benchmark, and `experiment-results/original` has to be cleared between
+runs. `experiment-scripts/run_all_benchmarks.sh` does all of it in a single invocation.
 
-For example, if you notice the experiment is not starting for a long time, stop the current run and perform the following steps to identify which node is the problem.
+```bash
+./experiment-scripts/run_all_benchmarks.sh -u <cloudlab-user> -e <experiment-name> -c <cluster> -o <archive-root>
+```
 
-1. In `experiment-scripts/utils/experiment_util.py`, modify the function `copy_binaries_to_nfs()` to wait on uploading to each set of replica and its clients. 
-That is, at the end of the for loop on line 559, add in `concurrent.futures.wait(futures)`.
-2. Rerun an experiment. 
-You will notice that the script copies binaries to the CloudLab nodes and waits after each replica, rather than doing all in parallel. 
-At some point, one of these will hang.
-3. You can then check the hanging replica and its clients individually by attempting to ssh into them.
-Either you will be unable to ssh into it, or the node will not appear to have bash as its shell (we have seen both happen).
-Reboot the node that has the problem from the CloudLab web interface. 
+It performs, in order:
 
-Other times, if a node fails to initialize during an experiment, you may notice the numbers are drastically lower than expected.
-You can then go and check the logs for the run (located in the timestamped output folder).
-You may notice that a particular node does not have a `stats.json` output.
-This node likely experienced an issue and may need to be rebooted.
+1. **Update configs.** Runs `update_configs.py` over every config directory listed in the
+   [RunningExperiments.md](RunningExperiments.md) override table, pairing each with its override
+   file from `experiment-scripts/example_user_overrides/`.
+2. **Generate benchmark data.** Runs `src/generate_benchmark_data.sh` for seats, tpcc, and
+   tpcc-lifting.
+3. **Upload benchmark data.** Runs `src/upload_data_remote.sh` per benchmark, forwarding the
+   connection arguments given to the script.
+4. **Run each experiment.** For every benchmark: clears `output/` and
+   `experiment-results/original`, runs the configs, runs `collect_results.sh`, runs
+   `analyze_stats_file.py` with that experiment's flags, then moves the raw output and collected
+   stats into `<archive-root>/<timestamp>/<benchmark>/` and clears both directories for the next
+   benchmark.
+
+Both the workload experiments and all microbenchmarks are run by default. Useful options:
+
+| Option | Meaning |
+|---|---|
+| `-b "<list>"` | Subset to run. Accepts individual names or the groups `all` (default), `workloads`, `micro` |
+| `-t <count>` | Trials per config (default 1; `random-policy` defaults to 3 per the paper) |
+| `-w <count>` | TPC-C warehouses (default 20) |
+| `-S <factor>` | Seats scale factor (default 1) |
+| `--dry-run` | Print every command instead of executing it |
+| `--skip-configs` / `--skip-generate` / `--skip-upload` / `--skip-run` | Skip individual phases |
+| `--rootdir` (on `collect_results.sh` / `run_many_experiment_configs.sh`) | Artifact root, if not the directory the scripts live in |
+
+Run `./experiment-scripts/run_all_benchmarks.sh -h` for the full list.
+
+> :warning: **HotStuff and BFT-SMaRt pre-configuration must be done beforehand.** The script does
+> not run `pghs_config_remote.sh` or `bftsmart-configs/one_step_config.sh`. See
+> [above](#preconfig).
+
+> :warning: Uploading benchmark data **is** handled inside `run_all_benchmarks.sh` — do not run
+> `upload_data_remote.sh` separately first.
+
+> 📓 Start with `--dry-run` to confirm the resolved paths, and consider a single cheap benchmark
+> (e.g. `-b vary-policy-z`) before committing to a full run. The complete default run is 151
+> experiment invocations.
+
+### Remaining rough edges
+
+Full automation of config setup is limited by two properties of the configs themselves:
+
+- `benchmark_schema_file_path` depends on **both** the CloudLab user and the baseline being run,
+  so it cannot be set from a single global override. This is why there are separate
+  `example_user_override-<benchmark>.json` files rather than one file.
+- The configs inherit a large number of fields from Basil/Pesto that are irrelevant to Sintr,
+  which makes it hard to tell which fields actually need changing.
+
+Two benchmark families additionally have data that the artifact cannot provision:
+
+- **Smallbank** data is pre-provisioned on the CloudLab image at `/usr/local/etc/smallbank_data`;
+  there is no generator or uploader for it.
+- **rw-sql** (all microbenchmarks except lifting) points `benchmark_schema_file_path` at
+  `/users/<cloudlab-user>/rw-sql.json`, which likewise has no generator or uploader. The copy in
+  the repo (`src/0_local_test_outputs/rw-sql/rw-sql.json`) is a 0-byte placeholder — the rw-sql
+  table schemas are produced at run time as `rw-sql-gen-*-tables-schema.json` — so the file
+  appears only to need to *exist* at that path. Confirm it is present before a microbenchmark run.
+
+`run_all_benchmarks.sh` skips the data phase for both, but the runs will fail if those files are not already present on the machines.

@@ -14,7 +14,7 @@ The high-level requirements for building the codebase are:
 ### AUTOMATIC INSTALLATION
 
 Simply run `./install_dependencies.sh`. If the script is not set to executable by default, use `chmod +x install_dependencies.sh` first. 
-Each installation step will print `COMPLETE` upon completion, and require manual input to proceed -- please verify that the installation step proceeded without errors. In case of errors, please consult the [manual installation](#manual-installation) and [troubleshooting](#troubleshooting) below.
+Each installation step will print `COMPLETE` upon completion, and require manual input to proceed -- please verify that the installation step proceeded without errors. In case of errors, please consult the [manual installation](#manual-installation) below and [Troubleshooting](Troubleshooting.md#manual-installation).
 If successful, skip ahead to [Building binaries](#building-binaries). 
 
 > :warning: NOTE: The script requires explicit manual interaction when installing IntelTBB and BFT-SMaRt requisites. Please consult the manual installation below.
@@ -388,7 +388,7 @@ Once you have completed all required installation steps you can build the binari
 Navigate to `src/` and build:
 - `make -j $(nproc)`
 
-If you run into issues, consult the troubleshooting section below, or contact us directly.
+If you run into issues, consult the [Troubleshooting](Troubleshooting.md#manual-installation) section, or contact us directly.
 
 ### Confirming that binaries work locally (optional sanity check)
 You may want to run a simple toy single server/single client experiment using Pesto to validate that the binaries you built do not have an obvious error.
@@ -405,43 +405,4 @@ Then run client:
 
 The client should finish within 10 seconds and the output file `src/0_local_test_outputs/client-0.out` should include a summary of the transactions committed at the end.
 
-
-### Troubleshooting:
-   
-#### Problems with locating libraries:
-   
-1. You may need to export your `LD_LIBRARY_PATH` if your installations are in non-standard locations:
-   The default install locations are:
-
-   <!--- Hoard: usr/local/lib -->
-   - Jemalloc: usr/local/lib
-   - TaoPq:  /usr/local/lib
-   - Nlohmann/JSON:  /usr/local/include
-   - Secp256k1:  /usr/local/lib
-   - CryptoPP: /usr/local/include  /usr/local/bin   /usr/local/share
-   - Blake3: /usr/local/lib
-   - Donna: /usr/local/lib
-   - Googletest: /usr/local/lib /usr/local/include
-   - Protobufs: /usr/local/lib
-   - Intel TBB: /opt/intel/oneapi
-   - CockroachDB: /usr/local/lib/cockroach  /usr/local/bin/cockroach
-
- Run `export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/share:/usr/local/include:$LD_LIBRARY_PATH` (adjusted depending on where `make install` puts the libraries) followed by `sudo ldconfig`.
-   
-2. If you installed more Intel API tools besides "Intel oneAPI Threading Building Blocks", then the Intel oneAPI installation might have installed a different protobuf binary. Since the application pre-pends the Intel install locations to `PATH`, you may need to manually pre-pend the original directories. Run: `export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH`
-
-3. Building googletest differently:
-   
-   If you get an error: `make: *** No rule to make target '.obj/gtest/gtest-all.o', needed by '.obj/gtest/gtest_main.a'.  Stop.` try to install googletest directly into the `src` directory as follows:
-   1. `git clone https://github.com/google/googletest.git`
-   2. `cd googletest`
-   3. `git checkout release-1.10.0`
-   4. `rm -rf <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
-   5. `mkdir <Relative-Path>/Sintr-Artifact/src/.obj`
-   6. `cp -r googletest <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
-   7. `cd <Relative-Path>/Sintr-Artifact/src/.obj/gtest`
-   8. `cmake CMakeLists.txt`
-   9. `make -j $(nproc)`
-   10. `g++ -isystem ./include -I . -pthread -c ./src/gtest-all.cc`
-   11. `g++ -isystem ./include -I . -pthread -c ./src/gtest_main.cc`
-
+For troubleshooting, please see [Troubleshooting](Troubleshooting.md#manual-installation)

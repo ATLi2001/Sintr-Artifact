@@ -12,6 +12,7 @@ For all questions about the artifact please e-mail Austin Li <atl63@cornell.edu>
 4. [Installing Dependencies and Building Binaries](Installation.md)
 5. [Setting up CloudLab](CloudlabSetup.md)
 6. [Running Experiments](RunningExperiments.md)
+7. [Troubleshooting](Troubleshooting.md)
 
 
 # Summary 
@@ -129,3 +130,8 @@ The ReadMe is organized into the following high level sections. Refer to each li
 3. [*Running experiments*](RunningExperiments.md)
 
    To reproduce our experiments you will need to build the code, and run the supplied experiment scripts using the supplied experiment configurations. Section "Running Experiments" includes instructions for using the experiment scripts, modifying the configurations, and parsing the output. HotStuff and BFT-SMaRt baselines require additional configuration steps, also detailed in section "Running Experiments".
+
+
+4. [*Troubleshooting*](Troubleshooting.md)
+
+   If you run into any issues throughout the process, please refer to our troubleshooting section.
