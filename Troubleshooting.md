@@ -283,7 +283,7 @@ This node likely experienced an issue and may need to be rebooted.
 
 ## Known Remaining Issues
 
-- **Instability at high load.** Runs at high client counts can still hit bugs in the program.
+- **Instability at high load.** Runs at high client counts can still hit bugs in the program, usually indicated by a segfault or a `Panic` statement triggering within the logs.
   We have not tracked down the cause.
 - **BFT-SMaRt and Hotstuff at low load.** BFT-SMaRt and Hotstuff will fail to make progress at low load. Please run these two systems with at least 33 clients total.
 
