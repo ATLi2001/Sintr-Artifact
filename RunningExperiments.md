@@ -2,7 +2,7 @@
 Hurray! You have completed the tedious process of installing the binaries and setting up CloudLab. 
 Next, we will cover how to run experiments in order to reproduce all results. This is a straightforward but time-consuming process.
 
-> NOTE: We have created a new one-shot experiment script that automates all our experiment setup and runs. 
+> NOTE: We have created a new [one-shot experiment script](#oneshot) that automates all our experiment setup and runs. 
 > We recommend reading the instructions in full to understand what steps are taken.
 > **HotStuff and BFT-SMaRt pre-configuration must be done beforehand.**
 > Other steps are taken care of by the one-shot script.
