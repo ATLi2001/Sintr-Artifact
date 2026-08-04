@@ -224,8 +224,7 @@ Run: `python3 <PATH>/experiment-scripts/run_multiple_experiments.py <PATH>/exper
 
 Optional: To monitor experiment progress you can ssh into a server machine (e.g., us-east-1-0) and run htop. During the experiment run-time the CPUs will be loaded (to different degrees depending on contention and client count).
  
-> **NOTE**: If you are running the experiments using a control machine and encounter issues, please read the [Troubleshooting](Troubleshooting.md) to ensure that the experiments run smoothly.
-> If you would like to run all benchmarks/microbenchmarks at once, please use the `experiment-scripts/run_all_benchmarks.sh` script. Usage information is [here](#oneshot)
+> **NOTE**: If you are running the experiments using a control machine and encounter issues, please read the [Troubleshooting](Troubleshooting.md#CloudLab-Control-Machine-Compilation) to ensure that the experiments run smoothly.
    
 ## (4) Parsing outputs <a name="output"></a>
 This section explains how to understand the results of a single experiment run.
