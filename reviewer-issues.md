@@ -2,7 +2,7 @@
 
 Notes on the issues raised during artifact review, what causes each one, and how to fix it.
 Everything here was reproduced and fixed on a CloudLab control-machine deployment; where a fix
-has *not* been verified on `fsp-dev`, that is called out explicitly.
+has *not* been verified on `fsp-dev` (our local machine), that is called out explicitly.
 
 Related documents:
 - [CloudlabSetup.md](CloudlabSetup.md) — provisioning the CloudLab experiment
