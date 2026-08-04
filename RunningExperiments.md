@@ -4,7 +4,8 @@ Next, we will cover how to run experiments in order to reproduce all results. Th
 
 > NOTE: We have created a new [one-shot experiment script](#oneshot) that automates all our experiment setup and runs. 
 > We recommend reading the instructions in full to understand what steps are taken.
-> **HotStuff and BFT-SMaRt pre-configuration must be done beforehand.**
+> **HotStuff and BFT-SMaRt pre-configuration must be done beforehand**, and the
+> [override files must be filled in](#overrides) with your CloudLab credentials and artifact path.
 > Other steps are taken care of by the one-shot script.
 
 Ideally you have good network connectivity to quickly upload binaries to the remote machines and download experiment results. 
@@ -172,6 +173,49 @@ Running `update_configs.py` according to the table will appropriately update the
 | `experiment-configs/Sintr/2-Microbenchmarks/2-Gov-Txn/` | `experiment-scripts/example_user_overrides/example_user_override-gov-txn.json` |
 | `experiment-configs/Sintr/2-Microbenchmarks/3-Client-Failures/` | `experiment-scripts/example_user_overrides/example_user_override-micro.json` |
 | `experiment-configs/Sintr/2-Microbenchmarks/4-Lifting/` | `experiment-scripts/example_user_overrides/example_user_override-tpcc-lifting.json` |
+
+### Filling in the override files <a name="overrides"></a>
+
+The override files listed above ship with our own CloudLab account and paths baked in, so before
+running anything you need to point them at *your* setup.
+Rather than editing all ten files by hand, run `experiment-scripts/update_user_overrides.py`:
+
+```bash
+python3 experiment-scripts/update_user_overrides.py <project-name> <experiment-name> <cloudlab-user> <artifact-parent-dir> [--dry-run] [--backup]
+```
+
+- `<artifact-parent-dir>` is the local folder *holding* your artifact directory, **not** the
+  artifact directory itself. If your checkout is at `/home/atli/Sintr-Artifact`, pass `/home/atli`.
+- In dry run mode no changes are made, and every field that would change is printed as a
+  `- old` / `+ new` pair.
+- In backup mode all modified files are backed up to `example_user_overrides/backup`.
+
+For example, for CloudLab user `atli` running experiment `sintr` in project `pequin-pg0`, with the
+artifact checked out at `/home/atli/Sintr-Artifact`:
+
+```bash
+python3 experiment-scripts/update_user_overrides.py pequin-pg0 sintr atli /home/atli
+```
+
+This sets, in every file that has the field:
+
+| Field | Set to |
+|---|---|
+| `project_name`, `experiment_name`, `emulab_user` | the values you passed |
+| `base_local_exp_directory` | `<artifact-dir>/output` |
+| `src_directory` | `<artifact-dir>/src` |
+| `sintr_policy_config_path`, `gov_txn_config_path` | `<artifact-dir>/src/0_local_test_outputs/configs` |
+| `base_remote_bin_directory_nfs` | `/users/<cloudlab-user>/sintr` |
+| `bftsmart_codebase_dir` | `/users/<cloudlab-user>` |
+| `benchmark_schema_file_path` | `/users/<cloudlab-user>/...`, keeping each file's own schema filename |
+
+**When to use it:** once, before you run `update_configs.py` (or the
+[one-shot script](#oneshot)) for the first time on a machine, and again any time your CloudLab
+experiment, project, username, or artifact location changes.
+
+> :warning: This script updates the **override files**, not the experiment configs.
+You still need to run `update_configs.py` (per the table above) afterwards to push those values
+into `experiment-configs/`. The [one-shot script](#oneshot) does this step for you.
 
 <!-- ### Detailed Manual Instructions
 
@@ -488,6 +532,22 @@ be pointed at each config directory with the matching override file, benchmark d
 generated and uploaded per benchmark, and `experiment-results/original` has to be cleared between
 runs. `experiment-scripts/run_all_benchmarks.sh` does all of it in a single invocation.
 
+**Before your first run**, complete the two setup steps that the script does *not* do for you:
+
+1. **Fill in the override files.** `run_all_benchmarks.sh` applies the override files exactly as
+   they are -- it does not personalise them. Point them at your own CloudLab account and artifact
+   path with [`update_user_overrides.py`](#overrides):
+
+   ```bash
+   python3 experiment-scripts/update_user_overrides.py <project-name> <experiment-name> <cloudlab-user> <artifact-parent-dir>
+   ```
+
+   Re-run it any time your CloudLab experiment, project, username, or artifact location changes.
+2. **Pre-configure HotStuff and BFT-SMaRt.** The script does not run `pghs_config_remote.sh` or
+   `bftsmart-configs/one_step_config.sh`; see [above](#preconfig).
+
+Then run:
+
 ```bash
 ./experiment-scripts/run_all_benchmarks.sh -u <cloudlab-user> -e <experiment-name> -c <cluster> -o <archive-root>
 ```
@@ -495,8 +555,9 @@ runs. `experiment-scripts/run_all_benchmarks.sh` does all of it in a single invo
 It performs, in order:
 
 1. **Update configs.** Runs `update_configs.py` over every config directory listed in the
-   [RunningExperiments.md](RunningExperiments.md) override table, pairing each with its override
-   file from `experiment-scripts/example_user_overrides/`.
+   [override table](#scripts) above, pairing each with its override file from
+   `experiment-scripts/example_user_overrides/` -- the files you personalised with
+   [`update_user_overrides.py`](#overrides).
 2. **Generate benchmark data.** Runs `src/generate_benchmark_data.sh` for seats, tpcc, and
    tpcc-lifting.
 3. **Upload benchmark data.** Runs `src/upload_data_remote.sh` per benchmark, forwarding the
@@ -521,10 +582,6 @@ Both the workload experiments and all microbenchmarks are run by default. Useful
 
 Run `./experiment-scripts/run_all_benchmarks.sh -h` for the full list.
 
-> :warning: **HotStuff and BFT-SMaRt pre-configuration must be done beforehand.** The script does
-> not run `pghs_config_remote.sh` or `bftsmart-configs/one_step_config.sh`. See
-> [above](#preconfig).
-
 > :warning: Uploading benchmark data **is** handled inside `run_all_benchmarks.sh` — do not run
 > `upload_data_remote.sh` separately first.
 
@@ -533,14 +590,6 @@ Run `./experiment-scripts/run_all_benchmarks.sh -h` for the full list.
 > experiment invocations.
 
 ### Remaining rough edges
-
-Full automation of config setup is limited by two properties of the configs themselves:
-
-- `benchmark_schema_file_path` depends on **both** the CloudLab user and the baseline being run,
-  so it cannot be set from a single global override. This is why there are separate
-  `example_user_override-<benchmark>.json` files rather than one file.
-- The configs inherit a large number of fields from Basil/Pesto that are irrelevant to Sintr,
-  which makes it hard to tell which fields actually need changing.
 
 Two benchmark families additionally have data that the artifact cannot provision:
 
