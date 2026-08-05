@@ -48,7 +48,7 @@
     {
       "message_transport_type": "tcp",
       "watermark_time_delta": 30000,
-      "local_config": "false",
+      "local_config": false,
       "read_quorum": "one-honest",
       "read_dep": "one-honest",
       "hash_digest": true,
