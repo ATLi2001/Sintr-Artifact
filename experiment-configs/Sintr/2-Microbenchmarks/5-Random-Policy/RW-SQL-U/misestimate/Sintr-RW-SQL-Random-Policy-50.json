@@ -137,7 +137,7 @@
     "sintr_sign_finish_validation": true,
     "sintr_debug_endorse_check": false,
     "sintr_client_check_evidence": true,
-    "sintr_policy_function_name": "rw_sql_table_based_policy",
+    "sintr_policy_function_name": "rw_sql_random_policy",
     "sintr_policy_config_path": "/home/dhl93/Sintr-Artifact/src/0_local_test_outputs/configs/policy-estimate-writeset.config",
     "sintr_read_include_policy": 0,
     "sintr_client_validation_heuristic": 0,
