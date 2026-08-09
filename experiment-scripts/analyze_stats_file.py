@@ -545,11 +545,11 @@ def create_grouped_bar_plot(grouped_data, x_labels, x_axis_label, y_label, outpu
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     # ax.set_ylabel(y_label)
-    ax.set_ylabel(y_label, fontsize=24, fontweight="bold")
+    ax.set_ylabel(y_label, fontweight="bold")
     # center the tick under the whole group regardless of how many bars it holds
     ax.set_xticks(x + width * (bars_per_group - 1) / 2, x_labels)
     # ax.set_xlabel(x_axis_label)
-    ax.set_xlabel(x_axis_label, fontsize=24, fontweight="bold")
+    ax.set_xlabel(x_axis_label, fontweight="bold")
     ax.grid(True, axis="y", linestyle="--", alpha=0.7)
     ax.grid(False, axis="x")
     ylims = ax.get_ylim()
