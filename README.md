@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/898024577.svg)](https://doi.org/10.5281/zenodo.22050053)
+
 # Sintr Artifact
 This is the code artifact for the paper: "Sintr: Safe Interactive Transactions in the Presence of Byzantine Clients". (SOSP'26 paper 216)
 
